@@ -1,0 +1,161 @@
+{
+  "schema": "betterquizzer.quiz",
+  "version": 2,
+  "quizId": "mixed-types-v2-demo",
+  "title": "Mixed Question Types v2 Demo",
+  "description": "A broad UI test for BetterQuizzes v2 question types.",
+  "subject": "Demo",
+  "mode": "practice",
+  "displayPolicy": {
+    "showCorrectAnswers": "after_submit",
+    "showExplanations": "llm_after_submit",
+    "requireConfidence": true
+  },
+  "gradingPolicy": {
+    "preferredGrader": "llm",
+    "includeAnswerKeyInSubmission": true
+  },
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "prompt": "Which file extension should BetterQuizzes quiz files use?",
+      "choices": [
+        ".txt",
+        ".bqz",
+        ".png",
+        ".mp3"
+      ],
+      "answer": 1,
+      "tags": [
+        "betterquizzer",
+        "files"
+      ],
+      "difficulty": 1
+    },
+    {
+      "id": "q2",
+      "type": "ordering",
+      "prompt": "Put the BetterQuizzes flow in order.",
+      "items": [
+        {
+          "id": "import",
+          "text": "Import QuizSpec"
+        },
+        {
+          "id": "answer",
+          "text": "User answers questions"
+        },
+        {
+          "id": "submit",
+          "text": "Create SubmissionCapsule"
+        },
+        {
+          "id": "grade",
+          "text": "LLM grades and teaches"
+        }
+      ],
+      "answer": [
+        "import",
+        "answer",
+        "submit",
+        "grade"
+      ],
+      "tags": [
+        "betterquizzer",
+        "workflow"
+      ],
+      "difficulty": 2
+    },
+    {
+      "id": "q3",
+      "type": "matching",
+      "prompt": "Match each BetterQuizzes object to its job.",
+      "left": [
+        {
+          "id": "quizspec",
+          "text": "QuizSpec"
+        },
+        {
+          "id": "answerrecord",
+          "text": "AnswerRecord"
+        },
+        {
+          "id": "submission",
+          "text": "SubmissionCapsule"
+        }
+      ],
+      "right": [
+        {
+          "id": "wholequiz",
+          "text": "The quiz the LLM creates"
+        },
+        {
+          "id": "singleanswer",
+          "text": "One response plus confidence"
+        },
+        {
+          "id": "llmreturn",
+          "text": "The object sent back for grading"
+        }
+      ],
+      "answer": [
+        {
+          "leftId": "quizspec",
+          "rightId": "wholequiz"
+        },
+        {
+          "leftId": "answerrecord",
+          "rightId": "singleanswer"
+        },
+        {
+          "leftId": "submission",
+          "rightId": "llmreturn"
+        }
+      ],
+      "tags": [
+        "betterquizzer",
+        "schema"
+      ],
+      "difficulty": 2
+    },
+    {
+      "id": "q4",
+      "type": "long_response",
+      "prompt": "Explain one reason BetterQuizzes should let the LLM do explanations instead of embedding explanations into the quiz UI.",
+      "rubric": [
+        "Mentions that the LLM is the teacher/tutor",
+        "Explains that the UI should stay neutral and flexible",
+        "Connects answer feedback to targeted follow-up teaching"
+      ],
+      "tags": [
+        "betterquizzer",
+        "product-design",
+        "llm-feedback"
+      ],
+      "difficulty": 3
+    },
+    {
+      "id": "q5",
+      "type": "numeric",
+      "prompt": "How many answers does a true/false question have?",
+      "answer": 2,
+      "tolerance": 0,
+      "tags": [
+        "betterquizzer",
+        "numeric"
+      ],
+      "difficulty": 1
+    }
+  ],
+  "metadata": {
+    "createdBy": "human",
+    "createdAt": "2026-04-26T00:00:00.000Z",
+    "estimatedTimeMinutes": 4,
+    "tags": [
+      "demo",
+      "mixed-types",
+      "v2"
+    ]
+  }
+}

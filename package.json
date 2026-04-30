@@ -1,0 +1,54 @@
+{
+  "name": "betterquizzes-v1-final-proposal-fix",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test-shared.mjs",
+    "mcp:stdio": "node mcp/betterquizzes-app-server.mjs",
+    "mcp:demo": "node mcp/demo-client.mjs",
+    "mcp:sdk:stdio": "node mcp/sdk-stdio-server.mjs",
+    "serve:prod": "node mcp/remote-server.mjs",
+    "mcp:http": "node mcp/remote-server.mjs",
+    "smoke:http": "node scripts/smoke-http.mjs",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run sdk:dependencies && npm run sdk:alignment && npm run mcp:demo && npm run smoke:http && npm run contract:test && npm run host:readiness && npm run deploy:package && npm run trial:doctor && npm run trial:local && npm run host:public && npm run v1:regression",
+    "host:readiness": "node scripts/host-readiness.mjs",
+    "contract:test": "node scripts/contract-test.mjs",
+    "connect:local": "node scripts/print-connect-info.mjs",
+    "connect:chatgpt": "node scripts/print-connect-info.mjs --public",
+    "host:public": "node scripts/public-host-smoke.mjs",
+    "host:public:strict": "node scripts/public-host-smoke.mjs --strict",
+    "deploy:package": "node scripts/deploy-package-check.mjs",
+    "tunnel:help": "node scripts/tunnel-help.mjs",
+    "build:strict": "tsc --noEmit && vite build",
+    "trial:probe": "node scripts/trial-probe.mjs",
+    "trial:local": "node scripts/local-host-trial.mjs",
+    "trial:public": "node scripts/trial-probe.mjs --strict-https",
+    "trial:doctor": "node scripts/host-trial-doctor.mjs",
+    "sdk:dependencies": "node scripts/sdk-dependency-check.mjs",
+    "sdk:alignment": "node scripts/sdk-alignment-test.mjs",
+    "v1:regression": "node scripts/v1-regression.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@vitejs/plugin-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-linux-x64-gnu": "^1.0.0-rc.17"
+  }
+}

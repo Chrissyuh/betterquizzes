@@ -1,0 +1,51 @@
+{
+  "schema": "betterquizzer.quiz",
+  "version": 2,
+  "quizId": "tiny-demo-v2",
+  "title": "Tiny BetterQuizzes v2 Demo",
+  "description": "A tiny quiz used to test the neutral LLM-controlled submission flow.",
+  "subject": "General",
+  "mode": "practice",
+  "displayPolicy": {
+    "showCorrectAnswers": "after_submit",
+    "showExplanations": "llm_after_submit",
+    "requireConfidence": true
+  },
+  "gradingPolicy": {
+    "preferredGrader": "llm",
+    "includeAnswerKeyInSubmission": true
+  },
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "prompt": "Which number is even?",
+      "choices": ["3", "5", "8", "9"],
+      "answer": 2,
+      "tags": ["math", "numbers"],
+      "difficulty": 1
+    },
+    {
+      "id": "q2",
+      "type": "fill_blank",
+      "prompt": "The capital of France is ________.",
+      "answer": ["Paris"],
+      "tags": ["geography"],
+      "difficulty": 1
+    },
+    {
+      "id": "q3",
+      "type": "true_false",
+      "prompt": "BetterQuizzes v2 sends structured submissions back to an LLM for grading and teaching.",
+      "answer": true,
+      "tags": ["betterquizzer", "workflow"],
+      "difficulty": 1
+    }
+  ],
+  "metadata": {
+    "createdBy": "human",
+    "createdAt": "2026-04-26T00:00:00.000Z",
+    "estimatedTimeMinutes": 2,
+    "tags": ["demo", "v2"]
+  }
+}

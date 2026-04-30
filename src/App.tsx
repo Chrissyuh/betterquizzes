@@ -1,0 +1,2308 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type PointerEvent } from "react";
+import {
+  buildCompactReturnPrompt,
+  buildCompletionSummary,
+  buildLlmReturnPrompt,
+  createSession,
+  createSubmissionCapsule,
+  encodeCompactSubmission,
+  getQuizId,
+  normalizeActivityPolicy,
+  normalizeDisplayPolicy,
+  normalizeGradingPolicy,
+  formatRenderContractIssue,
+  prepareQuizForRender,
+  type ActivityPolicy,
+  type AnswerRecord,
+  type AnswerResponse,
+  type DisplayPolicy,
+  type MatchingPair,
+  type Question,
+  type QuizSession,
+  type QuizSpec,
+  type SubmissionCapsule,
+} from "./shared";
+import {
+  getHostQuizPayload,
+  getPersistedDraftState,
+  getPersistedSubmissionState,
+  isChatGptWidget,
+  persistWidgetState,
+  persistSubmissionState,
+  sendSubmissionFollowUp,
+  submitToHost,
+  type HostQuizPayload,
+  type SubmissionBridgeState,
+  type ToolResultLike,
+} from "./host/openaiBridge";
+import { BETTERQUIZZER_BUILD_ID, BETTERQUIZZER_VERSION } from "./shared/version";
+import tinyDemo from "./shared/examples/tiny-demo.json";
+import aphgDemo from "./shared/examples/aphg-demo.json";
+import mixedTypesDemo from "./shared/examples/mixed-types.json";
+
+type Screen = "loading" | "import" | "quiz" | "submission";
+type DraftAnswer = {
+  response: AnswerResponse;
+  confidence?: AnswerRecord["confidence"];
+  /** Absolute ms timestamp for the first edit in the current visible session. */
+  firstSeenAt: number;
+  /** Absolute ms timestamp for the most recent edit. Used for draft restore diagnostics. */
+  lastUpdatedAt?: number;
+};
+type ResponseLimit = { maxChars?: number | null; minChars?: number; showCounter?: boolean };
+type SubmissionDeliveryStatus =
+  | "not_started"
+  | "submitted"
+  | "requesting_grade"
+  | "retrying_grade_request"
+  | "grade_requested"
+  | "grade_request_unavailable"
+  | "grade_request_failed";
+
+type FinishedSubmission = {
+  submission: SubmissionCapsule;
+  session: ReturnType<typeof createSession>;
+  hostSubmitted: boolean;
+  followUpRequested?: boolean;
+  followUpStatus?: SubmissionDeliveryStatus;
+  followUpAttempts?: number;
+  followUpMessage?: string;
+};
+
+type PendingLaunch = {
+  key: string;
+  payload: HostQuizPayload;
+  quiz: QuizSpec;
+  firstSeenAt: number;
+};
+
+type HydrationProgress = { expectedQuestions: number; receivedQuestions: number; renderableQuestions?: number; complete?: boolean };
+
+const SAMPLE_QUIZZES = [tinyDemo as QuizSpec, aphgDemo as QuizSpec, mixedTypesDemo as QuizSpec];
+const WIDGET_VERSION = BETTERQUIZZER_VERSION;
+const WIDGET_VERSION_LABEL = formatWidgetVersion(WIDGET_VERSION);
+const STABLE_LAUNCH_MS = 450;
+const HYDRATION_ERROR_DELAY_MS = 5000;
+const TOOL_INPUT_FALLBACK_DELAY_MS = 2500;
+const HYDRATION_INTERRUPTED_MS = 12000;
+
+export default function App(): ReactElement {
+  const routeWidgetMode = useMemo(() => isWidgetRoute(), []);
+  const bootstrapWidgetMode = useMemo(() => hasBetterQuizzesBootstrap(), []);
+  const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode);
+  const [screen, setScreen] = useState<Screen>(widgetMode ? "loading" : "import");
+  const [quiz, setQuiz] = useState<QuizSpec | null>(null);
+  const [launchId, setLaunchId] = useState<string | undefined>(undefined);
+  const [startedAt, setStartedAt] = useState(() => new Date().toISOString());
+  const [finished, setFinished] = useState<FinishedSubmission | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [hydrationError, setHydrationError] = useState<string | null>(null);
+  const [hydrationErrorVisible, setHydrationErrorVisible] = useState(false);
+  const [hydrationProgress, setHydrationProgress] = useState<HydrationProgress | null>(null);
+  const pendingLaunchRef = useRef<PendingLaunch | null>(null);
+  const hydrationStartedAtRef = useRef(Date.now());
+
+  function applyQuiz(rawQuiz: unknown): void {
+    const prepared = prepareQuizForRender(rawQuiz);
+    if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
+    const nextQuiz = prepared.quiz;
+    const restored = widgetMode ? buildFinishedFromPersistedSubmission(nextQuiz) : null;
+    setQuiz(nextQuiz);
+    setLaunchId(undefined);
+    setStartedAt(restored?.session.startedAt ?? new Date().toISOString());
+    setFinished(restored);
+    setImportError(null);
+    setHydrationError(null);
+    setScreen(restored ? "submission" : "quiz");
+  }
+
+  function loadQuiz(nextQuiz: QuizSpec): void {
+    try {
+      applyQuiz(nextQuiz);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  useEffect(() => {
+    if (!widgetMode) return;
+    const timeout = window.setTimeout(() => setHydrationErrorVisible(true), HYDRATION_ERROR_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [widgetMode]);
+
+  useEffect(() => {
+    if (!widgetMode) return;
+    const interval = window.setInterval(() => {
+      const elapsedMs = Date.now() - hydrationStartedAtRef.current;
+      const nextPayload = getHostQuizPayload({ allowUnsealedToolInput: elapsedMs >= TOOL_INPUT_FALLBACK_DELAY_MS });
+      if (nextPayload) {
+        try {
+          const prepared = prepareQuizForRender(nextPayload.quiz);
+          if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
+          const nextQuiz = prepared.quiz;
+          setHydrationProgress(toHydrationProgress(nextPayload, nextQuiz));
+          const pendingKey = launchStabilityKey(nextPayload, nextQuiz);
+          const now = Date.now();
+          const currentPending = pendingLaunchRef.current;
+          if (!currentPending || currentPending.key !== pendingKey) {
+            pendingLaunchRef.current = { key: pendingKey, payload: nextPayload, quiz: nextQuiz, firstSeenAt: now };
+            return;
+          }
+          if (now - currentPending.firstSeenAt < STABLE_LAUNCH_MS) return;
+          if (!shouldAcceptHydratedQuiz(quiz, currentPending.quiz)) return;
+
+          const restored = buildFinishedFromPersistedSubmission(currentPending.quiz, currentPending.payload.launchId);
+          setLaunchId(currentPending.payload.launchId);
+          setStartedAt(restored?.session.startedAt ?? new Date().toISOString());
+          setFinished(restored);
+          setImportError(null);
+          setHydrationError(null);
+          setHydrationErrorVisible(false);
+          setHydrationProgress(toHydrationProgress(currentPending.payload, currentPending.quiz));
+          setScreen(restored ? "submission" : "quiz");
+          setQuiz(currentPending.quiz);
+        } catch (error) {
+          setHydrationError(error instanceof Error ? error.message : String(error));
+          if (!quiz) setScreen("loading");
+        }
+      }
+      if (!nextPayload && !quiz && elapsedMs >= HYDRATION_INTERRUPTED_MS) {
+        setHydrationError("The quiz launch did not finish. ChatGPT may have stopped generating before it sent BetterQuizzes a complete quiz packet.");
+        setHydrationErrorVisible(true);
+      }
+    }, 250);
+    return () => window.clearInterval(interval);
+  }, [widgetMode, quiz]);
+
+  useEffect(() => {
+    if (!widgetMode || quiz) return;
+    const requestedQuizId = getRequestedQuizId();
+    if (!requestedQuizId) return;
+    let cancelled = false;
+    void fetchQuizFromServer(requestedQuizId)
+      .then((serverQuiz) => {
+        if (cancelled) return;
+        setHydrationProgress({ expectedQuestions: serverQuiz.questions.length, receivedQuestions: serverQuiz.questions.length, renderableQuestions: serverQuiz.questions.length, complete: true });
+        applyQuiz(serverQuiz);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setHydrationError(error instanceof Error ? error.message : String(error));
+        setScreen("loading");
+      });
+    return () => { cancelled = true; };
+  }, [widgetMode, quiz]);
+
+  if (screen === "import") {
+    if (widgetMode) return <WidgetLoading progress={hydrationProgress} />;
+    return <ImportScreen error={importError} onLoadQuiz={loadQuiz} />;
+  }
+
+  if (screen === "loading") {
+    return hydrationError && hydrationErrorVisible ? <QuizSetupIssue message={hydrationError} /> : <WidgetLoading progress={hydrationProgress} />;
+  }
+
+  if (screen === "submission" && finished) {
+    return <SubmissionScreen finished={finished} widgetMode={widgetMode} onNewQuiz={() => setScreen(widgetMode ? "submission" : "import")} />;
+  }
+
+  if (!quiz) {
+    return widgetMode ? (hydrationError && hydrationErrorVisible ? <QuizSetupIssue message={hydrationError} /> : <WidgetLoading progress={hydrationProgress} />) : <ImportScreen error="No quiz is loaded." onLoadQuiz={loadQuiz} />;
+  }
+
+  return (
+    <QuizRunner
+      key={getQuizId(quiz)}
+      quiz={quiz}
+      startedAt={startedAt}
+      launchId={launchId}
+      widgetMode={widgetMode}
+      onReset={() => setScreen("import")}
+      onFinish={(result) => {
+        setFinished(result);
+        setScreen("submission");
+      }}
+    />
+  );
+}
+
+function formatWidgetVersion(version: string): string {
+  const trimmed = String(version || "").trim();
+  if (!trimmed) return "V1";
+  return /^v/i.test(trimmed) ? trimmed : /^V\d/i.test(trimmed) ? trimmed : `v${trimmed}`;
+}
+
+function WidgetLoading({ progress }: { progress?: HydrationProgress | null } = {}): ReactElement {
+  const expected = progress?.expectedQuestions ?? 0;
+  const received = progress?.receivedQuestions ?? 0;
+  const complete = Boolean(progress?.complete || (expected > 0 && received >= expected));
+  const percent = expected > 0 ? Math.min(100, Math.round((Math.max(0, received) / expected) * 100)) : 0;
+  const progressClass = expected > 0 ? "progress-shell loading-progress determinate" : "progress-shell loading-progress indeterminate";
+  return (
+    <main className="shell narrow">
+      <section className="card stack center-card loading-card">
+        <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+        <h1>Loading quiz…</h1>
+        <div className="loading-progress-note" aria-live="polite">
+          <div className={progressClass} aria-label="Loading quiz packet" aria-busy={!complete}>
+            <span style={expected > 0 ? { width: `${percent}%` } : undefined} />
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function QuizSetupIssue({ message }: { message: string }): ReactElement {
+  return (
+    <main className="shell narrow">
+      <section className="card stack">
+        <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+        <h1>Quiz launch interrupted</h1>
+        <p>The quiz packet did not finish arriving. Send the quiz again from the chat; BetterQuizzes will recover automatically if a complete tool input is still available.</p>
+        <details>
+          <summary>Technical details</summary>
+          <pre className="error-box">{message}</pre>
+        </details>
+      </section>
+    </main>
+  );
+}
+
+function isWidgetRoute(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return Boolean(window.__BETTERQUIZZER_FORCE_WIDGET__) || window.location.pathname === "/widget" || params.get("mode") === "widget" || params.get("bq_widget") === "1";
+}
+
+function hasBetterQuizzesBootstrap(): boolean {
+  if (typeof window === "undefined") return false;
+  const bootstrap = window.__BETTERQUIZZER_BOOTSTRAP__;
+  return Boolean(bootstrap && typeof bootstrap === "object");
+}
+
+function getRequestedQuizId(): string | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("quizId") || params.get("quiz") || null;
+}
+
+function getServerBase(): string {
+  if (typeof window === "undefined") return "";
+  const injected = window.__BETTERQUIZZER_SERVER_BASE__?.trim().replace(/\/$/, "");
+  if (injected) return injected;
+  return window.location.origin && window.location.origin !== "null" ? window.location.origin : "";
+}
+
+async function fetchQuizFromServer(quizId: string): Promise<QuizSpec> {
+  const base = getServerBase();
+  const path = "/api/quiz/" + encodeURIComponent(quizId);
+  const url = base ? base + path : path;
+  const response = await fetch(url, { headers: { accept: "application/json" } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = body && typeof body === "object" && "error" in body ? String((body as { error?: unknown }).error) : response.status + " " + response.statusText;
+    throw new Error("Server quiz fetch failed: " + detail);
+  }
+  const record = body as { quiz?: QuizSpec };
+  if (!record.quiz) throw new Error("Server response did not include a quiz.");
+  return record.quiz;
+}
+
+function buildFinishedFromPersistedSubmission(quiz: QuizSpec, launchId?: string): FinishedSubmission | null {
+  const state = getPersistedSubmissionState(getQuizId(quiz), launchId);
+  if (!state?.submission) return null;
+  const submission = state.submission;
+  const session = isMatchingSession(state.session, submission) ? state.session : makeRestoredSession(submission);
+  const followUpStatus = getRestoredDeliveryStatus(state, submission);
+  return {
+    submission,
+    session,
+    hostSubmitted: submission.status?.hostSubmitted ?? state.status !== "fallback_ready",
+    followUpRequested: submission.status?.followUpRequested ?? state.status === "grade_requested",
+    followUpStatus,
+    followUpAttempts: followUpStatus === "submitted" ? 0 : 1,
+    followUpMessage: state.error,
+  };
+}
+
+function isMatchingSession(session: QuizSession | undefined, submission: SubmissionCapsule): session is QuizSession {
+  return Boolean(session && session.quizId === submission.quizId && session.sessionId === submission.sessionId);
+}
+
+function makeRestoredSession(submission: SubmissionCapsule): QuizSession {
+  return {
+    schema: "betterquizzer.session",
+    version: 2,
+    sessionId: submission.sessionId,
+    quizId: submission.quizId,
+    startedAt: inferRestoredStartedAt(submission),
+    submittedAt: submission.submittedAt,
+    mode: submission.mode,
+    answers: submission.answers,
+  };
+}
+
+function inferRestoredStartedAt(submission: SubmissionCapsule): string {
+  const submittedMs = Date.parse(submission.submittedAt);
+  if (!Number.isFinite(submittedMs)) return submission.submittedAt || new Date().toISOString();
+  const longestAnswerMs = submission.answers.reduce((largest, answer) => {
+    const timeMs = typeof answer.timeMs === "number" && Number.isFinite(answer.timeMs) ? answer.timeMs : 0;
+    return Math.max(largest, timeMs);
+  }, 0);
+  return new Date(submittedMs - longestAnswerMs).toISOString();
+}
+
+function getRestoredDeliveryStatus(state: SubmissionBridgeState, submission: SubmissionCapsule): SubmissionDeliveryStatus {
+  if (submission.status?.followUpRequested) return "grade_requested";
+  switch (state.status) {
+    case "grade_requested":
+      return "grade_requested";
+    case "requesting_grade":
+      return "requesting_grade";
+    case "retrying_grade_request":
+      return "retrying_grade_request";
+    case "fallback_ready":
+      return "grade_request_unavailable";
+    case "failed":
+      return "grade_request_failed";
+    case "submitting":
+      return "requesting_grade";
+    default:
+      return "submitted";
+  }
+}
+
+function toHydrationProgress(payload: HostQuizPayload, quiz: QuizSpec): HydrationProgress {
+  const fromPayload = payload.uploadProgress;
+  const expectedQuestions = fromPayload?.expectedQuestions ?? payload.declaredQuestionCount ?? payload.questionCount ?? quiz.questions.length;
+  const receivedQuestions = fromPayload?.receivedQuestions ?? payload.receivedQuestionCount ?? quiz.questions.length;
+  return {
+    expectedQuestions,
+    receivedQuestions,
+    renderableQuestions: fromPayload?.renderableQuestions ?? payload.renderDiagnostics?.renderableQuestionCount,
+    complete: fromPayload?.complete ?? receivedQuestions >= expectedQuestions,
+  };
+}
+
+function launchStabilityKey(payload: HostQuizPayload, quiz: QuizSpec): string {
+  return JSON.stringify({
+    launchId: payload.launchId ?? null,
+    quizRevision: payload.quizRevision ?? null,
+    questionCount: payload.questionCount ?? quiz.questions.length,
+    fingerprint: quizFingerprint(quiz),
+  });
+}
+
+function shouldAcceptHydratedQuiz(currentQuiz: QuizSpec | null, nextQuiz: QuizSpec): boolean {
+  if (!currentQuiz) return true;
+  const currentQuizId = getQuizId(currentQuiz);
+  const nextQuizId = getQuizId(nextQuiz);
+  if (currentQuizId !== nextQuizId) return true;
+  if (quizFingerprint(currentQuiz) === quizFingerprint(nextQuiz)) return false;
+  return isMoreCompleteQuiz(nextQuiz, currentQuiz);
+}
+
+function isMoreCompleteQuiz(candidate: QuizSpec, current: QuizSpec): boolean {
+  if (candidate.questions.length > current.questions.length) return true;
+  if (candidate.questions.length < current.questions.length) return false;
+  const candidateFilledFields = countRenderableQuestionFields(candidate);
+  const currentFilledFields = countRenderableQuestionFields(current);
+  return candidateFilledFields > currentFilledFields;
+}
+
+function countRenderableQuestionFields(quiz: QuizSpec): number {
+  return quiz.questions.reduce((total, question) => {
+    let score = 0;
+    if (question.id) score += 1;
+    if (question.type) score += 1;
+    if (question.prompt) score += 1;
+    if ("choices" in question && Array.isArray(question.choices)) score += question.choices.length;
+    if ("items" in question && Array.isArray(question.items)) score += question.items.length;
+    if ("left" in question && Array.isArray(question.left)) score += question.left.length;
+    if ("right" in question && Array.isArray(question.right)) score += question.right.length;
+    return total + score;
+  }, 0);
+}
+
+function quizFingerprint(quiz: QuizSpec): string {
+  return JSON.stringify({
+    quizId: getQuizId(quiz),
+    questionCount: quiz.questions.length,
+    questionIds: quiz.questions.map((question) => question.id),
+    questionTypes: quiz.questions.map((question) => question.type),
+    prompts: quiz.questions.map((question) => question.prompt),
+  });
+}
+
+
+function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz: (quiz: QuizSpec) => void }): ReactElement {
+  const [text, setText] = useState("");
+
+  function loadFromText(): void {
+    try {
+      onLoadQuiz(JSON.parse(text) as QuizSpec);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      alert(`Invalid JSON: ${message}`);
+    }
+  }
+
+  async function loadFile(file: File): Promise<void> {
+    const fileText = await file.text();
+    onLoadQuiz(JSON.parse(fileText) as QuizSpec);
+  }
+
+  return (
+    <main className="shell">
+      <section className="hero card">
+        <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+        <h1>Native-ready quiz interface for LLMs.</h1>
+        <p>
+          Run it as a normal web app, or launch it as a ChatGPT Apps-style widget from the MCP tool server. BetterQuizzes collects answers and confidence; the LLM grades and teaches.
+        </p>
+      </section>
+
+      <section className="grid three">
+        {SAMPLE_QUIZZES.map((sample) => (
+          <button className="sample-card" key={sample.quizId ?? sample.title} type="button" onClick={() => onLoadQuiz(sample)}>
+            <span className="badge">Sample</span>
+            <strong>{sample.title}</strong>
+            <span>{sample.description ?? sample.subject ?? "Demo activity"}</span>
+            <small>{sample.questions.length} questions</small>
+          </button>
+        ))}
+      </section>
+
+      <section className="card stack">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Import</p>
+            <h2>Paste a QuizSpec v2 JSON object</h2>
+          </div>
+          <label className="file-button">
+            Upload .bqz/.json
+            <input
+              accept=".bqz,.json,application/json"
+              type="file"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (file) void loadFile(file);
+              }}
+            />
+          </label>
+        </div>
+        <textarea className="code-input" value={text} placeholder="Paste BetterQuizzes QuizSpec JSON here..." onChange={(event) => setText(event.currentTarget.value)} />
+        {error ? <div className="notice-box" role="status">{error}</div> : null}
+        <div className="actions">
+          <button className="primary" type="button" disabled={!text.trim()} onClick={loadFromText}>Load pasted quiz</button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function QuizRunner({
+  quiz,
+  startedAt,
+  launchId,
+  widgetMode,
+  onReset,
+  onFinish,
+}: {
+  quiz: QuizSpec;
+  startedAt: string;
+  launchId?: string;
+  widgetMode: boolean;
+  onReset: () => void;
+  onFinish: (finished: FinishedSubmission) => void;
+}): ReactElement {
+  const restoredDraftState = useMemo(() => widgetMode ? getPersistedDraftState(getQuizId(quiz)) : null, [widgetMode, quiz]);
+  const [currentIndex, setCurrentIndex] = useState(() => clampIndex(restoredDraftState?.currentIndex ?? 0, quiz.questions.length));
+  const [drafts, setDrafts] = useState<Record<string, DraftAnswer>>(() => sanitizeRestoredDrafts(restoredDraftState?.drafts, quiz));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [skipMode, setSkipMode] = useState<"prompt" | "skipped" | null>(null);
+  const displayPolicy = normalizeDisplayPolicy(quiz.displayPolicy);
+  const gradingPolicy = normalizeGradingPolicy(quiz.gradingPolicy);
+  const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
+  const current = quiz.questions[currentIndex];
+  const requiredQuestions = quiz.questions.filter((question) => isQuestionRequired(question, activityPolicy));
+  const completeQuestionCount = quiz.questions.filter((question) => isQuestionAnswerComplete(question, drafts[question.id])).length;
+  const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
+  const canSubmit = !activityPolicy.submitRequiresRequiredAnswers || !submitIssue;
+  const progressPercent = quiz.questions.length ? Math.round((completeQuestionCount / quiz.questions.length) * 100) : 100;
+  const answeredCount = quiz.questions.filter((question) => hasResponse(drafts[question.id])).length;
+
+  useEffect(() => {
+    setCurrentIndex((index) => clampIndex(index, quiz.questions.length));
+    setDrafts((previous) => keepDraftsForQuiz(previous, quiz));
+  }, [quiz]);
+
+  useEffect(() => {
+    if (!widgetMode) return;
+    persistWidgetState({
+      kind: "betterquizzer.draft_state",
+      status: "draft",
+      quizId: getQuizId(quiz),
+      launchId,
+      currentIndex,
+      drafts: keepDraftsForQuiz(drafts, quiz),
+      updatedAt: new Date().toISOString(),
+    });
+  }, [widgetMode, quiz, launchId, currentIndex, drafts]);
+
+  useEffect(() => {
+    const currentQuestion = quiz.questions[currentIndex];
+    if (!currentQuestion || currentQuestion.type !== "ordering") return;
+    const items = getOrderingItems(currentQuestion);
+    if (!items.length) return;
+    setDrafts((previous) => {
+      const existing = previous[currentQuestion.id];
+      if (hasResponse(existing)) return previous;
+      const now = Date.now();
+      return {
+        ...previous,
+        [currentQuestion.id]: {
+          response: items.map((item) => item.id),
+          confidence: existing?.confidence,
+          firstSeenAt: existing?.firstSeenAt ?? now,
+          lastUpdatedAt: existing?.lastUpdatedAt ?? now,
+        },
+      };
+    });
+  }, [quiz, currentIndex]);
+
+  function updateDraft(questionId: string, patch: Partial<DraftAnswer>): void {
+    setDrafts((previous) => {
+      const now = Date.now();
+      const previousDraft = previous[questionId] ?? { response: null, firstSeenAt: now, lastUpdatedAt: now };
+      const question = quiz.questions.find((item) => item.id === questionId);
+      const merged: DraftAnswer = {
+        ...previousDraft,
+        ...patch,
+        firstSeenAt: clampDraftFirstSeenAt(previousDraft.firstSeenAt, startedAt, now),
+        lastUpdatedAt: now,
+      };
+      // Preserve confidence while a user temporarily clears or edits an answer.
+      // The UI hides/disables confidence for incomplete answers, but restores
+      // the previous value when the question becomes complete again.
+      void question;
+      return { ...previous, [questionId]: merged };
+    });
+  }
+
+  function skipQuiz(): void {
+    setError(null);
+    setSkipMode("prompt");
+  }
+
+  function exitWithoutGrading(): void {
+    if (widgetMode) {
+      persistSubmissionState({
+        status: "skipped",
+        quizId: getQuizId(quiz),
+        launchId,
+        currentIndex,
+        drafts,
+        error: "User skipped the quiz before submission.",
+      });
+    }
+    setSkipMode("skipped");
+  }
+
+  async function finish(options: { allowIncomplete?: boolean } = {}): Promise<void> {
+    if (submitting) return;
+    const records = makeAnswerRecords(quiz, drafts, startedAt);
+    const completion = buildCompletionSummary(quiz, records, displayPolicy, activityPolicy);
+    if (activityPolicy.submitRequiresRequiredAnswers && !completion.isComplete && !options.allowIncomplete) {
+      const firstMissingId = completion.missingRequiredQuestionIds[0] ?? completion.missingRequiredConfidenceIds[0];
+      if (firstMissingId) {
+        const nextIndex = quiz.questions.findIndex((question) => question.id === firstMissingId);
+        if (nextIndex >= 0) setCurrentIndex(nextIndex);
+      }
+      setError(formatSubmitIssue(quiz, completion.missingRequiredQuestionIds, completion.missingRequiredConfidenceIds));
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    const session = createSession(quiz, records, startedAt);
+    const submission = createSubmissionCapsule(quiz, session);
+
+    submission.status = {
+      ...(submission.status ?? { localSaved: true, hostSubmitted: false, followUpRequested: false, duplicateSubmission: false, warnings: [] }),
+      localSaved: true,
+      hostSubmitted: false,
+      followUpRequested: false,
+    };
+
+    if (widgetMode) {
+      persistSubmissionState({
+        status: "submitting",
+        quizId: submission.quizId,
+        launchId,
+        currentIndex,
+        drafts,
+        session,
+        submission,
+      });
+    }
+
+    let hostSubmitted = false;
+    let bridgeError: string | null = null;
+    let hostResult: ToolResultLike | null = null;
+
+    try {
+      if (widgetMode) {
+        try {
+          hostResult = await submitToHost(submission, 8000);
+          hostSubmitted = Boolean(hostResult);
+        } catch (toolError) {
+          bridgeError = toolError instanceof Error ? toolError.message : String(toolError);
+        }
+
+        submission.status = {
+          ...(submission.status ?? { localSaved: true, hostSubmitted: false, followUpRequested: false, duplicateSubmission: false, warnings: [] }),
+          hostSubmitted,
+          warnings: uniqueWarnings([
+            ...(submission.status?.warnings ?? []),
+            ...(bridgeError ? [`Answers were saved locally, but the host submit bridge reported: ${bridgeError}`] : []),
+          ]),
+        };
+
+        persistSubmissionState({
+          status: hostSubmitted ? "submitted" : "fallback_ready",
+          quizId: submission.quizId,
+          launchId,
+          currentIndex,
+          drafts,
+          session,
+          submission,
+          hostResult: summarizeToolResult(hostResult),
+          error: bridgeError ?? undefined,
+        });
+      }
+
+      const firstStatus: SubmissionDeliveryStatus = widgetMode ? "requesting_grade" : "submitted";
+      onFinish({ submission, session, hostSubmitted, followUpRequested: false, followUpStatus: firstStatus, followUpAttempts: 0, followUpMessage: bridgeError ?? undefined });
+
+      if (widgetMode) {
+        void requestChatGptGradeOnce({
+          submission,
+          session,
+          hostSubmitted,
+          currentIndex,
+          drafts,
+          hostResult,
+          launchId,
+          onUpdate: onFinish,
+        });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (skipMode) {
+    return (
+      <SkipQuizScreen
+        mode={skipMode}
+        widgetMode={widgetMode}
+        title={quiz.title}
+        answeredCount={answeredCount}
+        totalCount={quiz.questions.length}
+        submitting={submitting}
+        onResume={() => setSkipMode(null)}
+        onSubmitAnswered={() => void finish({ allowIncomplete: true })}
+        onExitWithoutGrading={exitWithoutGrading}
+        onNewQuiz={onReset}
+      />
+    );
+  }
+
+  if (!current) {
+    return (
+      <main className="shell narrow">
+        <section className="card stack">
+          <h1>No question found.</h1>
+          <button type="button" onClick={onReset}>Back to import</button>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="shell quiz-layout">
+      <section className="top-bar card">
+        <div>
+          <div className="eyebrow-row"><p className="eyebrow">BetterQuizzes</p><span className="version-chip">{WIDGET_VERSION_LABEL}</span></div>
+          <h1><RichInline text={quiz.title} /></h1>
+          {quiz.description ? <RichBlock text={quiz.description} /> : null}
+        </div>
+        <div className="top-actions">
+          {!widgetMode ? <button type="button" onClick={onReset}>New quiz</button> : null}
+          {activityPolicy.allowSkipQuiz ? <button className="skip-quiz-button" type="button" onClick={() => skipQuiz()}>Skip</button> : null}
+        </div>
+        <div className="progress-shell" aria-label="Quiz progress"><span style={{ width: `${progressPercent}%` }} /></div>
+      </section>
+
+      {quiz.questions.length > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} displayPolicy={displayPolicy} activityPolicy={activityPolicy} onSelect={setCurrentIndex} /> : null}
+
+      <section className="main-column">
+        <QuestionCard question={current} draft={drafts[current.id]} displayPolicy={displayPolicy} activityPolicy={activityPolicy} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
+        {error ? <div className="notice-box" role="status">{error}</div> : null}
+        <div className={`actions split compact-actions ${quiz.questions.length <= 1 ? "single-question-actions" : ""}`}>
+          {quiz.questions.length > 1 ? (
+            <div className="actions">
+              <button type="button" disabled={currentIndex === 0} onClick={() => setCurrentIndex((index) => Math.max(0, index - 1))}>Previous</button>
+              <button type="button" disabled={currentIndex === quiz.questions.length - 1} onClick={() => setCurrentIndex((index) => Math.min(quiz.questions.length - 1, index + 1))}>Next</button>
+            </div>
+          ) : null}
+          <div className="submit-column">
+            <button className="primary" type="button" disabled={submitting || !canSubmit} title={submitIssue ?? undefined} onClick={() => void finish()}>{submitting ? "Submitting…" : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+
+function SkipQuizScreen({
+  mode,
+  widgetMode,
+  title,
+  answeredCount,
+  totalCount,
+  submitting,
+  onResume,
+  onSubmitAnswered,
+  onExitWithoutGrading,
+  onNewQuiz,
+}: {
+  mode: "prompt" | "skipped";
+  widgetMode: boolean;
+  title: string;
+  answeredCount: number;
+  totalCount: number;
+  submitting: boolean;
+  onResume: () => void;
+  onSubmitAnswered: () => void;
+  onExitWithoutGrading: () => void;
+  onNewQuiz: () => void;
+}): ReactElement {
+  if (mode === "skipped") {
+    return (
+      <main className="shell narrow result-shell">
+        <section className="card result-hero stack">
+          <p className="eyebrow eyebrow-row">Quiz skipped <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+          <h1>No grade was created</h1>
+          <p>You exited “{title}” before submitting answers for grading.</p>
+          <div className="submission-status-grid user-status-grid">
+            <span>{answeredCount}/{totalCount} questions had draft answers</span>
+            <span>Grading not requested</span>
+          </div>
+          <div className="actions wrap">
+            <button className="primary" type="button" onClick={onResume}>Resume quiz</button>
+            {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="shell narrow result-shell">
+      <section className="card result-hero stack">
+        <p className="eyebrow eyebrow-row">Leave quiz? <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+        <h1>{answeredCount > 0 ? "Submit what you answered?" : "Exit without grading?"}</h1>
+        <p>{answeredCount > 0 ? `You have answered ${answeredCount} of ${totalCount} questions. You can submit those answers for grading, resume the quiz, or exit without creating a grade.` : "You have not answered anything yet. You can resume the quiz or exit without creating a grade."}</p>
+        <div className="actions wrap">
+          <button className="primary" type="button" disabled={answeredCount === 0 || submitting} onClick={onSubmitAnswered}>{submitting ? "Submitting…" : "Submit answered questions"}</button>
+          <button type="button" onClick={onResume}>Resume quiz</button>
+          <button type="button" onClick={onExitWithoutGrading}>Exit without grading</button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function QuestionNav({
+  questions,
+  drafts,
+  currentIndex,
+  displayPolicy,
+  activityPolicy,
+  onSelect,
+}: {
+  questions: Question[];
+  drafts: Record<string, DraftAnswer>;
+  currentIndex: number;
+  displayPolicy: DisplayPolicy;
+  activityPolicy: ActivityPolicy;
+  onSelect: (index: number) => void;
+}): ReactElement {
+  return (
+    <aside className="card nav-card">
+      <p className="eyebrow">Questions</p>
+      <div className="question-dots">
+        {questions.map((question, index) => {
+          const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy);
+          return <button key={question.id} type="button" className={`dot ${index === currentIndex ? "active" : ""} ${status}`} onClick={() => onSelect(index)}>{index + 1}</button>;
+        })}
+      </div>
+    </aside>
+  );
+}
+
+function QuestionCard({ question, draft, displayPolicy, activityPolicy, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+  const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy);
+  const required = isQuestionRequired(question, activityPolicy);
+  const answerComplete = isQuestionAnswerComplete(question, draft);
+  const confidenceValue = answerComplete ? normalizeConfidence(draft?.confidence) : undefined;
+  return (
+    <section className={`card question-card ${status}`}>
+      <div className="question-header">
+        {!required ? <span className="question-meta-label">Optional</span> : null}
+      </div>
+      <h2><RichInline text={question.prompt} /></h2>
+      <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onChange={onChange} />
+      <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
+        <div><p className="confidence-heading">Confidence</p></div>
+        <ConfidencePicker value={confidenceValue} required={displayPolicy.requireConfidence} disabled={!answerComplete} onChange={(confidence) => onChange({ confidence })} />
+      </section>
+    </section>
+  );
+}
+
+function QuestionInput({ question, draft, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+  const response = draft?.response;
+  switch (question.type) {
+    case "multiple_choice":
+      return <ChoiceList question={question} quizChoiceBehavior={quizChoiceBehavior} response={response} onChange={(nextResponse) => onChange({ response: nextResponse })} />;
+    case "multi_select":
+      return <MultiSelectList question={question} quizChoiceBehavior={quizChoiceBehavior} response={response} onChange={(nextResponse) => onChange({ response: nextResponse })} />;
+    case "true_false":
+      return <TrueFalseList selected={typeof response === "boolean" ? response : null} onSelect={(value) => onChange({ response: value })} />;
+    case "fill_blank":
+      return <TextField label="Your answer" placeholder={question.placeholder ?? "Type your answer..."} value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting onChange={(value) => onChange({ response: value })} />;
+    case "short_answer":
+      return <TextArea label="Short answer" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting onChange={(value) => onChange({ response: value })} />;
+    case "long_response":
+      return <TextArea label="Long response" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting onChange={(value) => onChange({ response: value })} rows={8} />;
+    case "multi_typing":
+      return <MultiTypingInput question={question} response={isMultiTypingResponse(response) ? response : {}} onChange={(value) => onChange({ response: value })} />;
+    case "multi_write_vertical":
+      return <MultiWriteVerticalInput question={question} response={isMultiTypingResponse(response) ? response : {}} onChange={(value) => onChange({ response: value })} />;
+    case "text_select":
+      return <TextSelectInput question={question} response={Array.isArray(response) ? response.filter((item): item is string => typeof item === "string") : []} onChange={(value) => onChange({ response: value })} />;
+    case "numeric":
+      return <TextField label={question.unit ? `Number (${question.unit})` : "Number"} inputMode="text" value={typeof response === "number" || typeof response === "string" ? String(response) : ""} onChange={(value) => onChange({ response: value })} />;
+    case "ordering":
+      return <OrderingInput question={question} response={Array.isArray(response) ? response.filter((item): item is string => typeof item === "string") : []} onChange={(value) => onChange({ response: value })} />;
+    case "matching":
+      return <MatchingInput question={question} response={isMatchingPairs(response) ? response : []} onChange={(value) => onChange({ response: value })} />;
+    default:
+      return <QuestionRenderWarning question={question} detail="This question has a missing or unsupported type." />;
+  }
+}
+
+function QuestionRenderWarning({ question, detail }: { question: Question; detail: string }): ReactElement {
+  return (
+    <section className="question-render-warning">
+      <strong>Question setup issue</strong>
+      <p>{detail}</p>
+      <p className="muted compact-status">questionId: {safeText(question.id) || "(missing)"} • type: {formatQuestionType(question.type)}</p>
+    </section>
+  );
+}
+
+type ChoiceLike = { choices?: unknown };
+function getChoiceTexts(question: ChoiceLike): string[] {
+  if (!Array.isArray(question.choices)) return [];
+
+  return question.choices
+    .map((choice, index) => {
+      if (typeof choice === "string") return choice;
+      if (choice && typeof choice === "object") {
+        const record = choice as Record<string, unknown>;
+        return safeText(record.text ?? record.label ?? record.value ?? record.id ?? `Choice ${index + 1}`);
+      }
+      return "";
+    })
+    .filter((text) => text.trim().length > 0);
+}
+
+function safeText(value: unknown): string {
+  return String(value ?? "");
+}
+
+function formatQuestionType(type: unknown): string {
+  return safeText(type || "unknown_question").replaceAll("_", " ");
+}
+
+function RichInline({ text }: { text: unknown }): ReactElement {
+  return <span className="rich-text">{renderInlineMarkup(safeText(text), "ri")}</span>;
+}
+
+function RichBlock({ text }: { text: unknown }): ReactElement {
+  const paragraphs = safeText(text).split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
+  if (!paragraphs.length) return <p />;
+  return (
+    <>
+      {paragraphs.map((paragraph, index) => (
+        <p key={index} className="rich-text rich-block">{renderInlineMarkup(paragraph, `rb-${index}`)}</p>
+      ))}
+    </>
+  );
+}
+
+function renderInlineMarkup(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const tokenPattern = /(\*\*[^*]+\*\*|<u>[\s\S]*?<\/u>|<sub>[\s\S]*?<\/sub>|<sup>[\s\S]*?<\/sup>|`[^`]+`|\*[^*]+\*)/gi;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tokenPattern.exec(text)) !== null) {
+    if (match.index > cursor) appendTextWithBreaks(nodes, text.slice(cursor, match.index), `${keyPrefix}-t-${cursor}`);
+    const token = match[0];
+    const key = `${keyPrefix}-m-${match.index}`;
+    if (token.startsWith("**") && token.endsWith("**")) nodes.push(<strong key={key}>{renderInlineMarkup(token.slice(2, -2), `${key}-b`)}</strong>);
+    else if (/^<u>/i.test(token)) nodes.push(<u key={key}>{renderInlineMarkup(token.slice(3, -4), `${key}-u`)}</u>);
+    else if (/^<sub>/i.test(token)) nodes.push(<sub key={key}>{renderInlineMarkup(token.slice(5, -6), `${key}-sub`)}</sub>);
+    else if (/^<sup>/i.test(token)) nodes.push(<sup key={key}>{renderInlineMarkup(token.slice(5, -6), `${key}-sup`)}</sup>);
+    else if (token.startsWith("`") && token.endsWith("`")) nodes.push(<code key={key}>{token.slice(1, -1)}</code>);
+    else if (token.startsWith("*") && token.endsWith("*")) nodes.push(<em key={key}>{renderInlineMarkup(token.slice(1, -1), `${key}-i`)}</em>);
+    else appendTextWithBreaks(nodes, token, key);
+    cursor = match.index + token.length;
+  }
+  if (cursor < text.length) appendTextWithBreaks(nodes, text.slice(cursor), `${keyPrefix}-t-${cursor}`);
+  return nodes.length ? nodes : [text];
+}
+
+function appendTextWithBreaks(nodes: ReactNode[], text: string, keyPrefix: string): void {
+  const parts = text.split(/\n/);
+  parts.forEach((part, index) => {
+    if (index > 0) nodes.push(<br key={`${keyPrefix}-br-${index}`} />);
+    if (part) nodes.push(part);
+  });
+}
+
+
+type OrderingLike = { items?: unknown };
+function getOrderingItems(question: OrderingLike): { id: string; text: string }[] {
+  if (!Array.isArray(question.items)) return [];
+  return question.items
+    .filter((item): item is { id: unknown; text: unknown } => Boolean(item) && typeof item === "object" && "id" in item && "text" in item)
+    .map((item) => ({ id: String(item.id), text: String(item.text) }))
+    .filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
+}
+
+function normalizeOrderingResponse(response: string[], items: { id: string; text: string }[]): string[] {
+  const itemIds = items.map((item) => item.id);
+  const allowed = new Set(itemIds);
+  const seen = new Set<string>();
+  const filtered = response.filter((id) => {
+    if (!allowed.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  return [...filtered, ...itemIds.filter((id) => !seen.has(id))];
+}
+
+type MatchingLike = { left?: unknown; right?: unknown };
+function getMatchingSide(question: MatchingLike, side: "left" | "right"): { id: string; text: string }[] {
+  const raw = side === "left" ? question.left : question.right;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is { id: unknown; text: unknown } => Boolean(item) && typeof item === "object" && "id" in item && "text" in item)
+    .map((item) => ({ id: String(item.id), text: String(item.text) }))
+    .filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
+}
+
+type MultiTypingLike = { fields?: unknown; responseLimit?: ResponseLimit | null };
+type MultiTypingFieldRender = { id: string; label: string; placeholder?: string; responseLimit?: ResponseLimit | null };
+function getMultiTypingFields(question: MultiTypingLike): MultiTypingFieldRender[] {
+  if (!Array.isArray(question.fields)) return [];
+  return question.fields
+    .filter((field): field is { id: unknown; label: unknown; placeholder?: unknown; responseLimit?: unknown } => Boolean(field) && typeof field === "object" && "id" in field && "label" in field)
+    .map((field) => ({
+      id: String(field.id),
+      label: String(field.label),
+      placeholder: typeof field.placeholder === "string" ? field.placeholder : undefined,
+      responseLimit: getFieldResponseLimit(field.responseLimit),
+    }))
+    .filter((field) => field.id.trim().length > 0 && field.label.trim().length > 0);
+}
+
+function getFieldResponseLimit(raw: unknown): ResponseLimit | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const maxChars = record.maxChars === null ? null : typeof record.maxChars === "number" && Number.isFinite(record.maxChars) ? Math.max(0, Math.floor(record.maxChars)) : undefined;
+  const minChars = typeof record.minChars === "number" && Number.isFinite(record.minChars) ? Math.max(0, Math.floor(record.minChars)) : undefined;
+  const showCounter = typeof record.showCounter === "boolean" ? record.showCounter : undefined;
+  return { maxChars, minChars, showCounter };
+}
+
+function isMultiTypingResponse(value: unknown): value is Record<string, string> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && !("kind" in (value as Record<string, unknown>)) && Object.values(value as Record<string, unknown>).every((item) => typeof item === "string");
+}
+
+type TextSelectLike = { segments?: unknown; selectionPolicy?: unknown; selectPolicy?: unknown; selection?: unknown; select?: unknown };
+type TextSelectSegmentRender = { id: string; text: string; selectable?: boolean };
+type TextSelectPolicyRender = { mode: "exact_count" | "all_that_apply" | "range"; count?: number; min?: number; max?: number; instruction?: string };
+
+function getTextSelectSegments(question: TextSelectLike): TextSelectSegmentRender[] {
+  if (!Array.isArray(question.segments)) return [];
+  return question.segments.flatMap((segment, index): TextSelectSegmentRender[] => {
+    if (typeof segment === "string") {
+      const text = segment.trim();
+      return text ? [{ id: "segment" + (index + 1), text, selectable: true }] : [];
+    }
+    if (!segment || typeof segment !== "object" || Array.isArray(segment)) return [];
+    const record = segment as Record<string, unknown>;
+    const id = String(record.id ?? "segment" + (index + 1)).trim();
+    const text = String(record.text ?? record.label ?? record.value ?? "").trim();
+    if (!id || !text) return [];
+    return [{ id, text, selectable: record.selectable === false ? false : true }];
+  });
+}
+
+function getTextSelectPolicy(question: TextSelectLike): TextSelectPolicyRender {
+  const raw = question.selectionPolicy ?? question.selectPolicy ?? question.selection ?? question.select;
+  const record = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const rawMode = String(record.mode ?? record.kind ?? record.selectionMode ?? "");
+  const count = toPositiveInteger(record.count ?? record.selectCount ?? record.requiredSelections);
+  const min = toNonNegativeInteger(record.min ?? record.minSelections);
+  const max = toPositiveInteger(record.max ?? record.maxSelections);
+  const mode: TextSelectPolicyRender["mode"] = rawMode === "exact_count" || rawMode === "exact" || count !== undefined
+    ? "exact_count"
+    : rawMode === "range" || min !== undefined || max !== undefined
+      ? "range"
+      : "all_that_apply";
+  const instruction = typeof record.instruction === "string" && record.instruction.trim() ? record.instruction.trim() : undefined;
+  return { mode, ...(count !== undefined ? { count } : {}), ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}), ...(instruction ? { instruction } : {}) };
+}
+
+function getTextSelectMaxSelections(policy: TextSelectPolicyRender): number | null {
+  if (policy.mode === "exact_count" && typeof policy.count === "number") return policy.count;
+  if (typeof policy.max === "number") return policy.max;
+  return null;
+}
+
+function getTextSelectInstruction(policy: TextSelectPolicyRender): string {
+  if (policy.instruction) return policy.instruction;
+  if (policy.mode === "exact_count") return "Select " + (policy.count ?? 1) + " segment" + ((policy.count ?? 1) === 1 ? "." : "s.");
+  if (policy.mode === "range") {
+    if (policy.min !== undefined && policy.max !== undefined) return "Select " + policy.min + " to " + policy.max + " segments.";
+    if (policy.min !== undefined) return "Select at least " + policy.min + " segment" + (policy.min === 1 ? "." : "s.");
+    if (policy.max !== undefined) return "Select up to " + policy.max + " segment" + (policy.max === 1 ? "." : "s.");
+  }
+  return "Select all that apply.";
+}
+
+function isTextSelectComplete(question: Extract<Question, { type: "text_select" }>, response: unknown): boolean {
+  if (!Array.isArray(response) || !response.every((item) => typeof item === "string")) return false;
+  const segments = getTextSelectSegments(question);
+  const selectableIds = new Set(segments.filter((segment) => segment.selectable !== false).map((segment) => segment.id));
+  const selected = response.filter((id) => selectableIds.has(id));
+  const policy = getTextSelectPolicy(question);
+  if (policy.mode === "exact_count") return selected.length === (policy.count ?? 1);
+  if (policy.mode === "range") {
+    if (policy.min !== undefined && selected.length < policy.min) return false;
+    if (policy.max !== undefined && selected.length > policy.max) return false;
+    return selected.length > 0 || policy.min === 0;
+  }
+  return selected.length > 0;
+}
+
+function sanitizeTextSelectResponse(question: Extract<Question, { type: "text_select" }>, response: unknown): string[] {
+  if (!Array.isArray(response)) return [];
+  const selectableIds = new Set(getTextSelectSegments(question).filter((segment) => segment.selectable !== false).map((segment) => segment.id));
+  const seen = new Set<string>();
+  return response.filter((item): item is string => {
+    if (typeof item !== "string" || !selectableIds.has(item) || seen.has(item)) return false;
+    seen.add(item);
+    return true;
+  });
+}
+
+function toPositiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function toNonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+function ChoiceList({ question, quizChoiceBehavior, response, onChange }: { question: Extract<Question, { type: "multiple_choice" }>; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; response: AnswerResponse | undefined; onChange: (response: AnswerResponse) => void }): ReactElement {
+  const selected = typeof response === "number" ? response : null;
+  const special = asSpecialResponse(response);
+  const behavior = { ...(quizChoiceBehavior ?? {}), ...(question.choiceBehavior ?? {}) };
+  const allowOther = behavior.allowOther ?? false;
+  const choices = getChoiceTexts(question);
+  if (!choices.length && !allowOther) {
+    return <QuestionRenderWarning question={question} detail="This multiple-choice question did not include any valid choices." />;
+  }
+  return (
+    <div className="choice-list">
+      {choices.map((choice, index) => {
+        const selectedChoice = selected === index;
+        const label = String.fromCharCode(65 + index);
+        return <button key={String(index)} type="button" className={selectedChoice ? "choice single-choice selected" : "choice single-choice"} onClick={() => onChange(index)}><span className="choice-letter" aria-hidden="true">{label}</span><span><RichInline text={choice} /></span></button>;
+      })}
+      {allowOther ? <label className={special?.kind === "other" ? "choice other-choice selected" : "choice other-choice"}><span className="choice-letter">+</span><input value={special?.kind === "other" ? special.text : ""} placeholder={behavior.otherLabel ?? "Other..."} onFocus={() => onChange({ kind: "other", text: special?.kind === "other" ? special.text : "" })} onChange={(event) => onChange({ kind: "other", text: event.currentTarget.value })} /></label> : null}
+    </div>
+  );
+}
+
+function MultiSelectList({ question, quizChoiceBehavior, response, onChange }: { question: Extract<Question, { type: "multi_select" }>; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; response: AnswerResponse | undefined; onChange: (response: AnswerResponse) => void }): ReactElement {
+  const selected = Array.isArray(response) ? response.filter((item): item is number => typeof item === "number") : [];
+  const special = asSpecialResponse(response);
+  const behavior = { ...(quizChoiceBehavior ?? {}), ...(question.choiceBehavior ?? {}) };
+  const choices = getChoiceTexts(question);
+  function toggle(index: number): void {
+    onChange(selected.includes(index) ? selected.filter((item) => item !== index) : [...selected, index].sort((a, b) => a - b));
+  }
+  if (!choices.length && !behavior.allowOther) {
+    return <QuestionRenderWarning question={question} detail="This multi-select question did not include any valid choices." />;
+  }
+  return (
+    <div className="choice-list">
+      {choices.map((choice, index) => {
+        const selectedChoice = selected.includes(index);
+        const label = String.fromCharCode(65 + index);
+        return <button key={String(index)} type="button" className={selectedChoice ? "choice multi-choice selected" : "choice multi-choice"} onClick={() => toggle(index)}><span className="choice-letter" aria-hidden="true">{selectedChoice ? "✓" : ""}</span><span><RichInline text={choice} /></span></button>;
+      })}
+      {behavior.allowOther ? <label className={special?.kind === "other" ? "choice multi-choice other-choice selected" : "choice multi-choice other-choice"}><span className="choice-letter">+</span><input value={special?.kind === "other" ? special.text : ""} placeholder={behavior.otherLabel ?? "Other..."} onFocus={() => onChange({ kind: "other", text: special?.kind === "other" ? special.text : "" })} onChange={(event) => onChange({ kind: "other", text: event.currentTarget.value })} /></label> : null}
+    </div>
+  );
+}
+
+
+function TrueFalseList({ selected, onSelect }: { selected: boolean | null; onSelect: (value: boolean) => void }): ReactElement {
+  return (
+    <div className="choice-list">
+      <button type="button" className={selected === true ? "choice selected" : "choice"} onClick={() => onSelect(true)}><span className="choice-letter">T</span><span>True</span></button>
+      <button type="button" className={selected === false ? "choice selected" : "choice"} onClick={() => onSelect(false)}><span className="choice-letter">F</span><span>False</span></button>
+    </div>
+  );
+}
+
+type TextFormat = "bold" | "italic" | "underline" | "subscript" | "superscript";
+
+type TextControlElement = HTMLInputElement | HTMLTextAreaElement;
+
+function TextField({ label, value, onChange, placeholder, inputMode, responseLimit, formatting = false }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; inputMode?: "decimal" | "text"; responseLimit?: ResponseLimit | null; formatting?: boolean }): ReactElement {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const maxChars = getMaxChars(responseLimit);
+  const limitedValue = clampTextToLimit(value, maxChars);
+  function apply(format: TextFormat): void {
+    applyInlineFormat(inputRef.current, limitedValue, maxChars, onChange, format);
+  }
+  return (
+    <label className="field-label">
+      <span>{label}</span>
+      <input ref={inputRef} autoComplete="off" inputMode={inputMode} value={limitedValue} maxLength={maxChars ?? undefined} placeholder={placeholder} onChange={(event) => onChange(clampTextToLimit(event.currentTarget.value, maxChars))} />
+      {formatting ? <TextFormatToolbar onFormat={apply} /> : null}
+      {shouldShowCharCounter(responseLimit, maxChars) ? <span className="char-counter">{limitedValue.length} / {maxChars}</span> : null}
+    </label>
+  );
+}
+
+function TextArea({ label, value, onChange, rows = 4, responseLimit, formatting = false, placeholder = "Write your answer..." }: { label: string; value: string; onChange: (value: string) => void; rows?: number; responseLimit?: ResponseLimit | null; formatting?: boolean; placeholder?: string }): ReactElement {
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const maxChars = getMaxChars(responseLimit);
+  const limitedValue = clampTextToLimit(value, maxChars);
+
+  useLayoutEffect(() => {
+    const element = textAreaRef.current;
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = Math.max(element.scrollHeight, rows * 24 + 28) + "px";
+  }, [limitedValue, rows]);
+
+  function apply(format: TextFormat): void {
+    applyInlineFormat(textAreaRef.current, limitedValue, maxChars, onChange, format);
+  }
+
+  return (
+    <label className="field-label">
+      <span>{label}</span>
+      <textarea ref={textAreaRef} className="text-area no-horizontal-resize auto-text-area" rows={rows} value={limitedValue} maxLength={maxChars ?? undefined} placeholder={placeholder} onChange={(event) => onChange(clampTextToLimit(event.currentTarget.value, maxChars))} />
+      {formatting ? <TextFormatToolbar onFormat={apply} /> : null}
+      {shouldShowCharCounter(responseLimit, maxChars) ? <span className="char-counter">{limitedValue.length} / {maxChars}</span> : null}
+    </label>
+  );
+}
+
+function TextFormatToolbar({ onFormat }: { onFormat: (format: TextFormat) => void }): ReactElement {
+  const buttons: { format: TextFormat; label: string; title: string }[] = [
+    { format: "bold", label: "B", title: "Bold" },
+    { format: "italic", label: "I", title: "Italic" },
+    { format: "underline", label: "U", title: "Underline" },
+    { format: "subscript", label: "x₂", title: "Subscript" },
+    { format: "superscript", label: "x²", title: "Superscript" },
+  ];
+  return (
+    <div className="format-toolbar" aria-label="Text formatting">
+      {buttons.map((button) => (
+        <button key={button.format} type="button" title={button.title} aria-label={button.title} onMouseDown={(event) => event.preventDefault()} onClick={() => onFormat(button.format)}>
+          {button.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function applyInlineFormat(element: TextControlElement | null, value: string, maxChars: number | null, onChange: (value: string) => void, format: TextFormat): void {
+  const rawStart = element?.selectionStart ?? value.length;
+  const rawEnd = element?.selectionEnd ?? value.length;
+  const selection = rawStart === rawEnd ? expandSelectionToWord(value, rawStart) : { start: rawStart, end: rawEnd };
+  const selected = value.slice(selection.start, selection.end);
+
+  if (!selected.trim()) {
+    window.setTimeout(() => element?.focus(), 0);
+    return;
+  }
+
+  const formatted = formatPlainText(selected, format);
+  const next = clampTextToLimit(value.slice(0, selection.start) + formatted + value.slice(selection.end), maxChars);
+  onChange(next);
+  window.setTimeout(() => {
+    if (!element) return;
+    element.focus();
+    const selectionEnd = Math.min(selection.start + formatted.length, next.length);
+    element.setSelectionRange(Math.min(selection.start, next.length), selectionEnd);
+  }, 0);
+}
+
+function expandSelectionToWord(value: string, index: number): { start: number; end: number } {
+  const bounded = Math.max(0, Math.min(index, value.length));
+  let start = bounded;
+  let end = bounded;
+  while (start > 0 && !/\s/.test(value[start - 1])) start -= 1;
+  while (end < value.length && !/\s/.test(value[end])) end += 1;
+  return { start, end };
+}
+
+function formatPlainText(value: string, format: TextFormat): string {
+  switch (format) {
+    case "bold":
+      return value.replace(/[A-Za-z0-9]/g, (char) => toMathAlphanumeric(char, "bold"));
+    case "italic":
+      return value.replace(/[A-Za-z]/g, (char) => toMathAlphanumeric(char, "italic"));
+    case "underline":
+      return value.replace(/[^\s]/g, (char) => char + "\u0332");
+    case "subscript":
+      return value.replace(/[A-Za-z0-9+\-=()]/g, (char) => SUBSCRIPT_MAP[char] ?? char);
+    case "superscript":
+      return value.replace(/[A-Za-z0-9+\-=()]/g, (char) => SUPERSCRIPT_MAP[char] ?? char);
+  }
+}
+
+function toMathAlphanumeric(char: string, style: "bold" | "italic"): string {
+  const code = char.codePointAt(0) ?? 0;
+  if (style === "bold") {
+    if (code >= 65 && code <= 90) return String.fromCodePoint(0x1d400 + code - 65);
+    if (code >= 97 && code <= 122) return String.fromCodePoint(0x1d41a + code - 97);
+    if (code >= 48 && code <= 57) return String.fromCodePoint(0x1d7ce + code - 48);
+    return char;
+  }
+  if (code >= 65 && code <= 90) return String.fromCodePoint(0x1d434 + code - 65);
+  if (char === "h") return "ℎ";
+  if (code >= 97 && code <= 122) return String.fromCodePoint(0x1d44e + code - 97);
+  return char;
+}
+
+const SUBSCRIPT_MAP: Record<string, string> = {
+  "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
+  "+": "₊", "-": "₋", "=": "₌", "(": "₍", ")": "₎",
+  a: "ₐ", e: "ₑ", h: "ₕ", i: "ᵢ", j: "ⱼ", k: "ₖ", l: "ₗ", m: "ₘ", n: "ₙ", o: "ₒ", p: "ₚ", r: "ᵣ", s: "ₛ", t: "ₜ", u: "ᵤ", v: "ᵥ", x: "ₓ",
+  A: "ₐ", E: "ₑ", H: "ₕ", I: "ᵢ", J: "ⱼ", K: "ₖ", L: "ₗ", M: "ₘ", N: "ₙ", O: "ₒ", P: "ₚ", R: "ᵣ", S: "ₛ", T: "ₜ", U: "ᵤ", V: "ᵥ", X: "ₓ",
+};
+
+const SUPERSCRIPT_MAP: Record<string, string> = {
+  "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+  "+": "⁺", "-": "⁻", "=": "⁼", "(": "⁽", ")": "⁾",
+  a: "ᵃ", b: "ᵇ", c: "ᶜ", d: "ᵈ", e: "ᵉ", f: "ᶠ", g: "ᵍ", h: "ʰ", i: "ⁱ", j: "ʲ", k: "ᵏ", l: "ˡ", m: "ᵐ", n: "ⁿ", o: "ᵒ", p: "ᵖ", r: "ʳ", s: "ˢ", t: "ᵗ", u: "ᵘ", v: "ᵛ", w: "ʷ", x: "ˣ", y: "ʸ", z: "ᶻ",
+  A: "ᴬ", B: "ᴮ", D: "ᴰ", E: "ᴱ", G: "ᴳ", H: "ᴴ", I: "ᴵ", J: "ᴶ", K: "ᴷ", L: "ᴸ", M: "ᴹ", N: "ᴺ", O: "ᴼ", P: "ᴾ", R: "ᴿ", T: "ᵀ", U: "ᵁ", V: "ⱽ", W: "ᵂ",
+};
+
+function MultiTypingInput({ question, response, onChange }: { question: Extract<Question, { type: "multi_typing" }>; response: Record<string, string>; onChange: (value: Record<string, string>) => void }): ReactElement {
+  const fields = getMultiTypingFields(question);
+  if (fields.length < 2) return <QuestionRenderWarning question={question} detail="This multi-typing question needs at least two fields." />;
+
+  function updateField(fieldId: string, value: string): void {
+    onChange({ ...response, [fieldId]: value });
+  }
+
+  return (
+    <div className="multi-typing-grid">
+      {fields.map((field) => (
+        <TextField
+          key={field.id}
+          label={field.label}
+          value={typeof response[field.id] === "string" ? response[field.id] : ""}
+          placeholder={field.placeholder ?? `Type ${field.label.toLowerCase()}...`}
+          responseLimit={field.responseLimit ?? getResponseLimit(question)}
+          onChange={(value) => updateField(field.id, value)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MultiWriteVerticalInput({ question, response, onChange }: { question: Extract<Question, { type: "multi_write_vertical" }>; response: Record<string, string>; onChange: (value: Record<string, string>) => void }): ReactElement {
+  const fields = getMultiTypingFields(question);
+  if (fields.length < 1) return <QuestionRenderWarning question={question} detail="This multi-write vertical question needs at least one field." />;
+
+  function updateField(fieldId: string, value: string): void {
+    onChange({ ...response, [fieldId]: value });
+  }
+
+  return (
+    <div className="multi-write-vertical">
+      {fields.map((field) => (
+        <TextArea
+          key={field.id}
+          label={field.label}
+          value={typeof response[field.id] === "string" ? response[field.id] : ""}
+          placeholder={field.placeholder ?? "Write " + field.label.toLowerCase() + "..."}
+          responseLimit={field.responseLimit ?? getResponseLimit(question)}
+          rows={3}
+          onChange={(value) => updateField(field.id, value)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TextSelectInput({ question, response, onChange }: { question: Extract<Question, { type: "text_select" }>; response: string[]; onChange: (value: string[]) => void }): ReactElement {
+  const segments = getTextSelectSegments(question);
+  const selectableIds = new Set(segments.filter((segment) => segment.selectable !== false).map((segment) => segment.id));
+  const selected = response.filter((id) => selectableIds.has(id));
+  const policy = getTextSelectPolicy(question);
+  const maxSelections = getTextSelectMaxSelections(policy);
+  const maxReached = maxSelections !== null && selected.length >= maxSelections;
+
+  if (!segments.length) return <QuestionRenderWarning question={question} detail="This text-select question needs at least one text segment." />;
+
+  function toggleSegment(id: string): void {
+    if (!selectableIds.has(id)) return;
+    if (selected.includes(id)) {
+      onChange(selected.filter((item) => item !== id));
+      return;
+    }
+    if (maxReached) return;
+    onChange([...selected, id]);
+  }
+
+  function renderSegment(segment: TextSelectSegmentRender, labelText?: string): ReactNode {
+    const selectable = segment.selectable !== false;
+    const isSelected = selected.includes(segment.id);
+    const label = labelText ?? segment.text;
+    if (!selectable) return <span key={segment.id} className="text-segment static-segment">{label}</span>;
+    return (
+      <button
+        key={segment.id}
+        type="button"
+        className={isSelected ? "text-segment selectable-segment selected" : "text-segment selectable-segment"}
+        disabled={!isSelected && maxReached}
+        onClick={() => toggleSegment(segment.id)}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  const inline = buildTextSelectInlineParts(typeof question.text === "string" ? question.text : "", segments, renderSegment);
+  const fallbackSegments = segments.filter((segment) => !inline.renderedSegmentIds.has(segment.id));
+
+  return (
+    <div className="text-select-shell">
+      <p className="text-select-instruction">{getTextSelectInstruction(policy)}</p>
+      <div className="text-select-content inline-text-select">
+        {inline.nodes.length ? inline.nodes : fallbackSegments.map((segment) => renderSegment(segment))}
+      </div>
+      {Boolean(inline.nodes.length && fallbackSegments.length) ? <div className="text-select-fallback" aria-label="Additional selectable segments">{fallbackSegments.map((segment) => renderSegment(segment))}</div> : null}
+      <p className="text-select-count">Selected {selected.length}{maxSelections !== null ? " / " + maxSelections : ""}</p>
+    </div>
+  );
+}
+
+type TextSelectRenderSegment = (segment: TextSelectSegmentRender, labelText?: string) => ReactNode;
+
+function buildTextSelectInlineParts(text: string, segments: TextSelectSegmentRender[], renderSegment: TextSelectRenderSegment): { nodes: ReactNode[]; renderedSegmentIds: Set<string> } {
+  const renderedSegmentIds = new Set<string>();
+  if (!text.trim()) return { nodes: [], renderedSegmentIds };
+
+  const lowerText = text.toLowerCase();
+  const rawMatches = segments
+    .map((segment, order) => {
+      const exactIndex = text.indexOf(segment.text);
+      const fallbackIndex = exactIndex >= 0 ? exactIndex : lowerText.indexOf(segment.text.toLowerCase());
+      return fallbackIndex >= 0 ? { segment, index: fallbackIndex, length: segment.text.length, order } : null;
+    })
+    .filter((match): match is { segment: TextSelectSegmentRender; index: number; length: number; order: number } => Boolean(match))
+    .sort((a, b) => a.index - b.index || b.length - a.length || a.order - b.order);
+
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of rawMatches) {
+    if (renderedSegmentIds.has(match.segment.id) || match.index < cursor) continue;
+    if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
+    const label = text.slice(match.index, match.index + match.length);
+    nodes.push(renderSegment(match.segment, label));
+    renderedSegmentIds.add(match.segment.id);
+    cursor = match.index + match.length;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return { nodes, renderedSegmentIds };
+}
+
+function getResponseLimit(question: Question): ResponseLimit | null {
+  const raw = (question as { responseLimit?: unknown }).responseLimit;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const maxChars = record.maxChars === null ? null : typeof record.maxChars === "number" && Number.isFinite(record.maxChars) ? Math.max(0, Math.floor(record.maxChars)) : undefined;
+  const minChars = typeof record.minChars === "number" && Number.isFinite(record.minChars) ? Math.max(0, Math.floor(record.minChars)) : undefined;
+  const showCounter = typeof record.showCounter === "boolean" ? record.showCounter : undefined;
+  return { maxChars, minChars, showCounter };
+}
+
+function getMaxChars(limit?: ResponseLimit | null): number | null {
+  if (!limit) return null;
+  if (limit.maxChars === null || limit.maxChars === undefined) return null;
+  return Number.isFinite(limit.maxChars) && limit.maxChars > 0 ? Math.floor(limit.maxChars) : null;
+}
+
+function clampTextToLimit(value: string, maxChars: number | null): string {
+  return maxChars === null ? value : value.slice(0, maxChars);
+}
+
+function shouldShowCharCounter(limit: ResponseLimit | null | undefined, maxChars: number | null): boolean {
+  return maxChars !== null && limit?.showCounter !== false;
+}
+
+function parseNumericResponse(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const fraction = trimmed.match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*\/\s*([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/);
+  if (fraction) {
+    const numerator = Number(fraction[1]);
+    const denominator = Number(fraction[2]);
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) return numerator / denominator;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function OrderingInput({ question, response, onChange }: { question: Extract<Question, { type: "ordering" }>; response: string[]; onChange: (value: string[]) => void }): ReactElement {
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const draggingRef = useRef<string | null>(null);
+  const orderRef = useRef<string[]>([]);
+  const items = getOrderingItems(question);
+  const itemIds = items.map((item) => item.id);
+  const itemIdsKey = itemIds.join("|");
+  const behavior = getOrderingBehavior(question);
+  const order = normalizeOrderingResponse(response, items);
+
+  useEffect(() => {
+    orderRef.current = order;
+  }, [order.join("|")]);
+
+  useEffect(() => {
+    if (!response.length && itemIds.length) onChange(itemIds);
+  }, [response.length, itemIdsKey]);
+
+  if (!items.length) return <QuestionRenderWarning question={question} detail="This ordering question did not include any valid items." />;
+
+  function commit(nextOrder: string[]): void {
+    const normalized = normalizeOrderingResponse(nextOrder, items);
+    orderRef.current = normalized;
+    onChange(normalized);
+  }
+
+  function reorder(sourceId: string, targetId: string): void {
+    if (!sourceId || sourceId === targetId) return;
+    const currentOrder = orderRef.current.length ? orderRef.current : order;
+    const fromIndex = currentOrder.indexOf(sourceId);
+    const toIndex = currentOrder.indexOf(targetId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const next = [...currentOrder];
+    next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, sourceId);
+    commit(next);
+  }
+
+  function reorderNativeDrag(targetId: string): void {
+    if (!draggedId || draggedId === targetId) return;
+    reorder(draggedId, targetId);
+  }
+
+  function targetIdFromPoint(clientX: number, clientY: number): string | null {
+    const element = document.elementFromPoint(clientX, clientY);
+    const row = element?.closest?.("[data-order-id]") as HTMLElement | null;
+    return row?.dataset.orderId ?? null;
+  }
+
+  function beginPointerDrag(event: PointerEvent<HTMLElement>, id: string): void {
+    draggingRef.current = id;
+    setDraggedId(id);
+    setOverId(id);
+    event.preventDefault();
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* no-op */ }
+  }
+
+  function movePointerDrag(event: PointerEvent<HTMLElement>): void {
+    const sourceId = draggingRef.current;
+    if (!sourceId) return;
+    event.preventDefault();
+    const targetId = targetIdFromPoint(event.clientX, event.clientY);
+    if (!targetId) return;
+    setOverId(targetId);
+    reorder(sourceId, targetId);
+  }
+
+  function endPointerDrag(event: PointerEvent<HTMLElement>): void {
+    if (!draggingRef.current) return;
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
+    draggingRef.current = null;
+    setDraggedId(null);
+    setOverId(null);
+  }
+
+  return (
+    <div className="order-shell drag-order-shell" aria-label="Ordering answer">
+      <div className="order-end-label top-label">{behavior.topLabel}</div>
+      <div className="order-list drag-order-list" aria-live="polite">
+        {order.map((id, index) => {
+          const item = items.find((entry) => entry.id === id);
+          return (
+            <div
+              className={(draggedId === id ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (overId === id ? " drag-over" : "")}
+              key={id}
+              data-order-id={id}
+              draggable
+              onDragStart={(event) => {
+                setDraggedId(id);
+                draggingRef.current = id;
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", id);
+              }}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setOverId(id);
+                reorderNativeDrag(id);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                reorderNativeDrag(id);
+                draggingRef.current = null;
+                setDraggedId(null);
+                setOverId(null);
+              }}
+              onDragEnd={() => {
+                draggingRef.current = null;
+                setDraggedId(null);
+                setOverId(null);
+              }}
+            >
+              <span className="order-item-text"><span className="order-index">{index + 1}</span><RichInline text={item?.text ?? id} /></span>
+              <span
+                className="drag-handle"
+                role="button"
+                tabIndex={0}
+                aria-label={`Drag ${item?.text ?? id}`}
+                onPointerDown={(event) => beginPointerDrag(event, id)}
+                onPointerMove={movePointerDrag}
+                onPointerUp={endPointerDrag}
+                onPointerCancel={endPointerDrag}
+              >
+                ⋮⋮
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="order-end-label bottom-label">{behavior.bottomLabel}</div>
+    </div>
+  );
+}
+
+function MatchingInput({ question, response, onChange }: { question: Extract<Question, { type: "matching" }>; response: MatchingPair[]; onChange: (value: MatchingPair[]) => void }): ReactElement {
+  const leftItems = getMatchingSide(question, "left");
+  const rightItems = getMatchingSide(question, "right");
+  function setPair(leftId: string, rightId: string): void {
+    const without = response.filter((pair) => pair.leftId !== leftId);
+    onChange(rightId ? [...without, { leftId, rightId }] : without);
+  }
+  if (!leftItems.length || !rightItems.length) {
+    return <QuestionRenderWarning question={question} detail="This matching question needs valid left and right item lists." />;
+  }
+  return <div className="match-list">{leftItems.map((left) => <label key={left.id} className="match-row"><span>{left.text}</span><select value={response.find((pair) => pair.leftId === left.id)?.rightId ?? ""} onChange={(event) => setPair(left.id, event.currentTarget.value)}><option value="">Choose match...</option>{rightItems.map((right) => <option key={right.id} value={right.id}>{right.text}</option>)}</select></label>)}</div>;
+}
+
+function ConfidencePicker({ value, required, disabled, onChange }: { value: AnswerRecord["confidence"] | undefined; required: boolean; disabled?: boolean; onChange: (value: AnswerRecord["confidence"]) => void }): ReactElement {
+  const levels = [1, 2, 3] as const;
+  return (
+    <div className="confidence-picker three-level" aria-label="Confidence rating" aria-disabled={disabled ? "true" : undefined}>
+      {levels.map((item) => (
+        <button key={item} type="button" disabled={disabled} className={value === item ? "selected" : ""} onClick={() => onChange(item)}>
+          <strong>{item}</strong><span>{confidenceLabel(item)}</span>
+        </button>
+      ))}
+      {required && !disabled && value === undefined ? <small className="required-note">Required</small> : null}
+    </div>
+  );
+}
+
+function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: FinishedSubmission; widgetMode: boolean; onNewQuiz: () => void }): ReactElement {
+  const { submission, session, hostSubmitted } = finished;
+  const [copied, setCopied] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const compact = encodeCompactSubmission(submission);
+  const prompt = buildLlmReturnPrompt(submission);
+  const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
+
+  async function copy(name: string, text: string): Promise<void> {
+    await copyText(text);
+    setCopied(name);
+  }
+
+  return (
+    <main className="shell narrow result-shell">
+      <section className="card result-hero">
+        <p className="eyebrow eyebrow-row">Quiz submitted <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+        <h1>{getSubmissionHeadline(gradeStatus)}</h1>
+        <p>{getSubmissionMessage(gradeStatus, hostSubmitted)}</p>
+
+        <div className="submission-status-grid user-status-grid">
+          <span>Answers saved ✓</span>
+          <span>{submission.completion.requiredAnswered}/{submission.completion.requiredTotal} required complete ✓</span>
+          <span>{getGradeStatusLabel(gradeStatus)}</span>
+        </div>
+
+        {finished.followUpAttempts && gradeStatus !== "grade_requested" ? (
+          <p className="muted compact-status">Attempt {finished.followUpAttempts}: {finished.followUpMessage ?? "Still trying to ask ChatGPT to grade."}</p>
+        ) : null}
+
+        <div className="actions wrap">
+          <button className="primary" type="button" onClick={() => setShowReview((value) => !value)}>{showReview ? "Hide review" : "Review answers"}</button>
+          {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
+          <button type="button" onClick={() => setShowAdvanced((value) => !value)}>{showAdvanced ? "Hide options" : "More options"}</button>
+        </div>
+        {copied ? <p className="copied">Copied {copied}.</p> : null}
+      </section>
+
+      {showReview ? <SubmissionReview submission={submission} /> : null}
+
+      {showAdvanced ? (
+        <section className="card stack">
+          <p className="eyebrow">Options</p>
+          <p className="muted">Most of the time you do not need these. Your answers are already saved.</p>
+          <div className="actions wrap">
+            <button type="button" onClick={() => void copy("grading prompt", prompt)}>Copy grading prompt</button>
+            <button type="button" onClick={() => void copy("compact code", compact)}>Copy compact code</button>
+            <button type="button" onClick={() => void copy("compact prompt", buildCompactReturnPrompt(submission))}>Copy compact prompt</button>
+            <button type="button" onClick={() => void copy("issue report", buildIssueReport(finished, widgetMode))}>Copy issue report</button>
+            <button type="button" onClick={() => downloadJson(`${submission.quizId}-submission.bqsub`, submission)}>Download answers</button>
+            <button type="button" onClick={() => downloadJson(`${session.sessionId}.session.json`, session)}>Download session</button>
+            <button type="button" onClick={() => setShowDebug((value) => !value)}>{showDebug ? "Hide details" : "Show details"}</button>
+          </div>
+        </section>
+      ) : null}
+
+      {showAdvanced && showDebug ? <section className="card stack">
+        <p className="eyebrow">Submission details</p>
+        <pre className="code-preview">{JSON.stringify(submission, null, 2)}</pre>
+      </section> : null}
+    </main>
+  );
+}
+
+function SubmissionReview({ submission }: { submission: SubmissionCapsule }): ReactElement {
+  const answerMap = new Map(submission.answers.map((answer) => [answer.questionId, answer]));
+  const keyMap = new Map((submission.answerKey ?? []).map((entry) => [entry.questionId, entry]));
+  return (
+    <section className="card stack review-panel">
+      <p className="eyebrow">Review</p>
+      <h2>Your submitted questions</h2>
+      <p className="muted">Use this to review your work while or after ChatGPT grades in the chat.</p>
+      <div className="review-list">
+        {submission.questions.map((question, index) => {
+          const answer = answerMap.get(question.id);
+          const key = keyMap.get(question.id);
+          return (
+            <article className="review-item" key={question.id}>
+              <div className="question-header"><span className="badge">Question {index + 1}</span><span className="badge subtle-badge">{formatQuestionType(question.type)}</span></div>
+              <h3>{question.prompt}</h3>
+              {question.multiTypingFields ? <p className="muted compact-status">Fields: {question.multiTypingFields.map((field) => field.label).join(", ")}</p> : null}
+              <p><strong>Your answer:</strong> {formatAnswerForReview(answer?.response)}</p>
+              {answer?.confidence ? <p className="muted compact-status">Confidence: {answer.confidence} ({confidenceLabel(answer.confidence)})</p> : null}
+              {key ? <details><summary>Answer key / grading guide</summary><pre className="review-answer-key">{formatAnswerKeyForReview(key)}</pre></details> : null}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function formatAnswerForReview(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "No response";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map((item) => typeof item === "object" ? JSON.stringify(item) : String(item)).join(" -> ");
+  if (typeof value === "object") {
+    const special = asSpecialResponse(value);
+    if (special?.kind === "other") return special.text || "Other";
+    if (special?.kind === "cancelled") return "Cancelled";
+    return Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key}: ${String(item ?? "")}`).join("; ");
+  }
+  return String(value);
+}
+
+function formatAnswerKeyForReview(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
+function buildIssueReport(finished: FinishedSubmission, widgetMode: boolean): string {
+  return JSON.stringify({
+    kind: "betterquizzer.issue_report",
+    widgetVersion: WIDGET_VERSION,
+    buildId: BETTERQUIZZER_BUILD_ID,
+    widgetMode,
+    quizId: finished.submission.quizId,
+    sessionId: finished.submission.sessionId,
+    followUpStatus: finished.followUpStatus,
+    followUpRequested: finished.followUpRequested,
+    followUpAttempts: finished.followUpAttempts,
+    hostSubmitted: finished.hostSubmitted,
+    completion: finished.submission.completion,
+    warnings: finished.submission.status?.warnings ?? [],
+    message: finished.followUpMessage,
+    createdAt: new Date().toISOString(),
+  }, null, 2);
+}
+
+function getFinishedGradeStatus(finished: FinishedSubmission, widgetMode: boolean): SubmissionDeliveryStatus {
+  if (finished.followUpStatus) return finished.followUpStatus;
+  if (!widgetMode) return "submitted";
+  return finished.submission.status?.followUpRequested ? "grade_requested" : "requesting_grade";
+}
+
+function getSubmissionHeadline(status: SubmissionDeliveryStatus): string {
+  switch (status) {
+    case "grade_requested":
+      return "ChatGPT is grading your work";
+    case "requesting_grade":
+    case "retrying_grade_request":
+      return "Asking ChatGPT to grade…";
+    case "grade_request_unavailable":
+      return "Answers saved";
+    case "grade_request_failed":
+      return "Answers saved";
+    default:
+      return "Your answers were saved";
+  }
+}
+
+function getSubmissionMessage(status: SubmissionDeliveryStatus, hostSubmitted: boolean): string {
+  if (status === "grade_requested") return "ChatGPT has your submitted answers. You can return to the chat for feedback.";
+  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers are saved. BetterQuizzes is asking ChatGPT to grade them now.";
+  if (status === "grade_request_unavailable") return hostSubmitted
+    ? "Your answers were submitted, but this host session did not expose automatic chat follow-up."
+    : "Your answers were saved locally, but this host session did not expose the automatic grading bridge.";
+  if (status === "grade_request_failed") return "Your answers were saved. The automatic grading request did not complete. Your submission is not lost.";
+  return "Your answers were saved.";
+}
+
+function getGradeStatusLabel(status: SubmissionDeliveryStatus): string {
+  switch (status) {
+    case "grade_requested":
+      return "Grade request sent ✓";
+    case "requesting_grade":
+      return "Asking ChatGPT to grade…";
+    case "retrying_grade_request":
+      return "Still trying to request grading…";
+    case "grade_request_unavailable":
+      return "Automatic grading unavailable";
+    case "grade_request_failed":
+      return "ChatGPT request did not complete";
+    default:
+      return "Saved";
+  }
+}
+
+function summarizeToolResult(result: ToolResultLike | null): ToolResultLike | null {
+  if (!result) return null;
+  const text = Array.isArray(result.content)
+    ? result.content
+        .map((item) => {
+          if (item && typeof item === "object" && "text" in item) return String((item as { text?: unknown }).text ?? "");
+          return "";
+        })
+        .filter(Boolean)
+        .join("\n")
+    : undefined;
+  return {
+    content: text ? [{ type: "text", text }] : undefined,
+    structuredContent: result.structuredContent ? { ok: true } : undefined,
+  };
+}
+
+type GradeRetryOptions = {
+  submission: SubmissionCapsule;
+  session: ReturnType<typeof createSession>;
+  hostSubmitted: boolean;
+  currentIndex: number;
+  drafts: Record<string, DraftAnswer>;
+  hostResult: ToolResultLike | null;
+  launchId?: string;
+  onUpdate: (finished: FinishedSubmission) => void;
+};
+
+async function requestChatGptGradeOnce(options: GradeRetryOptions): Promise<void> {
+  setFollowUpDelivery(options, "requesting_grade", false, 0, "Asking ChatGPT to grade…");
+
+  const result = await sendSubmissionFollowUp(buildAutoGradePrompt(options.submission), 8000);
+  if (result.status === "sent") {
+    setFollowUpDelivery(options, "grade_requested", true, 1, "Grade request sent.");
+    return;
+  }
+
+  if (result.status === "unavailable") {
+    setFollowUpDelivery(options, "grade_request_unavailable", false, 1, result.message);
+    return;
+  }
+
+  setFollowUpDelivery(options, "grade_request_failed", false, 1, result.message ?? "ChatGPT grading request did not complete.");
+}
+
+function setFollowUpDelivery(options: GradeRetryOptions, status: SubmissionDeliveryStatus, followUpRequested: boolean, attempts: number, message?: string): void {
+  options.submission.status = {
+    ...(options.submission.status ?? { localSaved: true, hostSubmitted: options.hostSubmitted, followUpRequested: false, duplicateSubmission: false, warnings: [] }),
+    localSaved: true,
+    hostSubmitted: options.hostSubmitted,
+    followUpRequested,
+    warnings: uniqueWarnings([
+      ...(options.submission.status?.warnings ?? []),
+      ...(message && status !== "grade_requested" && status !== "requesting_grade" && status !== "retrying_grade_request" ? [message] : []),
+    ]),
+  };
+
+  persistSubmissionState({
+    status: status === "grade_requested" ? "grade_requested" : status === "grade_request_unavailable" || status === "grade_request_failed" ? "fallback_ready" : "requesting_grade",
+    quizId: options.submission.quizId,
+    launchId: options.launchId,
+    currentIndex: options.currentIndex,
+    drafts: options.drafts,
+    session: options.session,
+    submission: options.submission,
+    hostResult: summarizeToolResult(options.hostResult),
+    error: status === "grade_request_failed" || status === "grade_request_unavailable" ? message : undefined,
+  });
+
+  options.onUpdate({
+    submission: options.submission,
+    session: options.session,
+    hostSubmitted: options.hostSubmitted,
+    followUpRequested,
+    followUpStatus: status,
+    followUpAttempts: attempts,
+    followUpMessage: message,
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function uniqueWarnings(warnings: string[]): string[] {
+  return [...new Set(warnings.filter(Boolean))];
+}
+
+function clampIndex(index: number, questionCount: number): number {
+  return Math.max(0, Math.min(Math.max(0, questionCount - 1), index));
+}
+
+function sanitizeRestoredDrafts(value: unknown, quiz: QuizSpec): Record<string, DraftAnswer> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return keepDraftsForQuiz(value as Record<string, DraftAnswer>, quiz);
+}
+
+function keepDraftsForQuiz(drafts: Record<string, DraftAnswer>, quiz: QuizSpec): Record<string, DraftAnswer> {
+  const questionById = new Map(quiz.questions.map((question) => [question.id, question]));
+  const kept: Record<string, DraftAnswer> = {};
+  for (const [questionId, draft] of Object.entries(drafts)) {
+    const question = questionById.get(questionId);
+    if (!question || !isDraftAnswerLike(draft)) continue;
+    const sanitized = sanitizeDraftForQuestion(question, draft);
+    // Keep saved confidence even if a restored draft is temporarily incomplete;
+    // the picker stays locked until the answer is complete again.
+    kept[questionId] = sanitized;
+  }
+  return kept;
+}
+
+function isDraftAnswerLike(value: unknown): value is DraftAnswer {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && typeof (value as { firstSeenAt?: unknown }).firstSeenAt === "number";
+}
+
+function sanitizeDraftForQuestion(question: Question, draft: DraftAnswer): DraftAnswer {
+  const base: DraftAnswer = {
+    response: null,
+    confidence: normalizeConfidence(draft.confidence),
+    firstSeenAt: Number.isFinite(draft.firstSeenAt) ? draft.firstSeenAt : Date.now(),
+    lastUpdatedAt: typeof draft.lastUpdatedAt === "number" && Number.isFinite(draft.lastUpdatedAt) ? draft.lastUpdatedAt : undefined,
+  };
+  const response = draft.response;
+  switch (question.type) {
+    case "multiple_choice":
+      return { ...base, response: typeof response === "number" ? response : asSpecialResponse(response) ?? null };
+    case "multi_select":
+      return { ...base, response: Array.isArray(response) ? response.filter((item): item is number => typeof item === "number") : asSpecialResponse(response) ?? null };
+    case "true_false":
+      return { ...base, response: typeof response === "boolean" ? response : null };
+    case "fill_blank":
+    case "short_answer":
+    case "long_response":
+      return { ...base, response: typeof response === "string" ? clampTextToLimit(response, getMaxChars(getResponseLimit(question))) : null };
+    case "multi_typing":
+    case "multi_write_vertical":
+      return { ...base, response: sanitizeMultiTypingResponse(question, response) };
+    case "text_select":
+      return { ...base, response: sanitizeTextSelectResponse(question, response) };
+    case "numeric":
+      return { ...base, response: typeof response === "number" && Number.isFinite(response) ? response : typeof response === "string" ? response : null };
+    case "ordering": {
+      const restored = Array.isArray(response) ? response.filter((item): item is string => typeof item === "string") : [];
+      return { ...base, response: restored.length ? normalizeOrderingResponse(restored, getOrderingItems(question)) : null };
+    }
+    case "matching":
+      return { ...base, response: sanitizeMatchingPairs(question, response) };
+    default:
+      return base;
+  }
+}
+
+function sanitizeMultiTypingResponse(question: Question & MultiTypingLike, response: unknown): Record<string, string> {
+  const fields = getMultiTypingFields(question);
+  const record = isMultiTypingResponse(response) ? response : {};
+  const next: Record<string, string> = {};
+  for (const field of fields) {
+    const maxChars = getMaxChars(field.responseLimit ?? getResponseLimit(question));
+    next[field.id] = clampTextToLimit(record[field.id] ?? "", maxChars);
+  }
+  return next;
+}
+
+function sanitizeMatchingPairs(question: Extract<Question, { type: "matching" }>, response: unknown): MatchingPair[] {
+  if (!isMatchingPairs(response)) return [];
+  const leftIds = new Set(getMatchingSide(question, "left").map((item) => item.id));
+  const rightIds = new Set(getMatchingSide(question, "right").map((item) => item.id));
+  const seenLeft = new Set<string>();
+  return response.filter((pair) => {
+    if (!leftIds.has(pair.leftId) || !rightIds.has(pair.rightId) || seenLeft.has(pair.leftId)) return false;
+    seenLeft.add(pair.leftId);
+    return true;
+  });
+}
+
+function buildAnswerMeta(question: Question): Record<string, unknown> | undefined {
+  if (question.type === "ordering") {
+    const behavior = getOrderingBehavior(question);
+    return {
+      responseDirection: behavior.direction,
+      visualOrder: "top_to_bottom",
+      topLabel: behavior.topLabel,
+      bottomLabel: behavior.bottomLabel,
+      interaction: "drag_and_drop",
+    };
+  }
+  if (question.type === "text_select") {
+    const segments = getTextSelectSegments(question);
+    return {
+      selectionPolicy: getTextSelectPolicy(question),
+      selectableSegmentIds: segments.filter((segment) => segment.selectable !== false).map((segment) => segment.id),
+    };
+  }
+  return undefined;
+}
+
+function getOrderingBehavior(question: Extract<Question, { type: "ordering" }>): { direction: "top_to_bottom"; topLabel: string; bottomLabel: string } {
+  const raw = (question as { orderingBehavior?: unknown }).orderingBehavior;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const record = raw as Record<string, unknown>;
+    const topLabel = typeof record.topLabel === "string" && record.topLabel.trim() ? record.topLabel.trim() : undefined;
+    const bottomLabel = typeof record.bottomLabel === "string" && record.bottomLabel.trim() ? record.bottomLabel.trim() : undefined;
+    if (topLabel && bottomLabel) return { direction: "top_to_bottom", topLabel, bottomLabel };
+  }
+  return inferOrderingBehavior(question.prompt);
+}
+
+function inferOrderingBehavior(prompt: string): { direction: "top_to_bottom"; topLabel: string; bottomLabel: string } {
+  const normalized = prompt.toLowerCase();
+  if (normalized.includes("greatest to least") || normalized.includes("largest to smallest") || normalized.includes("highest to lowest")) return { direction: "top_to_bottom", topLabel: "Greatest", bottomLabel: "Least" };
+  if (normalized.includes("least to greatest") || normalized.includes("smallest to largest") || normalized.includes("lowest to highest")) return { direction: "top_to_bottom", topLabel: "Least", bottomLabel: "Greatest" };
+  if (normalized.includes("oldest to newest")) return { direction: "top_to_bottom", topLabel: "Oldest", bottomLabel: "Newest" };
+  if (normalized.includes("newest to oldest")) return { direction: "top_to_bottom", topLabel: "Newest", bottomLabel: "Oldest" };
+  if (normalized.includes("first to last")) return { direction: "top_to_bottom", topLabel: "First", bottomLabel: "Last" };
+  return { direction: "top_to_bottom", topLabel: "First", bottomLabel: "Last" };
+}
+
+
+function makeAnswerRecords(quiz: QuizSpec, drafts: Record<string, DraftAnswer>, startedAt?: string): AnswerRecord[] {
+  return quiz.questions.map((question) => {
+    const draft = drafts[question.id];
+    const response = normalizeResponseForSubmission(question, draft?.response ?? null);
+    const timeMs = safeElapsedMs(draft, startedAt);
+    const meta = buildAnswerMeta(question);
+    return { questionId: question.id, response, confidence: isQuestionAnswerComplete(question, draft) ? normalizeConfidence(draft?.confidence) : undefined, timeMs, ...(meta ? { meta, ...meta } : {}) };
+  });
+}
+
+function normalizeResponseForSubmission(question: Question, response: AnswerResponse): AnswerResponse {
+  if (question.type === "numeric") {
+    if (typeof response === "number" && Number.isFinite(response)) return response;
+    if (typeof response === "string") {
+      const parsed = parseNumericResponse(response);
+      return parsed ?? response.trim();
+    }
+    return null;
+  }
+  return response;
+}
+
+function safeElapsedMs(draft: DraftAnswer | undefined, startedAt?: string): number | undefined {
+  if (!draft) return undefined;
+  const now = Date.now();
+  const firstSeenAt = clampDraftFirstSeenAt(draft.firstSeenAt, startedAt, now);
+  const elapsed = Math.max(0, now - firstSeenAt);
+  const sessionStartedAt = startedAt ? Date.parse(startedAt) : Number.NaN;
+  const sessionElapsed = Number.isFinite(sessionStartedAt) ? Math.max(0, now - sessionStartedAt) : elapsed;
+  return Math.min(elapsed, sessionElapsed, 2 * 60 * 60 * 1000);
+}
+
+function clampDraftFirstSeenAt(firstSeenAt: number, startedAt?: string, now = Date.now()): number {
+  const sessionStartedAt = startedAt ? Date.parse(startedAt) : Number.NaN;
+  const floor = Number.isFinite(sessionStartedAt) ? sessionStartedAt : now - 2 * 60 * 60 * 1000;
+  if (!Number.isFinite(firstSeenAt)) return now;
+  return Math.max(Math.min(firstSeenAt, now), floor);
+}
+
+function getSubmitIssue(quiz: QuizSpec, drafts: Record<string, DraftAnswer>, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy, startedAt?: string): string | null {
+  const records = makeAnswerRecords(quiz, drafts, startedAt);
+  const completion = buildCompletionSummary(quiz, records, displayPolicy, activityPolicy);
+  if (completion.isComplete) return null;
+  return formatSubmitIssue(quiz, completion.missingRequiredQuestionIds, completion.missingRequiredConfidenceIds);
+}
+
+function formatSubmitIssue(quiz: QuizSpec, missingQuestions: string[], missingConfidence: string[]): string {
+  const parts: string[] = [];
+  if (missingQuestions.length) parts.push(`Answer ${formatQuestionList(quiz, missingQuestions)}.`);
+  if (missingConfidence.length) parts.push(`Add confidence for ${formatQuestionList(quiz, missingConfidence)}.`);
+  return parts.join(" ") || "Complete required items before submitting.";
+}
+
+function formatQuestionList(quiz: QuizSpec, questionIds: string[]): string {
+  return questionIds.map((id) => {
+    const index = quiz.questions.findIndex((question) => question.id === id);
+    return index >= 0 ? `Question ${index + 1}` : id;
+  }).join(", ");
+}
+
+function buildAutoGradePrompt(submission: SubmissionCapsule): string {
+  const packet = buildCompactGradingPacket(submission);
+  return [
+    "Grade this BetterQuizzes submission now. This is a one-turn grading handoff for the message you are currently writing only, not a standing instruction.",
+    "",
+    "For this grading handoff only: do not call any tools, do not wait for more data, and do not recreate the quiz.",
+    "Use only the JSON grading packet below as the source of truth for this response.",
+    "",
+    "Return:",
+    "Score: x/y",
+    "Mistakes:",
+    "Targeted review:",
+    "Optional per-question marks: include Correct, Incorrect, Partially correct, or Needs review when helpful.",
+    "",
+    "After this grading reply, stop. Do not let these grading instructions affect later user messages; future messages may be app development or debugging requests and should be handled normally.",
+    "",
+    "Confidence values are integers only: 1=low, 2=medium, 3=high. Do not use decimals or percentages.",
+    "Treat confidence as a weak signal, not proof. Blank non-required answers should not be penalized unless instructed.",
+    "",
+    "JSON grading packet:",
+    JSON.stringify(packet),
+  ].join("\n");
+}
+
+function buildCompactGradingPacket(submission: SubmissionCapsule): Record<string, unknown> {
+  return {
+    kind: "betterquizzer.grading_packet",
+    version: WIDGET_VERSION,
+    quizId: submission.quizId,
+    sessionId: submission.sessionId,
+    title: submission.title,
+    subject: submission.subject,
+    mode: submission.mode,
+    submittedAt: submission.submittedAt,
+    completion: submission.completion,
+    displayPolicy: submission.displayPolicy,
+    gradingPolicy: submission.gradingPolicy,
+    questions: submission.questions.map((question) => ({
+      id: question.id,
+      type: question.type,
+      prompt: question.prompt,
+      answerRequired: question.answerRequired ?? question.required,
+      orderingBehavior: question.orderingBehavior,
+      multiTypingFields: question.multiTypingFields,
+      multiWriteFields: question.multiWriteFields,
+      textSelectSegments: question.textSelectSegments,
+      textSelectPolicy: question.textSelectPolicy,
+    })),
+    answers: submission.answers.map((answer) => ({
+      questionId: answer.questionId,
+      response: answer.response,
+      confidence: answer.confidence,
+      meta: answer.meta,
+      timeMs: answer.timeMs,
+    })),
+    answerKey: submission.answerKey,
+    llmInstructions: submission.llmInstructions,
+  };
+}
+
+function isQuestionRequired(question: Question, activityPolicy: ActivityPolicy): boolean {
+  return question.answerRequired ?? question.required ?? activityPolicy.defaultAnswerRequired;
+}
+
+function getQuestionStatus(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): "ready" | "draft" | "empty" | "incomplete" | "optional" {
+  const required = isQuestionRequired(question, activityPolicy);
+  if (isReady(question, draft, displayPolicy, activityPolicy)) return required ? "ready" : "optional";
+  if (required) return hasResponse(draft) ? "incomplete" : "empty";
+  return hasResponse(draft) ? "draft" : "optional";
+}
+
+function isReady(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): boolean {
+  const required = isQuestionRequired(question, activityPolicy);
+  if (!isQuestionAnswerComplete(question, draft)) return !required;
+  if (displayPolicy.requireConfidence && normalizeConfidence(draft?.confidence) === undefined) return false;
+  return true;
+}
+
+function hasMeaningfulText(value: string): boolean {
+  const withoutFormatPlaceholders = value
+    .replace(/<\/?(?:u|sub|sup)>/gi, "")
+    .replace(/[*_`~]/g, "")
+    .trim();
+  return withoutFormatPlaceholders.length > 0;
+}
+
+function isQuestionAnswerComplete(question: Question, draft: DraftAnswer | undefined): boolean {
+  if (!draft) return false;
+  const response = draft.response;
+  const special = asSpecialResponse(response);
+  if (special?.kind === "cancelled") return true;
+  switch (question.type) {
+    case "multiple_choice":
+      return typeof response === "number" || special?.kind === "other" && special.text.trim().length > 0;
+    case "multi_select":
+      return Array.isArray(response) && response.length > 0 || special?.kind === "other" && special.text.trim().length > 0;
+    case "true_false":
+      return typeof response === "boolean";
+    case "fill_blank":
+    case "short_answer":
+    case "long_response":
+      return typeof response === "string" && hasMeaningfulText(response);
+    case "numeric":
+      return typeof response === "number" && Number.isFinite(response) || typeof response === "string" && hasMeaningfulText(response);
+    case "matching": {
+      const leftItems = getMatchingSide(question, "left");
+      const rightIds = new Set(getMatchingSide(question, "right").map((item) => item.id));
+      const pairs = isMatchingPairs(response) ? response : [];
+      return leftItems.length > 0 && leftItems.every((left) => pairs.some((pair) => pair.leftId === left.id && rightIds.has(pair.rightId)));
+    }
+    case "ordering": {
+      const items = getOrderingItems(question);
+      return items.length > 0 && Array.isArray(response) && response.length >= items.length;
+    }
+    case "multi_typing":
+    case "multi_write_vertical": {
+      if (!isMultiTypingResponse(response)) return false;
+      const responseRecord = response as Record<string, string>;
+      const fields = getMultiTypingFields(question as Question & MultiTypingLike);
+      return fields.length > 0 && fields.every((field) => typeof responseRecord[field.id] === "string" && responseRecord[field.id].trim().length > 0);
+    }
+    case "text_select":
+      return isTextSelectComplete(question, response);
+    default:
+      return hasResponse(draft);
+  }
+}
+
+function hasResponse(draft: DraftAnswer | undefined): boolean {
+  if (!draft) return false;
+  const response = draft.response;
+  if (response === null || response === undefined) return false;
+  if (typeof response === "string") return response.trim().length > 0;
+  if (Array.isArray(response)) return response.length > 0;
+  const special = asSpecialResponse(response);
+  if (special?.kind === "other") return special.text.trim().length > 0;
+  if (special?.kind === "cancelled") return true;
+  if (isMultiTypingResponse(response)) return Object.values(response).some((value) => value.trim().length > 0);
+  return true;
+}
+
+function asSpecialResponse(value: unknown): { kind: "other"; text: string } | { kind: "cancelled"; reason?: string } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (record.kind === "other") return { kind: "other", text: typeof record.text === "string" ? record.text : "" };
+  if (record.kind === "cancelled") return { kind: "cancelled", reason: typeof record.reason === "string" ? record.reason : undefined };
+  return null;
+}
+
+function isMatchingPairs(value: unknown): value is MatchingPair[] {
+  return Array.isArray(value) && value.every((item) => item && typeof item === "object" && typeof (item as MatchingPair).leftId === "string" && typeof (item as MatchingPair).rightId === "string");
+}
+
+function normalizeConfidence(value: unknown): AnswerRecord["confidence"] | undefined {
+  return value === 1 || value === 2 || value === 3 ? value : undefined;
+}
+
+function confidenceLabel(value: 1 | 2 | 3): string {
+  return ["low", "medium", "high"][value - 1];
+}
+
+function downloadJson(filename: string, value: unknown): void {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
