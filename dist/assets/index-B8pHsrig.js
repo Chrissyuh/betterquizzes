@@ -13013,58 +13013,84 @@ function TextArea({ label, value, onChange, rows = 4, responseLimit, formatting 
 	});
 }
 function TextFormatToolbar({ onFormat }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+	const buttons = [
+		{
+			format: "bold",
+			label: "B",
+			title: "Toggle bold on selected text or the current word"
+		},
+		{
+			format: "italic",
+			label: "I",
+			title: "Toggle italic on selected text or the current word"
+		},
+		{
+			format: "underline",
+			label: "U",
+			title: "Toggle underline on selected text or the current word"
+		},
+		{
+			format: "subscript",
+			label: "x₂",
+			title: "Toggle subscript on selected text or the current word"
+		},
+		{
+			format: "superscript",
+			label: "x²",
+			title: "Toggle superscript on selected text or the current word"
+		},
+		{
+			format: "plain",
+			label: "Tx",
+			title: "Clear formatting from selected text or the current word",
+			className: "format-plain"
+		}
+	];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "format-toolbar",
 		"aria-label": "Text formatting",
-		children: [
-			{
-				format: "bold",
-				label: "B",
-				title: "Bold"
-			},
-			{
-				format: "italic",
-				label: "I",
-				title: "Italic"
-			},
-			{
-				format: "underline",
-				label: "U",
-				title: "Underline"
-			},
-			{
-				format: "subscript",
-				label: "x₂",
-				title: "Subscript"
-			},
-			{
-				format: "superscript",
-				label: "x²",
-				title: "Superscript"
-			}
-		].map((button) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-			type: "button",
-			title: button.title,
-			"aria-label": button.title,
-			onMouseDown: (event) => event.preventDefault(),
-			onClick: () => onFormat(button.format),
-			children: button.label
-		}, button.format))
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+			className: "format-toolbar-label",
+			children: "Format"
+		}), buttons.map((button, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextFormatButton, {
+			button,
+			showDivider: index === buttons.length - 1,
+			onFormat
+		}, button.format))]
 	});
+}
+function TextFormatButton({ button, showDivider, onFormat }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [showDivider ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+		className: "format-divider",
+		"aria-hidden": "true"
+	}) : null, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+		className: button.className,
+		type: "button",
+		title: button.title,
+		"aria-label": button.title,
+		onMouseDown: (event) => event.preventDefault(),
+		onClick: () => onFormat(button.format),
+		children: button.label
+	})] });
 }
 function applyInlineFormat(element, value, maxChars, onChange, format) {
 	const rawStart = element?.selectionStart ?? value.length;
 	const rawEnd = element?.selectionEnd ?? value.length;
-	const selection = rawStart === rawEnd ? expandSelectionToWord(value, rawStart) : {
-		start: rawStart,
-		end: rawEnd
-	};
+	const selection = rawStart === rawEnd ? expandSelectionToEditableToken(value, rawStart) : normalizeSelectionRange(rawStart, rawEnd, value.length);
 	const selected = value.slice(selection.start, selection.end);
-	if (!selected.trim()) {
+	if (!hasFormattableText(selected)) {
 		window.setTimeout(() => element?.focus(), 0);
 		return;
 	}
 	const formatted = formatPlainText(selected, format);
+	if (formatted === selected) {
+		window.setTimeout(() => {
+			if (!element) return;
+			element.focus();
+			element.setSelectionRange(selection.start, selection.end);
+		}, 0);
+		return;
+	}
 	const next = clampTextToLimit(value.slice(0, selection.start) + formatted + value.slice(selection.end), maxChars);
 	onChange(next);
 	window.setTimeout(() => {
@@ -13074,25 +13100,62 @@ function applyInlineFormat(element, value, maxChars, onChange, format) {
 		element.setSelectionRange(Math.min(selection.start, next.length), selectionEnd);
 	}, 0);
 }
-function expandSelectionToWord(value, index) {
+function normalizeSelectionRange(start, end, length) {
+	const boundedStart = Math.max(0, Math.min(start, length));
+	const boundedEnd = Math.max(0, Math.min(end, length));
+	return boundedStart <= boundedEnd ? {
+		start: boundedStart,
+		end: boundedEnd
+	} : {
+		start: boundedEnd,
+		end: boundedStart
+	};
+}
+function expandSelectionToEditableToken(value, index) {
 	const bounded = Math.max(0, Math.min(index, value.length));
-	let start = bounded;
-	let end = bounded;
-	while (start > 0 && !/\s/.test(value[start - 1])) start -= 1;
-	while (end < value.length && !/\s/.test(value[end])) end += 1;
+	if (!value.length) return {
+		start: bounded,
+		end: bounded
+	};
+	const before = bounded > 0 ? value[bounded - 1] : "";
+	const after = bounded < value.length ? value[bounded] : "";
+	const anchor = (before ? /S/.test(before) && (!after || /s/.test(after)) : false) ? bounded - 1 : bounded;
+	if (anchor < 0 || anchor >= value.length || /s/.test(value[anchor])) return {
+		start: bounded,
+		end: bounded
+	};
+	let start = anchor;
+	let end = anchor + 1;
+	while (start > 0 && /S/.test(value[start - 1])) start -= 1;
+	while (end < value.length && /S/.test(value[end])) end += 1;
 	return {
 		start,
 		end
 	};
 }
+function hasFormattableText(value) {
+	return stripTextFormatting(value).trim().length > 0;
+}
 function formatPlainText(value, format) {
+	const plain = stripTextFormatting(value);
+	if (format === "plain") return plain;
+	if (isFormatEquivalent(value, plain, format)) return plain;
+	return renderPlainTextFormat(plain, format);
+}
+function isFormatEquivalent(value, plain, format) {
+	return renderPlainTextFormat(plain, format) === value;
+}
+function renderPlainTextFormat(value, format) {
 	switch (format) {
 		case "bold": return value.replace(/[A-Za-z0-9]/g, (char) => toMathAlphanumeric(char, "bold"));
 		case "italic": return value.replace(/[A-Za-z]/g, (char) => toMathAlphanumeric(char, "italic"));
-		case "underline": return value.replace(/[^\s]/g, (char) => char + "̲");
-		case "subscript": return value.replace(/[A-Za-z0-9+\-=()]/g, (char) => SUBSCRIPT_MAP[char] ?? char);
-		case "superscript": return value.replace(/[A-Za-z0-9+\-=()]/g, (char) => SUPERSCRIPT_MAP[char] ?? char);
+		case "underline": return value.replace(/[^s]/g, (char) => char + "̲");
+		case "subscript": return value.replace(/[A-Za-z0-9+-=()]/g, (char) => SUBSCRIPT_MAP[char] ?? char);
+		case "superscript": return value.replace(/[A-Za-z0-9+-=()]/g, (char) => SUPERSCRIPT_MAP[char] ?? char);
 	}
+}
+function stripTextFormatting(value) {
+	return Array.from(value.replace(/̲/g, "")).map((char) => PLAIN_TEXT_FORMAT_MAP[char] ?? char).join("");
 }
 function toMathAlphanumeric(char, style) {
 	const code = char.codePointAt(0) ?? 0;
@@ -13219,6 +13282,26 @@ var SUPERSCRIPT_MAP = {
 	V: "ⱽ",
 	W: "ᵂ"
 };
+var PLAIN_TEXT_FORMAT_MAP = {
+	...buildTextFormatReverseMap(SUBSCRIPT_MAP),
+	...buildTextFormatReverseMap(SUPERSCRIPT_MAP),
+	...buildMathAlphanumericReverseMap("bold"),
+	...buildMathAlphanumericReverseMap("italic")
+};
+function buildTextFormatReverseMap(map) {
+	const result = {};
+	for (const [plain, formatted] of Object.entries(map)) if (!(formatted in result)) result[formatted] = plain;
+	return result;
+}
+function buildMathAlphanumericReverseMap(style) {
+	const result = {};
+	const chars = style === "bold" ? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+	for (const plain of chars) {
+		const formatted = toMathAlphanumeric(plain, style);
+		if (formatted !== plain) result[formatted] = plain;
+	}
+	return result;
+}
 function MultiTypingInput({ question, response, onChange }) {
 	const fields = getMultiTypingFields(question);
 	if (fields.length < 2) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionRenderWarning, {

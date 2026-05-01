@@ -40,7 +40,7 @@ test("mixed demo includes expanded question types", () => {
 test("compact submission uses BQS2", () => expect(compact({ quizId: tiny.quizId, sessionId: "s1", mode: tiny.mode, answers: [] })).toMatch(/^BQS2\|/));
 test("V1 stdio server advertises widget resource metadata", () => {
   const server = readFileSync("mcp/betterquizzer-app-server.mjs", "utf8");
-  expect(server.includes('ui://widget/betterquizzes-v1-build-bqv1p2.html')).toBe(true);
+  expect(server.includes('ui://widget/betterquizzes-v1-build-bqv1p1.html')).toBe(true);
   expect(server.includes('text/html;profile=mcp-app')).toBe(true);
   expect(server.includes('openai/outputTemplate')).toBe(true);
 });

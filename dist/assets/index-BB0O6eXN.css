@@ -1235,3 +1235,161 @@ button.primary {
 .single-question-actions .submit-column {
   max-width: none;
 }
+
+
+/* V1 text-format button polish */
+.format-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.format-toolbar-label {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-right: 2px;
+  text-transform: uppercase;
+}
+
+.format-toolbar button {
+  min-width: 34px;
+  min-height: 32px;
+  border: 1px solid rgba(20, 33, 61, 0.12);
+  background: #ffffff;
+  color: #14213d;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 10px;
+}
+
+.format-toolbar button:hover {
+  border-color: rgba(79, 70, 229, 0.42);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.12);
+  transform: translateY(-1px);
+}
+
+.format-toolbar button:focus-visible {
+  outline: 3px solid rgba(79, 70, 229, 0.22);
+  outline-offset: 2px;
+}
+
+.format-divider {
+  align-self: stretch;
+  border-left: 1px solid rgba(100, 116, 139, 0.26);
+  margin: 2px 2px;
+}
+
+.format-toolbar .format-plain {
+  color: #475569;
+  font-size: 0.78rem;
+  letter-spacing: -0.01em;
+}
+
+
+/* V1 question-nav above-card regression restore */
+.quiz-layout {
+  grid-template-columns: 1fr;
+  min-width: 0;
+}
+
+.question-card,
+.nav-card,
+.answer-block,
+.text-answer,
+.long-answer,
+.question-dots,
+.question-dot-scroll {
+  min-width: 0;
+}
+
+/* V1 FINAL LAYOUT + FORMAT REGRESSION GUARD START */
+/* V1 hard polish */
+textarea,
+.text-answer,
+.long-answer {
+  resize: none;
+}
+
+/* V1 variety + formatting polish */
+.confidence-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* V1 text-format button polish */
+.format-toolbar {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.format-toolbar .format-plain {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.quiz-layout {
+  grid-template-columns: 1fr;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.top-bar p {
+  max-width: none;
+  width: 100%;
+}
+
+.skip-quiz-button {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.quiz-main,
+.quiz-stage,
+.question-card,
+.nav-card,
+.answer-block,
+.answer-review-card,
+.text-select-passage,
+.matching-grid,
+.ordering-list,
+.multi-write-list,
+.multi-typing-list,
+.text-answer,
+.long-answer {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.question-dots {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.question-dot-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.question-dot,
+.question-tab,
+.nav-dot {
+  flex: 0 0 auto;
+}
+/* V1 FINAL LAYOUT + FORMAT REGRESSION GUARD END */

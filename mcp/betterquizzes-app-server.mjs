@@ -5,7 +5,7 @@ import { join } from "node:path";
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v1-build-bqv1p2.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v1-build-bqv1p1.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,

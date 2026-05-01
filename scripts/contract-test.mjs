@@ -5,7 +5,7 @@ const server = readFileSync("mcp/remote-server.mjs", "utf8");
 function assert(value, message) { if (!value) throw new Error(message); }
 
 assert(server.includes('const VERSION = "V1"'), "server version must be V1");
-assert(server.includes('ui://widget/betterquizzes-v1-build-bqv1p2.html'), "widget URI must be versioned for V1");
+assert(server.includes('ui://widget/betterquizzes-v1-build-bqv1p1.html'), "widget URI must be versioned for V1");
 assert(server.includes('CREATE_QUIZ_INPUT_SCHEMA'), "create_quiz must use a named input schema");
 assert(server.includes('QUIZ_SPEC_SCHEMA'), "server must expose a QuizSpec schema");
 assert(server.includes('QUESTION_SCHEMA'), "server must expose discriminated question schemas");

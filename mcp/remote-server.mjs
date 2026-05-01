@@ -6,7 +6,7 @@ import { extname, join, normalize } from "node:path";
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v1-build-bqv1p2.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v1-build-bqv1p1.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
@@ -33,7 +33,7 @@ function listedWidgetResources() {
   }));
 }
 const PORT = Number(process.env.PORT || 8787);
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
 const DIST_DIR = join(process.cwd(), "dist");
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.

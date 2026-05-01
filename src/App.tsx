@@ -1189,7 +1189,7 @@ function TrueFalseList({ selected, onSelect }: { selected: boolean | null; onSel
   );
 }
 
-type TextFormat = "bold" | "italic" | "underline" | "subscript" | "superscript";
+type TextFormat = "bold" | "italic" | "underline" | "subscript" | "superscript" | "plain";
 
 type TextControlElement = HTMLInputElement | HTMLTextAreaElement;
 
@@ -1237,36 +1237,56 @@ function TextArea({ label, value, onChange, rows = 4, responseLimit, formatting 
 }
 
 function TextFormatToolbar({ onFormat }: { onFormat: (format: TextFormat) => void }): ReactElement {
-  const buttons: { format: TextFormat; label: string; title: string }[] = [
-    { format: "bold", label: "B", title: "Bold" },
-    { format: "italic", label: "I", title: "Italic" },
-    { format: "underline", label: "U", title: "Underline" },
-    { format: "subscript", label: "x₂", title: "Subscript" },
-    { format: "superscript", label: "x²", title: "Superscript" },
+  const buttons: { format: TextFormat; label: string; title: string; className?: string }[] = [
+    { format: "bold", label: "B", title: "Toggle bold on selected text or the current word" },
+    { format: "italic", label: "I", title: "Toggle italic on selected text or the current word" },
+    { format: "underline", label: "U", title: "Toggle underline on selected text or the current word" },
+    { format: "subscript", label: "x₂", title: "Toggle subscript on selected text or the current word" },
+    { format: "superscript", label: "x²", title: "Toggle superscript on selected text or the current word" },
+    { format: "plain", label: "Tx", title: "Clear formatting from selected text or the current word", className: "format-plain" },
   ];
   return (
     <div className="format-toolbar" aria-label="Text formatting">
-      {buttons.map((button) => (
-        <button key={button.format} type="button" title={button.title} aria-label={button.title} onMouseDown={(event) => event.preventDefault()} onClick={() => onFormat(button.format)}>
-          {button.label}
-        </button>
+      <span className="format-toolbar-label">Format</span>
+      {buttons.map((button, index) => (
+        <TextFormatButton key={button.format} button={button} showDivider={index === buttons.length - 1} onFormat={onFormat} />
       ))}
     </div>
+  );
+}
+
+function TextFormatButton({ button, showDivider, onFormat }: { button: { format: TextFormat; label: string; title: string; className?: string }; showDivider: boolean; onFormat: (format: TextFormat) => void }): ReactElement {
+  return (
+    <>
+      {showDivider ? <span className="format-divider" aria-hidden="true" /> : null}
+      <button className={button.className} type="button" title={button.title} aria-label={button.title} onMouseDown={(event) => event.preventDefault()} onClick={() => onFormat(button.format)}>
+        {button.label}
+      </button>
+    </>
   );
 }
 
 function applyInlineFormat(element: TextControlElement | null, value: string, maxChars: number | null, onChange: (value: string) => void, format: TextFormat): void {
   const rawStart = element?.selectionStart ?? value.length;
   const rawEnd = element?.selectionEnd ?? value.length;
-  const selection = rawStart === rawEnd ? expandSelectionToWord(value, rawStart) : { start: rawStart, end: rawEnd };
+  const selection = rawStart === rawEnd ? expandSelectionToEditableToken(value, rawStart) : normalizeSelectionRange(rawStart, rawEnd, value.length);
   const selected = value.slice(selection.start, selection.end);
 
-  if (!selected.trim()) {
+  if (!hasFormattableText(selected)) {
     window.setTimeout(() => element?.focus(), 0);
     return;
   }
 
   const formatted = formatPlainText(selected, format);
+  if (formatted === selected) {
+    window.setTimeout(() => {
+      if (!element) return;
+      element.focus();
+      element.setSelectionRange(selection.start, selection.end);
+    }, 0);
+    return;
+  }
+
   const next = clampTextToLimit(value.slice(0, selection.start) + formatted + value.slice(selection.end), maxChars);
   onChange(next);
   window.setTimeout(() => {
@@ -1277,28 +1297,61 @@ function applyInlineFormat(element: TextControlElement | null, value: string, ma
   }, 0);
 }
 
-function expandSelectionToWord(value: string, index: number): { start: number; end: number } {
+function normalizeSelectionRange(start: number, end: number, length: number): { start: number; end: number } {
+  const boundedStart = Math.max(0, Math.min(start, length));
+  const boundedEnd = Math.max(0, Math.min(end, length));
+  return boundedStart <= boundedEnd ? { start: boundedStart, end: boundedEnd } : { start: boundedEnd, end: boundedStart };
+}
+
+function expandSelectionToEditableToken(value: string, index: number): { start: number; end: number } {
   const bounded = Math.max(0, Math.min(index, value.length));
-  let start = bounded;
-  let end = bounded;
-  while (start > 0 && !/\s/.test(value[start - 1])) start -= 1;
-  while (end < value.length && !/\s/.test(value[end])) end += 1;
+  if (!value.length) return { start: bounded, end: bounded };
+
+  const before = bounded > 0 ? value[bounded - 1] : "";
+  const after = bounded < value.length ? value[bounded] : "";
+  const shouldUsePrevious = before ? /S/.test(before) && (!after || /s/.test(after)) : false;
+  const anchor = shouldUsePrevious ? bounded - 1 : bounded;
+  if (anchor < 0 || anchor >= value.length || /s/.test(value[anchor])) return { start: bounded, end: bounded };
+
+  let start = anchor;
+  let end = anchor + 1;
+  while (start > 0 && /S/.test(value[start - 1])) start -= 1;
+  while (end < value.length && /S/.test(value[end])) end += 1;
   return { start, end };
 }
 
+function hasFormattableText(value: string): boolean {
+  return stripTextFormatting(value).trim().length > 0;
+}
+
 function formatPlainText(value: string, format: TextFormat): string {
+  const plain = stripTextFormatting(value);
+  if (format === "plain") return plain;
+  if (isFormatEquivalent(value, plain, format)) return plain;
+  return renderPlainTextFormat(plain, format);
+}
+
+function isFormatEquivalent(value: string, plain: string, format: Exclude<TextFormat, "plain">): boolean {
+  return renderPlainTextFormat(plain, format) === value;
+}
+
+function renderPlainTextFormat(value: string, format: Exclude<TextFormat, "plain">): string {
   switch (format) {
     case "bold":
       return value.replace(/[A-Za-z0-9]/g, (char) => toMathAlphanumeric(char, "bold"));
     case "italic":
       return value.replace(/[A-Za-z]/g, (char) => toMathAlphanumeric(char, "italic"));
     case "underline":
-      return value.replace(/[^\s]/g, (char) => char + "\u0332");
+      return value.replace(/[^s]/g, (char) => char + "̲");
     case "subscript":
-      return value.replace(/[A-Za-z0-9+\-=()]/g, (char) => SUBSCRIPT_MAP[char] ?? char);
+      return value.replace(/[A-Za-z0-9+-=()]/g, (char) => SUBSCRIPT_MAP[char] ?? char);
     case "superscript":
-      return value.replace(/[A-Za-z0-9+\-=()]/g, (char) => SUPERSCRIPT_MAP[char] ?? char);
+      return value.replace(/[A-Za-z0-9+-=()]/g, (char) => SUPERSCRIPT_MAP[char] ?? char);
   }
+}
+
+function stripTextFormatting(value: string): string {
+  return Array.from(value.replace(/̲/g, "")).map((char) => PLAIN_TEXT_FORMAT_MAP[char] ?? char).join("");
 }
 
 function toMathAlphanumeric(char: string, style: "bold" | "italic"): string {
@@ -1328,6 +1381,32 @@ const SUPERSCRIPT_MAP: Record<string, string> = {
   a: "ᵃ", b: "ᵇ", c: "ᶜ", d: "ᵈ", e: "ᵉ", f: "ᶠ", g: "ᵍ", h: "ʰ", i: "ⁱ", j: "ʲ", k: "ᵏ", l: "ˡ", m: "ᵐ", n: "ⁿ", o: "ᵒ", p: "ᵖ", r: "ʳ", s: "ˢ", t: "ᵗ", u: "ᵘ", v: "ᵛ", w: "ʷ", x: "ˣ", y: "ʸ", z: "ᶻ",
   A: "ᴬ", B: "ᴮ", D: "ᴰ", E: "ᴱ", G: "ᴳ", H: "ᴴ", I: "ᴵ", J: "ᴶ", K: "ᴷ", L: "ᴸ", M: "ᴹ", N: "ᴺ", O: "ᴼ", P: "ᴾ", R: "ᴿ", T: "ᵀ", U: "ᵁ", V: "ⱽ", W: "ᵂ",
 };
+const PLAIN_TEXT_FORMAT_MAP: Record<string, string> = {
+  ...buildTextFormatReverseMap(SUBSCRIPT_MAP),
+  ...buildTextFormatReverseMap(SUPERSCRIPT_MAP),
+  ...buildMathAlphanumericReverseMap("bold"),
+  ...buildMathAlphanumericReverseMap("italic"),
+};
+
+function buildTextFormatReverseMap(map: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [plain, formatted] of Object.entries(map)) {
+    if (!(formatted in result)) result[formatted] = plain;
+  }
+  return result;
+}
+
+function buildMathAlphanumericReverseMap(style: "bold" | "italic"): Record<string, string> {
+  const result: Record<string, string> = {};
+  const chars = style === "bold" ? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  for (const plain of chars) {
+    const formatted = toMathAlphanumeric(plain, style);
+    if (formatted !== plain) result[formatted] = plain;
+  }
+  return result;
+}
+
+
 
 function MultiTypingInput({ question, response, onChange }: { question: Extract<Question, { type: "multi_typing" }>; response: Record<string, string>; onChange: (value: Record<string, string>) => void }): ReactElement {
   const fields = getMultiTypingFields(question);

@@ -13,7 +13,7 @@ function assert(value, message) {
 }
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
-assert(remote.includes("betterquizzes-v1-build-bqv1p2.html"), "resource URI must cache-bust for V1 patch 2");
+assert(remote.includes("betterquizzes-v1-build-bqv1p1.html"), "resource URI must cache-bust for V1 patch 2");
 assert(remote.includes("betterquizzer-stage12-7-0-build-bq1270.html"), "12.7.0 alias must remain active");
 assert(remote.includes("declaredQuestionCount"), "launch packet must declare expected question count");
 assert(remote.includes("packetProgress"), "launch packet must include upload progress metadata");
@@ -36,6 +36,12 @@ assert(app.includes("single-question-actions"), "one-question quizzes must not s
 assert(app.includes("function RichInline"), "titles and prompts must support light formatting");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
 assert(app.includes("function formatPlainText"), "format buttons must not insert raw markdown/html tags into student answers");
+assert(app.includes("stripTextFormatting"), "format buttons must be reversible and able to clear plain-text formatting");
+assert(app.includes("format === \"plain\""), "format toolbar must include a clear-formatting control");
+assert(app.includes("isFormatEquivalent"), "format buttons must toggle formatting back to plain text");
+assert(app.includes("expandSelectionToEditableToken"), "format buttons must use safer current-token selection handling");
+assert(styles.includes("V1 text-format button polish"), "text formatting toolbar polish CSS must be present");
+assert(styles.includes(".format-toolbar .format-plain"), "format toolbar must style the clear-formatting control");
 assert(app.includes("function formatWidgetVersion"), "version chip must not render vV1");
 assert(!app.includes("v{WIDGET_VERSION}"), "version chip must not hard-prefix V1 with v");
 assert(!app.includes("wrapFormattedText"), "format buttons must not store formatting markup in typed responses");
