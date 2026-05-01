@@ -66,7 +66,7 @@ export const DEFAULT_ACTIVITY_POLICY: ActivityPolicy = {
   allowSkipQuiz: true,
   allowCancel: true,
   allowSkipQuestions: true,
-  defaultAnswerRequired: true,
+  defaultAnswerRequired: false,
   defaultQuestionRequired: true,
   submitRequiresRequiredAnswers: true,
   submitRequiresAllRequired: true,

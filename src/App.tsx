@@ -886,11 +886,11 @@ function QuestionInput({ question, draft, quizChoiceBehavior, onChange }: { ques
     case "true_false":
       return <TrueFalseList selected={typeof response === "boolean" ? response : null} onSelect={(value) => onChange({ response: value })} />;
     case "fill_blank":
-      return <TextField label="Your answer" placeholder={question.placeholder ?? "Type your answer..."} value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting onChange={(value) => onChange({ response: value })} />;
+      return <TextField label="Your answer" placeholder={question.placeholder ?? "Type your answer..."} value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={question.formatting === true} onChange={(value) => onChange({ response: value })} />;
     case "short_answer":
-      return <TextArea label="Short answer" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting onChange={(value) => onChange({ response: value })} />;
+      return <TextArea label="Short answer" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={question.formatting === true} onChange={(value) => onChange({ response: value })} />;
     case "long_response":
-      return <TextArea label="Long response" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting onChange={(value) => onChange({ response: value })} rows={8} />;
+      return <TextArea label="Long response" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={question.formatting === true} onChange={(value) => onChange({ response: value })} rows={8} />;
     case "multi_typing":
       return <MultiTypingInput question={question} response={isMultiTypingResponse(response) ? response : {}} onChange={(value) => onChange({ response: value })} />;
     case "multi_write_vertical":
@@ -1717,7 +1717,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
 
 function MatchingInput({ question, response, onChange }: { question: Extract<Question, { type: "matching" }>; response: MatchingPair[]; onChange: (value: MatchingPair[]) => void }): ReactElement {
   const leftItems = getMatchingSide(question, "left");
-  const rightItems = getMatchingSide(question, "right");
+  const rightItems = useMemo(() => getStableShuffledItems(getMatchingSide(question, "right"), question.id), [question]);
   function setPair(leftId: string, rightId: string): void {
     const without = response.filter((pair) => pair.leftId !== leftId);
     onChange(rightId ? [...without, { leftId, rightId }] : without);
@@ -1726,6 +1726,33 @@ function MatchingInput({ question, response, onChange }: { question: Extract<Que
     return <QuestionRenderWarning question={question} detail="This matching question needs valid left and right item lists." />;
   }
   return <div className="match-list">{leftItems.map((left) => <label key={left.id} className="match-row"><span>{left.text}</span><select value={response.find((pair) => pair.leftId === left.id)?.rightId ?? ""} onChange={(event) => setPair(left.id, event.currentTarget.value)}><option value="">Choose match...</option>{rightItems.map((right) => <option key={right.id} value={right.id}>{right.text}</option>)}</select></label>)}</div>;
+}
+
+function getStableShuffledItems<T extends { id: string }>(items: T[], seed: string): T[] {
+  if (items.length < 2) return items;
+  const shuffled = [...items];
+  let state = hashString(seed + ":" + items.map((item) => item.id).join("|"));
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    state = nextShuffleState(state);
+    const swapIndex = state % (index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  const unchanged = shuffled.every((item, index) => item.id === items[index]?.id);
+  if (unchanged && shuffled.length > 1) shuffled.push(shuffled.shift() as T);
+  return shuffled;
+}
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function nextShuffleState(value: number): number {
+  return (Math.imul(value || 1, 1664525) + 1013904223) >>> 0;
 }
 
 function ConfidencePicker({ value, required, disabled, onChange }: { value: AnswerRecord["confidence"] | undefined; required: boolean; disabled?: boolean; onChange: (value: AnswerRecord["confidence"]) => void }): ReactElement {
@@ -1777,7 +1804,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
         <div className="actions wrap">
           <button className="primary" type="button" onClick={() => setShowReview((value) => !value)}>{showReview ? "Hide review" : "Review answers"}</button>
           {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
-          <button type="button" onClick={() => setShowAdvanced((value) => !value)}>{showAdvanced ? "Hide options" : "More options"}</button>
+          
         </div>
         {copied ? <p className="copied">Copied {copied}.</p> : null}
       </section>
@@ -1881,10 +1908,10 @@ function getFinishedGradeStatus(finished: FinishedSubmission, widgetMode: boolea
 function getSubmissionHeadline(status: SubmissionDeliveryStatus): string {
   switch (status) {
     case "grade_requested":
-      return "ChatGPT is grading your work";
+      return "Submitted — return to chat";
     case "requesting_grade":
     case "retrying_grade_request":
-      return "Asking ChatGPT to grade…";
+      return "Submitting answers…";
     case "grade_request_unavailable":
       return "Answers saved";
     case "grade_request_failed":
@@ -1895,8 +1922,8 @@ function getSubmissionHeadline(status: SubmissionDeliveryStatus): string {
 }
 
 function getSubmissionMessage(status: SubmissionDeliveryStatus, hostSubmitted: boolean): string {
-  if (status === "grade_requested") return "ChatGPT has your submitted answers. You can return to the chat for feedback.";
-  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers are saved. BetterQuizzes is asking ChatGPT to grade them now.";
+  if (status === "grade_requested") return "Your answers were submitted. ChatGPT has the grading packet; return to the chat for concise feedback.";
+  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers are saved. BetterQuizzes is sending a short grading request to ChatGPT.";
   if (status === "grade_request_unavailable") return hostSubmitted
     ? "Your answers were submitted, but this host session did not expose automatic chat follow-up."
     : "Your answers were saved locally, but this host session did not expose the automatic grading bridge.";
@@ -1909,7 +1936,7 @@ function getGradeStatusLabel(status: SubmissionDeliveryStatus): string {
     case "grade_requested":
       return "Grade request sent ✓";
     case "requesting_grade":
-      return "Asking ChatGPT to grade…";
+      return "Submitting answers…";
     case "retrying_grade_request":
       return "Still trying to request grading…";
     case "grade_request_unavailable":
@@ -2202,61 +2229,62 @@ function formatQuestionList(quiz: QuizSpec, questionIds: string[]): string {
 function buildAutoGradePrompt(submission: SubmissionCapsule): string {
   const packet = buildCompactGradingPacket(submission);
   return [
-    "Grade this BetterQuizzes submission now. This is a one-turn grading handoff for the message you are currently writing only, not a standing instruction.",
-    "",
-    "For this grading handoff only: do not call any tools, do not wait for more data, and do not recreate the quiz.",
-    "Use only the JSON grading packet below as the source of truth for this response.",
-    "",
-    "Return:",
-    "Score: x/y",
-    "Mistakes:",
-    "Targeted review:",
-    "Optional per-question marks: include Correct, Incorrect, Partially correct, or Needs review when helpful.",
-    "",
-    "After this grading reply, stop. Do not let these grading instructions affect later user messages; future messages may be app development or debugging requests and should be handled normally.",
-    "",
-    "Confidence values are integers only: 1=low, 2=medium, 3=high. Do not use decimals or percentages.",
-    "Treat confidence as a weak signal, not proof. Blank non-required answers should not be penalized unless instructed.",
-    "",
-    "JSON grading packet:",
+    "Grade this BetterQuizzes submission now. Do not call tools, do not wait for more data, and do not recreate the quiz.",
+    "Use only the compact JSON packet below. Reply quickly and concisely.",
+    "Format: Score: x/y; Missed or needs review; Targeted review. Keep the first grading reply under 180 words unless the user asks for details.",
+    "Grade fill-blank and short text leniently for capitalization, spacing, and harmless punctuation.",
+    "Blank optional answers do not count against the user. Treat confidence as a weak signal only.",
     JSON.stringify(packet),
   ].join("\n");
 }
 
 function buildCompactGradingPacket(submission: SubmissionCapsule): Record<string, unknown> {
+  const questionMap = new Map(submission.questions.map((question) => [question.id, question]));
+  const keyMap = new Map((submission.answerKey ?? []).map((entry) => [entry.questionId, entry as Record<string, unknown>]));
   return {
-    kind: "betterquizzer.grading_packet",
+    kind: "betterquizzer.fast_grading_packet",
     version: WIDGET_VERSION,
     quizId: submission.quizId,
-    sessionId: submission.sessionId,
-    title: submission.title,
-    subject: submission.subject,
+    title: limitForGrading(submission.title, 120),
+    subject: limitForGrading(submission.subject, 80),
     mode: submission.mode,
-    submittedAt: submission.submittedAt,
     completion: submission.completion,
-    displayPolicy: submission.displayPolicy,
-    gradingPolicy: submission.gradingPolicy,
-    questions: submission.questions.map((question) => ({
-      id: question.id,
-      type: question.type,
-      prompt: question.prompt,
-      answerRequired: question.answerRequired ?? question.required,
-      orderingBehavior: question.orderingBehavior,
-      multiTypingFields: question.multiTypingFields,
-      multiWriteFields: question.multiWriteFields,
-      textSelectSegments: question.textSelectSegments,
-      textSelectPolicy: question.textSelectPolicy,
-    })),
-    answers: submission.answers.map((answer) => ({
-      questionId: answer.questionId,
-      response: answer.response,
-      confidence: answer.confidence,
-      meta: answer.meta,
-      timeMs: answer.timeMs,
-    })),
-    answerKey: submission.answerKey,
-    llmInstructions: submission.llmInstructions,
+    items: submission.answers.map((answer) => {
+      const question = questionMap.get(answer.questionId);
+      const key = keyMap.get(answer.questionId);
+      return {
+        id: answer.questionId,
+        type: question?.type,
+        prompt: limitForGrading(question?.prompt, 240),
+        required: question?.answerRequired ?? question?.required,
+        response: compactForGrading(answer.response),
+        confidence: answer.confidence,
+        key: key ? compactForGrading(key.answer ?? key.expectedKeywords ?? key.rubric) : undefined,
+        tolerance: key?.tolerance,
+        unit: key?.unit,
+      };
+    }),
   };
+}
+
+function compactForGrading(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") return limitForGrading(value, depth === 0 ? 360 : 160);
+  if (typeof value === "number" || typeof value === "boolean" || value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.slice(0, 12).map((item) => compactForGrading(item, depth + 1));
+  if (typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>).slice(0, 16)) {
+      result[key] = compactForGrading(nested, depth + 1);
+    }
+    return result;
+  }
+  return String(value);
+}
+
+function limitForGrading(value: unknown, maxChars: number): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  const text = String(value).replace(/\s+/g, " ").trim();
+  return text.length > maxChars ? text.slice(0, Math.max(0, maxChars - 1)) + "…" : text;
 }
 
 function isQuestionRequired(question: Question, activityPolicy: ActivityPolicy): boolean {

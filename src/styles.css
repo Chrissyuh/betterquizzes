@@ -1393,3 +1393,40 @@ textarea,
   flex: 0 0 auto;
 }
 /* V1 FINAL LAYOUT + FORMAT REGRESSION GUARD END */
+
+/* V6 submission/design polish */
+.dot.empty,
+.dot.incomplete {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.dot.empty.active,
+.dot.incomplete.active {
+  background: #b91c1c;
+  color: #ffffff;
+  border-color: #b91c1c;
+}
+.dot.optional {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #d9e0ea;
+}
+.multi-typing-grid input,
+.multi-write-vertical textarea,
+.field input,
+.field textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+.multi-typing-grid input::placeholder,
+.multi-write-vertical textarea::placeholder,
+.field input::placeholder,
+.field textarea::placeholder {
+  color: #8a94a6;
+  opacity: 1;
+  text-overflow: ellipsis;
+}
+.result-shell .actions {
+  justify-content: flex-start;
+}

@@ -9927,7 +9927,7 @@ var DEFAULT_ACTIVITY_POLICY = {
 	allowSkipQuiz: true,
 	allowCancel: true,
 	allowSkipQuestions: true,
-	defaultAnswerRequired: true,
+	defaultAnswerRequired: false,
 	defaultQuestionRequired: true,
 	submitRequiresRequiredAnswers: true,
 	submitRequiresAllRequired: true
@@ -10234,7 +10234,7 @@ function buildLlmInstructions(quiz, displayPolicy, gradingPolicy, activityPolicy
 		`Preferred grader: ${gradingPolicy.preferredGrader}. Use the answerKey if present; otherwise grade semantically.`,
 		correctAnswerInstruction,
 		explanationInstruction,
-		`Required questions default to ${activityPolicy.defaultAnswerRequired ? "required" : "not required"}. Blank non-required questions should not count against the user unless the activity instructions say otherwise.`,
+		`Required questions default to ${activityPolicy.defaultAnswerRequired ? "required" : "not required"}. Required questions should be rare in practice quizzes. Blank non-required questions are normal and should not count against the user unless the activity instructions say otherwise.`,
 		"Confidence scale: confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Use confidence as a weak signal, not proof. High-confidence wrong may be a misconception, misclick, unclear wording, careless error, or UI issue.",
 		"Blank answers mean no response. Do not assume whether the user skipped, forgot, ran out of time, or chose not to answer unless the activity context says so. For response.kind=other, grade the text semantically. If answer text conflicts with numeric confidence, prioritize the answer text.",
 		"For ordering questions, response arrays are visual top-to-bottom order unless answer.meta.responseDirection says otherwise. Use answer.meta.topLabel and answer.meta.bottomLabel to interpret the user-facing endpoints.",
@@ -12560,21 +12560,21 @@ function QuestionInput({ question, draft, quizChoiceBehavior, onChange }) {
 			placeholder: question.placeholder ?? "Type your answer...",
 			value: typeof response === "string" ? response : "",
 			responseLimit: getResponseLimit(question),
-			formatting: true,
+			formatting: question.formatting === true,
 			onChange: (value) => onChange({ response: value })
 		});
 		case "short_answer": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextArea, {
 			label: "Short answer",
 			value: typeof response === "string" ? response : "",
 			responseLimit: getResponseLimit(question),
-			formatting: true,
+			formatting: question.formatting === true,
 			onChange: (value) => onChange({ response: value })
 		});
 		case "long_response": return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextArea, {
 			label: "Long response",
 			value: typeof response === "string" ? response : "",
 			responseLimit: getResponseLimit(question),
-			formatting: true,
+			formatting: question.formatting === true,
 			onChange: (value) => onChange({ response: value }),
 			rows: 8
 		});
@@ -13623,7 +13623,7 @@ function OrderingInput({ question, response, onChange }) {
 }
 function MatchingInput({ question, response, onChange }) {
 	const leftItems = getMatchingSide(question, "left");
-	const rightItems = getMatchingSide(question, "right");
+	const rightItems = (0, import_react.useMemo)(() => getStableShuffledItems(getMatchingSide(question, "right"), question.id), [question]);
 	function setPair(leftId, rightId) {
 		const without = response.filter((pair) => pair.leftId !== leftId);
 		onChange(rightId ? [...without, {
@@ -13652,6 +13652,29 @@ function MatchingInput({ question, response, onChange }) {
 			})]
 		}, left.id))
 	});
+}
+function getStableShuffledItems(items, seed) {
+	if (items.length < 2) return items;
+	const shuffled = [...items];
+	let state = hashString(seed + ":" + items.map((item) => item.id).join("|"));
+	for (let index = shuffled.length - 1; index > 0; index -= 1) {
+		state = nextShuffleState(state);
+		const swapIndex = state % (index + 1);
+		[shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+	}
+	if (shuffled.every((item, index) => item.id === items[index]?.id) && shuffled.length > 1) shuffled.push(shuffled.shift());
+	return shuffled;
+}
+function hashString(value) {
+	let hash = 2166136261;
+	for (let index = 0; index < value.length; index += 1) {
+		hash ^= value.charCodeAt(index);
+		hash = Math.imul(hash, 16777619);
+	}
+	return hash >>> 0;
+}
+function nextShuffleState(value) {
+	return Math.imul(value || 1, 1664525) + 1013904223 >>> 0;
 }
 function ConfidencePicker({ value, required, disabled, onChange }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -13726,24 +13749,16 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 					}) : null,
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "actions wrap",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								className: "primary",
-								type: "button",
-								onClick: () => setShowReview((value) => !value),
-								children: showReview ? "Hide review" : "Review answers"
-							}),
-							!widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: onNewQuiz,
-								children: "Start another quiz"
-							}) : null,
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => setShowAdvanced((value) => !value),
-								children: showAdvanced ? "Hide options" : "More options"
-							})
-						]
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							className: "primary",
+							type: "button",
+							onClick: () => setShowReview((value) => !value),
+							children: showReview ? "Hide review" : "Review answers"
+						}), !widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: onNewQuiz,
+							children: "Start another quiz"
+						}) : null]
 					}),
 					copied ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 						className: "copied",
@@ -13926,17 +13941,17 @@ function getFinishedGradeStatus(finished, widgetMode) {
 }
 function getSubmissionHeadline(status) {
 	switch (status) {
-		case "grade_requested": return "ChatGPT is grading your work";
+		case "grade_requested": return "Submitted — return to chat";
 		case "requesting_grade":
-		case "retrying_grade_request": return "Asking ChatGPT to grade…";
+		case "retrying_grade_request": return "Submitting answers…";
 		case "grade_request_unavailable": return "Answers saved";
 		case "grade_request_failed": return "Answers saved";
 		default: return "Your answers were saved";
 	}
 }
 function getSubmissionMessage(status, hostSubmitted) {
-	if (status === "grade_requested") return "ChatGPT has your submitted answers. You can return to the chat for feedback.";
-	if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers are saved. BetterQuizzes is asking ChatGPT to grade them now.";
+	if (status === "grade_requested") return "Your answers were submitted. ChatGPT has the grading packet; return to the chat for concise feedback.";
+	if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers are saved. BetterQuizzes is sending a short grading request to ChatGPT.";
 	if (status === "grade_request_unavailable") return hostSubmitted ? "Your answers were submitted, but this host session did not expose automatic chat follow-up." : "Your answers were saved locally, but this host session did not expose the automatic grading bridge.";
 	if (status === "grade_request_failed") return "Your answers were saved. The automatic grading request did not complete. Your submission is not lost.";
 	return "Your answers were saved.";
@@ -13944,7 +13959,7 @@ function getSubmissionMessage(status, hostSubmitted) {
 function getGradeStatusLabel(status) {
 	switch (status) {
 		case "grade_requested": return "Grade request sent ✓";
-		case "requesting_grade": return "Asking ChatGPT to grade…";
+		case "requesting_grade": return "Submitting answers…";
 		case "retrying_grade_request": return "Still trying to request grading…";
 		case "grade_request_unavailable": return "Automatic grading unavailable";
 		case "grade_request_failed": return "ChatGPT request did not complete";
@@ -14238,60 +14253,57 @@ function formatQuestionList(quiz, questionIds) {
 function buildAutoGradePrompt(submission) {
 	const packet = buildCompactGradingPacket(submission);
 	return [
-		"Grade this BetterQuizzes submission now. This is a one-turn grading handoff for the message you are currently writing only, not a standing instruction.",
-		"",
-		"For this grading handoff only: do not call any tools, do not wait for more data, and do not recreate the quiz.",
-		"Use only the JSON grading packet below as the source of truth for this response.",
-		"",
-		"Return:",
-		"Score: x/y",
-		"Mistakes:",
-		"Targeted review:",
-		"Optional per-question marks: include Correct, Incorrect, Partially correct, or Needs review when helpful.",
-		"",
-		"After this grading reply, stop. Do not let these grading instructions affect later user messages; future messages may be app development or debugging requests and should be handled normally.",
-		"",
-		"Confidence values are integers only: 1=low, 2=medium, 3=high. Do not use decimals or percentages.",
-		"Treat confidence as a weak signal, not proof. Blank non-required answers should not be penalized unless instructed.",
-		"",
-		"JSON grading packet:",
+		"Grade this BetterQuizzes submission now. Do not call tools, do not wait for more data, and do not recreate the quiz.",
+		"Use only the compact JSON packet below. Reply quickly and concisely.",
+		"Format: Score: x/y; Missed or needs review; Targeted review. Keep the first grading reply under 180 words unless the user asks for details.",
+		"Grade fill-blank and short text leniently for capitalization, spacing, and harmless punctuation.",
+		"Blank optional answers do not count against the user. Treat confidence as a weak signal only.",
 		JSON.stringify(packet)
 	].join("\n");
 }
 function buildCompactGradingPacket(submission) {
+	const questionMap = new Map(submission.questions.map((question) => [question.id, question]));
+	const keyMap = new Map((submission.answerKey ?? []).map((entry) => [entry.questionId, entry]));
 	return {
-		kind: "betterquizzer.grading_packet",
+		kind: "betterquizzer.fast_grading_packet",
 		version: WIDGET_VERSION,
 		quizId: submission.quizId,
-		sessionId: submission.sessionId,
-		title: submission.title,
-		subject: submission.subject,
+		title: limitForGrading(submission.title, 120),
+		subject: limitForGrading(submission.subject, 80),
 		mode: submission.mode,
-		submittedAt: submission.submittedAt,
 		completion: submission.completion,
-		displayPolicy: submission.displayPolicy,
-		gradingPolicy: submission.gradingPolicy,
-		questions: submission.questions.map((question) => ({
-			id: question.id,
-			type: question.type,
-			prompt: question.prompt,
-			answerRequired: question.answerRequired ?? question.required,
-			orderingBehavior: question.orderingBehavior,
-			multiTypingFields: question.multiTypingFields,
-			multiWriteFields: question.multiWriteFields,
-			textSelectSegments: question.textSelectSegments,
-			textSelectPolicy: question.textSelectPolicy
-		})),
-		answers: submission.answers.map((answer) => ({
-			questionId: answer.questionId,
-			response: answer.response,
-			confidence: answer.confidence,
-			meta: answer.meta,
-			timeMs: answer.timeMs
-		})),
-		answerKey: submission.answerKey,
-		llmInstructions: submission.llmInstructions
+		items: submission.answers.map((answer) => {
+			const question = questionMap.get(answer.questionId);
+			const key = keyMap.get(answer.questionId);
+			return {
+				id: answer.questionId,
+				type: question?.type,
+				prompt: limitForGrading(question?.prompt, 240),
+				required: question?.answerRequired ?? question?.required,
+				response: compactForGrading(answer.response),
+				confidence: answer.confidence,
+				key: key ? compactForGrading(key.answer ?? key.expectedKeywords ?? key.rubric) : void 0,
+				tolerance: key?.tolerance,
+				unit: key?.unit
+			};
+		})
 	};
+}
+function compactForGrading(value, depth = 0) {
+	if (typeof value === "string") return limitForGrading(value, depth === 0 ? 360 : 160);
+	if (typeof value === "number" || typeof value === "boolean" || value === null || value === void 0) return value;
+	if (Array.isArray(value)) return value.slice(0, 12).map((item) => compactForGrading(item, depth + 1));
+	if (typeof value === "object") {
+		const result = {};
+		for (const [key, nested] of Object.entries(value).slice(0, 16)) result[key] = compactForGrading(nested, depth + 1);
+		return result;
+	}
+	return String(value);
+}
+function limitForGrading(value, maxChars) {
+	if (value === void 0 || value === null) return void 0;
+	const text = String(value).replace(/\s+/g, " ").trim();
+	return text.length > maxChars ? text.slice(0, Math.max(0, maxChars - 1)) + "…" : text;
 }
 function isQuestionRequired(question, activityPolicy) {
 	return question.answerRequired ?? question.required ?? activityPolicy.defaultAnswerRequired;
