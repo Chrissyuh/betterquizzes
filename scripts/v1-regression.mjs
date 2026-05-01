@@ -63,6 +63,12 @@ assert(!app.includes("Getting your quiz ready"), "verbose loading explainer shou
 assert(app.includes('"choice multi-choice selected"'), "multi-select choices must use checkbox markers");
 assert(!app.includes('selectedChoice ? "✓" : label'), "single-select choices must not replace letters with checkmarks");
 
+assert(!app.includes("required complete ✓"), "submission screen must not show numeric required-complete chip");
+assert(!app.includes("0/0 required complete"), "submission screen must not show 0/0 required complete");
+assert(app.includes("submission.completion.requiredTotal > 0"), "required-complete chip must only render when required questions exist");
+assert(!remoteServer.includes("do not penalize blank non-required"), "remote submission handoff must not use blanket non-penalty wording");
+assert(remoteServer.includes("Grade case-by-case") || remoteServer.includes("case-by-case"), "remote submission handoff must use case-by-case grading wording");
+
 console.log("V1 polish regression checks passed.");
 
 // V9 stale submit-pipeline guards
