@@ -64,3 +64,12 @@ assert(app.includes('"choice multi-choice selected"'), "multi-select choices mus
 assert(!app.includes('selectedChoice ? "✓" : label'), "single-select choices must not replace letters with checkmarks");
 
 console.log("V1 polish regression checks passed.");
+
+// V9 stale submit-pipeline guards
+const staleReqUse = 'required complete' + '). Use';
+const staleNoPenalty = 'do not penalize' + ' blank non-required';
+assert(!remote.includes(staleReqUse), 'submit tool must not emit stale required-count text');
+assert(!remote.toLowerCase().includes(staleNoPenalty), 'submit tool must not use blanket no-penalty wording');
+assert(app.includes('submission.completion.requiredTotal > 0 ? <span>Required questions complete'), 'submission screen should only mention required completion when required questions exist');
+assert(!app.includes('More ' + 'options'), 'post-submit More options should be removed');
+assert(remote.includes('case-by-case'), 'submit pipeline must use case-by-case grading wording');

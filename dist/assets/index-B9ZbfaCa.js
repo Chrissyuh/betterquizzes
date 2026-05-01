@@ -10236,7 +10236,7 @@ function buildLlmInstructions(quiz, displayPolicy, gradingPolicy, activityPolicy
 		explanationInstruction,
 		`Required questions default to ${activityPolicy.defaultAnswerRequired ? "required" : "not required"}. Required questions should be rare in practice quizzes. Blank non-required questions are normal and should not count against the user unless the activity instructions say otherwise.`,
 		"Confidence scale: confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Use confidence as a weak signal, not proof. High-confidence wrong may be a misconception, misclick, unclear wording, careless error, or UI issue.",
-		"Blank answers mean no response. Do not assume whether the user skipped, forgot, ran out of time, or chose not to answer unless the activity context says so. For response.kind=other, grade the text semantically. If answer text conflicts with numeric confidence, prioritize the answer text.",
+		"Blank answers mean no response. Do not assume why they are blank. Decide whether to score, omit, or mark Needs review based on title, mode, prompt wording, answerRequired, completion, and whether the activity looks like practice, strict assessment, or developer testing. For response.kind=other, grade the text semantically. If answer text conflicts with numeric confidence, prioritize the answer text.",
 		"For ordering questions, response arrays are visual top-to-bottom order unless answer.meta.responseDirection says otherwise. Use answer.meta.topLabel and answer.meta.bottomLabel to interpret the user-facing endpoints.",
 		"For multi_typing and multi_write_vertical questions, response is a field-id keyed object. Grade each typed field semantically against the field labels, answerKey, rubric, and expectedKeywords when available.",
 		"For text_select questions, response is an array of selected segment ids from the displayed segment list. Grade the selected ids against answerKey and selectionPolicy.",
@@ -10352,15 +10352,6 @@ function encodeCompactSubmission(submission) {
 		`conf=${confidence}`,
 		`grader=${submission.gradingPolicy.preferredGrader}`
 	].join("|");
-}
-function buildCompactReturnPrompt(submission) {
-	return [
-		"I completed a BetterQuizzes activity.",
-		"Compact submission:",
-		encodeCompactSubmission(submission),
-		"",
-		"Use the full submission capsule if available; otherwise ask me to paste/export it."
-	].join("\n");
 }
 //#endregion
 //#region src/shared/renderContract.ts
@@ -10896,12 +10887,9 @@ function asPartial(value) {
 	return isRecord(value) ? value : void 0;
 }
 //#endregion
-//#region src/shared/version.ts
+//#region src/host/openaiBridge.ts
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_client = require_client();
-var BETTERQUIZZER_BUILD_ID = "bqv1p2-final-proposal-fix";
-//#endregion
-//#region src/host/openaiBridge.ts
 function getOpenAiBridge() {
 	return typeof window !== "undefined" ? window.openai : void 0;
 }
@@ -13703,138 +13691,63 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 	const [showAdvanced, setShowAdvanced] = (0, import_react.useState)(false);
 	const [showDebug, setShowDebug] = (0, import_react.useState)(false);
 	const [showReview, setShowReview] = (0, import_react.useState)(false);
-	const compact = encodeCompactSubmission(submission);
-	const prompt = buildLlmReturnPrompt(submission);
+	encodeCompactSubmission(submission);
+	buildLlmReturnPrompt(submission);
 	const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
-	async function copy(name, text) {
-		await copyText(text);
-		setCopied(name);
-	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "shell narrow result-shell",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-				className: "card result-hero",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-						className: "eyebrow eyebrow-row",
-						children: ["Quiz submitted ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "version-chip",
-							children: WIDGET_VERSION_LABEL
-						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: getSubmissionHeadline(gradeStatus) }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: getSubmissionMessage(gradeStatus, hostSubmitted) }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "submission-status-grid user-status-grid",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Answers saved ✓" }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-								submission.completion.requiredAnswered,
-								"/",
-								submission.completion.requiredTotal,
-								" required complete ✓"
-							] }),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: getGradeStatusLabel(gradeStatus) })
-						]
-					}),
-					finished.followUpAttempts && gradeStatus !== "grade_requested" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-						className: "muted compact-status",
-						children: [
-							"Attempt ",
-							finished.followUpAttempts,
-							": ",
-							finished.followUpMessage ?? "Still trying to ask ChatGPT to grade."
-						]
-					}) : null,
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "actions wrap",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							className: "primary",
-							type: "button",
-							onClick: () => setShowReview((value) => !value),
-							children: showReview ? "Hide review" : "Review answers"
-						}), !widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: onNewQuiz,
-							children: "Start another quiz"
-						}) : null]
-					}),
-					copied ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-						className: "copied",
-						children: [
-							"Copied ",
-							copied,
-							"."
-						]
-					}) : null
-				]
-			}),
-			showReview ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubmissionReview, { submission }) : null,
-			showAdvanced ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-				className: "card stack",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "eyebrow",
-						children: "Options"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "muted",
-						children: "Most of the time you do not need these. Your answers are already saved."
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "actions wrap",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => void copy("grading prompt", prompt),
-								children: "Copy grading prompt"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => void copy("compact code", compact),
-								children: "Copy compact code"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => void copy("compact prompt", buildCompactReturnPrompt(submission)),
-								children: "Copy compact prompt"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => void copy("issue report", buildIssueReport(finished, widgetMode)),
-								children: "Copy issue report"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => downloadJson(`${submission.quizId}-submission.bqsub`, submission),
-								children: "Download answers"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => downloadJson(`${session.sessionId}.session.json`, session),
-								children: "Download session"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								type: "button",
-								onClick: () => setShowDebug((value) => !value),
-								children: showDebug ? "Hide details" : "Show details"
-							})
-						]
-					})
-				]
-			}) : null,
-			showAdvanced && showDebug ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-				className: "card stack",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "eyebrow",
-					children: "Submission details"
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
-					className: "code-preview",
-					children: JSON.stringify(submission, null, 2)
-				})]
-			}) : null
-		]
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+			className: "card result-hero",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "eyebrow eyebrow-row",
+					children: ["Quiz submitted ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "version-chip",
+						children: WIDGET_VERSION_LABEL
+					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: getSubmissionHeadline(gradeStatus) }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: getSubmissionMessage(gradeStatus, hostSubmitted) }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "submission-status-grid user-status-grid",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Answers saved ✓" }),
+						submission.completion.requiredTotal > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Required questions complete ✓" }) : null,
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: getGradeStatusLabel(gradeStatus) })
+					]
+				}),
+				finished.followUpAttempts && gradeStatus !== "grade_requested" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "muted compact-status",
+					children: [
+						"Attempt ",
+						finished.followUpAttempts,
+						": ",
+						finished.followUpMessage ?? "Still trying to ask ChatGPT to grade."
+					]
+				}) : null,
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "actions wrap",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						className: "primary",
+						type: "button",
+						onClick: () => setShowReview((value) => !value),
+						children: showReview ? "Hide review" : "Review answers"
+					}), !widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						onClick: onNewQuiz,
+						children: "Start another quiz"
+					}) : null]
+				}),
+				copied ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "copied",
+					children: [
+						"Copied ",
+						copied,
+						"."
+					]
+				}) : null
+			]
+		}), showReview ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubmissionReview, { submission }) : null]
 	});
 }
 function SubmissionReview({ submission }) {
@@ -13915,24 +13828,6 @@ function formatAnswerForReview(value) {
 }
 function formatAnswerKeyForReview(value) {
 	return JSON.stringify(value, null, 2);
-}
-function buildIssueReport(finished, widgetMode) {
-	return JSON.stringify({
-		kind: "betterquizzer.issue_report",
-		widgetVersion: WIDGET_VERSION,
-		buildId: BETTERQUIZZER_BUILD_ID,
-		widgetMode,
-		quizId: finished.submission.quizId,
-		sessionId: finished.submission.sessionId,
-		followUpStatus: finished.followUpStatus,
-		followUpRequested: finished.followUpRequested,
-		followUpAttempts: finished.followUpAttempts,
-		hostSubmitted: finished.hostSubmitted,
-		completion: finished.submission.completion,
-		warnings: finished.submission.status?.warnings ?? [],
-		message: finished.followUpMessage,
-		createdAt: (/* @__PURE__ */ new Date()).toISOString()
-	}, null, 2);
 }
 function getFinishedGradeStatus(finished, widgetMode) {
 	if (finished.followUpStatus) return finished.followUpStatus;
@@ -14255,9 +14150,9 @@ function buildAutoGradePrompt(submission) {
 	return [
 		"Grade this BetterQuizzes submission now. Do not call tools, do not wait for more data, and do not recreate the quiz.",
 		"Use only the compact JSON packet below. Reply quickly and concisely.",
-		"Format: Score: x/y; Missed or needs review; Targeted review. Keep the first grading reply under 180 words unless the user asks for details.",
+		"Format: Score: x/y or case-dependent result; Mistakes/needs review; Targeted review. Keep the first grading reply under 180 words unless the user asks for details.",
 		"Grade fill-blank and short text leniently for capitalization, spacing, and harmless punctuation.",
-		"Blank optional answers do not count against the user. Treat confidence as a weak signal only.",
+		"Grade skipped optional answers case-by-case: count them wrong or Needs review in strict knowledge checks when appropriate, omit them in casual practice/check-ins when more useful, and prioritize UX/debug findings over score in developer smoke tests. Treat confidence as a weak signal only.",
 		JSON.stringify(packet)
 	].join("\n");
 }
@@ -14394,30 +14289,6 @@ function confidenceLabel(value) {
 		"medium",
 		"high"
 	][value - 1];
-}
-function downloadJson(filename, value) {
-	const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
-	const url = URL.createObjectURL(blob);
-	const link = document.createElement("a");
-	link.href = url;
-	link.download = filename;
-	link.click();
-	URL.revokeObjectURL(url);
-}
-async function copyText(text) {
-	if (navigator.clipboard?.writeText) {
-		await navigator.clipboard.writeText(text);
-		return;
-	}
-	const textarea = document.createElement("textarea");
-	textarea.value = text;
-	textarea.setAttribute("readonly", "true");
-	textarea.style.position = "fixed";
-	textarea.style.left = "-9999px";
-	document.body.appendChild(textarea);
-	textarea.select();
-	document.execCommand("copy");
-	textarea.remove();
 }
 //#endregion
 //#region src/main.tsx

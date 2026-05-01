@@ -1793,7 +1793,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
 
         <div className="submission-status-grid user-status-grid">
           <span>Answers saved ✓</span>
-          <span>{submission.completion.requiredAnswered}/{submission.completion.requiredTotal} required complete ✓</span>
+          {submission.completion.requiredTotal > 0 ? <span>Required questions complete ✓</span> : null}
           <span>{getGradeStatusLabel(gradeStatus)}</span>
         </div>
 
@@ -1809,28 +1809,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
         {copied ? <p className="copied">Copied {copied}.</p> : null}
       </section>
 
-      {showReview ? <SubmissionReview submission={submission} /> : null}
-
-      {showAdvanced ? (
-        <section className="card stack">
-          <p className="eyebrow">Options</p>
-          <p className="muted">Most of the time you do not need these. Your answers are already saved.</p>
-          <div className="actions wrap">
-            <button type="button" onClick={() => void copy("grading prompt", prompt)}>Copy grading prompt</button>
-            <button type="button" onClick={() => void copy("compact code", compact)}>Copy compact code</button>
-            <button type="button" onClick={() => void copy("compact prompt", buildCompactReturnPrompt(submission))}>Copy compact prompt</button>
-            <button type="button" onClick={() => void copy("issue report", buildIssueReport(finished, widgetMode))}>Copy issue report</button>
-            <button type="button" onClick={() => downloadJson(`${submission.quizId}-submission.bqsub`, submission)}>Download answers</button>
-            <button type="button" onClick={() => downloadJson(`${session.sessionId}.session.json`, session)}>Download session</button>
-            <button type="button" onClick={() => setShowDebug((value) => !value)}>{showDebug ? "Hide details" : "Show details"}</button>
-          </div>
-        </section>
-      ) : null}
-
-      {showAdvanced && showDebug ? <section className="card stack">
-        <p className="eyebrow">Submission details</p>
-        <pre className="code-preview">{JSON.stringify(submission, null, 2)}</pre>
-      </section> : null}
+      {showReview ? <SubmissionReview submission={submission} /> : null}
     </main>
   );
 }
@@ -2231,9 +2210,9 @@ function buildAutoGradePrompt(submission: SubmissionCapsule): string {
   return [
     "Grade this BetterQuizzes submission now. Do not call tools, do not wait for more data, and do not recreate the quiz.",
     "Use only the compact JSON packet below. Reply quickly and concisely.",
-    "Format: Score: x/y; Missed or needs review; Targeted review. Keep the first grading reply under 180 words unless the user asks for details.",
+    "Format: Score: x/y or case-dependent result; Mistakes/needs review; Targeted review. Keep the first grading reply under 180 words unless the user asks for details.",
     "Grade fill-blank and short text leniently for capitalization, spacing, and harmless punctuation.",
-    "Blank optional answers do not count against the user. Treat confidence as a weak signal only.",
+    "Grade skipped optional answers case-by-case: count them wrong or Needs review in strict knowledge checks when appropriate, omit them in casual practice/check-ins when more useful, and prioritize UX/debug findings over score in developer smoke tests. Treat confidence as a weak signal only.",
     JSON.stringify(packet),
   ].join("\n");
 }

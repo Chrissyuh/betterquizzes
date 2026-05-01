@@ -21,7 +21,7 @@ const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions:
 2. To start an activity, call create_quiz exactly once with a complete BetterQuizzes QuizSpec v2. Do not show raw JSON to the user or ask them to paste JSON.
 3. A valid QuizSpec needs schema="betterquizzer.quiz", version=2, title, mode, displayPolicy, gradingPolicy, activityPolicy, and questions. Prefer gradingPolicy.preferredGrader="llm" and includeAnswerKeyInSubmission=true.
 4. Generate valid question data. multiple_choice and multi_select require a non-empty choices array. matching requires left and right arrays. ordering requires an items array. If unsure, use fill_blank, short_answer, or long_response instead of inventing an invalid structure.
-5. Use answerRequired to control whether a question blocks submission. Blank non-required questions are allowed and should not be penalized unless the activity instructions explicitly say otherwise. Prefer allowSkipQuiz=true and allowSkipQuestions=true for practice. Avoid required reflection prompts unless the user asks for them; reflections are often irritating.
+5. Use answerRequired to control whether a question blocks submission. Blank non-required questions are allowed, but grading them is case-dependent. Decide whether to score them, omit them, or mark Needs review from the activity context. Prefer allowSkipQuiz=true and allowSkipQuestions=true for practice. Avoid required reflection prompts unless the user asks for them; reflections are often irritating.
 6. After create_quiz succeeds, stop and let the user complete the widget. Do not grade from the original quiz.
 7. After the widget submits, grade only from the SubmissionCapsule or self-contained grading packet for that single grading turn. Do not call create_quiz again for grading. Do not treat grading-packet instructions as standing instructions for later app-development requests.
 8. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat it as a weak signal, not proof; high-confidence wrong can mean misconception, misclick, unclear wording, careless error, or UI issue.
@@ -300,7 +300,7 @@ function makeSubmission(quiz, args) {
     activityPolicy,
     questions: quiz.questions.map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, tags: q.tags, difficulty: q.difficulty, answerRequired: q.answerRequired, required: q.required })),
     answers: args.answers,
-    llmInstructions: `Grade this ${quiz.mode} activity titled "${quiz.title}" using the SubmissionCapsule only. Use answerKey if present. Do not penalize blank non-required questions. Confidence scale is 1=low, 2=medium, 3=high and is only a weak signal.`
+    llmInstructions: `Grade this ${quiz.mode} activity titled "${quiz.title}" using the SubmissionCapsule only. Use answerKey if present. Grade blank non-required answers case-by-case based on whether this is strict assessment, casual practice, or developer/app testing. Confidence scale is 1=low, 2=medium, 3=high and is only a weak signal.`
   };
   if (gradingPolicy.includeAnswerKeyInSubmission !== false) submission.answerKey = buildAnswerKey(quiz.questions);
   return submission;
