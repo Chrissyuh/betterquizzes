@@ -10009,6 +10009,9 @@ function validateQuizSpec(input) {
 		if (!nonEmpty(question.prompt)) errors.push(`${prefix}.prompt must be a non-empty string.`);
 		if (question.answerRequired !== void 0 && typeof question.answerRequired !== "boolean") errors.push(`${prefix}.answerRequired must be boolean when provided.`);
 		if (question.required !== void 0 && typeof question.required !== "boolean") errors.push(`${prefix}.required must be boolean when provided.`);
+		if (question.requireConfidence !== void 0 && typeof question.requireConfidence !== "boolean") errors.push(`${prefix}.requireConfidence must be boolean when provided.`);
+		if (question.confidenceRequired !== void 0 && typeof question.confidenceRequired !== "boolean") errors.push(`${prefix}.confidenceRequired must be boolean when provided.`);
+		if (question.disableConfidence !== void 0 && typeof question.disableConfidence !== "boolean") errors.push(`${prefix}.disableConfidence must be boolean when provided.`);
 		if (question.responseLimit !== void 0) {
 			const limit = question.responseLimit;
 			if (limit !== null && (typeof limit !== "object" || Array.isArray(limit))) errors.push(`${prefix}.responseLimit must be an object or null.`);
@@ -10154,7 +10157,7 @@ function buildCompletionSummary(quiz, answers, displayPolicy = normalizeDisplayP
 	for (const question of requiredQuestions) {
 		const answer = answerMap.get(question.id);
 		if (!answerHasResponseForQuestion(question, answer)) missingRequiredQuestionIds.push(question.id);
-		if (displayPolicy.requireConfidence && answerHasResponseForQuestion(question, answer) && !isValidConfidenceValue(answer?.confidence)) missingRequiredConfidenceIds.push(question.id);
+		if (questionRequiresConfidence(question, displayPolicy) && answerHasResponseForQuestion(question, answer) && !isValidConfidenceValue(answer?.confidence)) missingRequiredConfidenceIds.push(question.id);
 	}
 	const requiredAnswered = requiredQuestions.length - missingRequiredQuestionIds.length;
 	const optionalAnswered = optionalQuestions.filter((question) => answerHasResponseForQuestion(question, answerMap.get(question.id))).length;
@@ -10167,6 +10170,15 @@ function buildCompletionSummary(quiz, answers, displayPolicy = normalizeDisplayP
 		missingRequiredConfidenceIds,
 		isComplete: missingRequiredQuestionIds.length === 0 && missingRequiredConfidenceIds.length === 0
 	};
+}
+function questionRequiresConfidence(question, displayPolicy) {
+	const record = question;
+	if (!displayPolicy.requireConfidence) return false;
+	if (record.disableConfidence === true) return false;
+	if (record.requireConfidence === false) return false;
+	if (record.confidenceRequired === false) return false;
+	if (record.confidence === false || record.confidence === "disabled") return false;
+	return true;
 }
 function isValidConfidenceValue(value) {
 	return value === 1 || value === 2 || value === 3;
@@ -10190,7 +10202,7 @@ function answerHasResponseForQuestion(question, answer) {
 		if (!Array.isArray(response) || !response.every((item) => typeof item === "string")) return false;
 		return isTextSelectComplete$1(question, response);
 	}
-	if (question.type === "multi_select") return Array.isArray(response) && response.length > 0;
+	if (question.type === "multi_select") return Array.isArray(response) && response.length > 0 || Boolean(response && typeof response === "object" && !Array.isArray(response) && response.kind === "other" && (typeof response.text === "string" && String(response.text).trim().length > 0 || Array.isArray(response.selections) && (response.selections ?? []).length > 0));
 	return true;
 }
 function isTextSelectComplete$1(question, selected) {
@@ -10217,7 +10229,7 @@ function answerHasResponse(answer) {
 	if (typeof response === "number") return Number.isFinite(response);
 	if (typeof response === "object") {
 		const kind = response.kind;
-		if (kind === "other") return typeof response.text === "string" && String(response.text).trim().length > 0;
+		if (kind === "other") return typeof response.text === "string" && String(response.text).trim().length > 0 || Array.isArray(response.selections) && (response.selections ?? []).length > 0;
 		if (kind === "cancelled") return true;
 		return Object.values(response).some((value) => typeof value === "string" && value.trim().length > 0);
 	}
@@ -12491,7 +12503,8 @@ function QuestionCard({ question, draft, displayPolicy, activityPolicy, quizChoi
 	const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy);
 	const required = isQuestionRequired(question, activityPolicy);
 	const answerComplete = isQuestionAnswerComplete(question, draft);
-	const confidenceValue = answerComplete ? normalizeConfidence(draft?.confidence) : void 0;
+	const confidenceRequired = isConfidenceRequiredForQuestion(question, displayPolicy);
+	const confidenceValue = answerComplete && confidenceRequired ? normalizeConfidence(draft?.confidence) : void 0;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: `card question-card ${status}`,
 		children: [
@@ -12509,18 +12522,18 @@ function QuestionCard({ question, draft, displayPolicy, activityPolicy, quizChoi
 				quizChoiceBehavior: question.choiceBehavior ?? quizChoiceBehavior,
 				onChange
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+			confidenceRequired ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 				className: answerComplete ? "confidence-section unlocked" : "confidence-section locked",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "confidence-heading",
 					children: "Confidence"
 				}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ConfidencePicker, {
 					value: confidenceValue,
-					required: displayPolicy.requireConfidence,
+					required: confidenceRequired,
 					disabled: !answerComplete,
 					onChange: (confidence) => onChange({ confidence })
 				})]
-			})
+			}) : null
 		]
 	});
 }
@@ -13820,7 +13833,7 @@ function formatAnswerForReview(value) {
 	if (Array.isArray(value)) return value.map((item) => typeof item === "object" ? JSON.stringify(item) : String(item)).join(" -> ");
 	if (typeof value === "object") {
 		const special = asSpecialResponse(value);
-		if (special?.kind === "other") return special.text || "Other";
+		if (special?.kind === "other") return `${special.text || "Other"}${special.selections?.length ? `; selected: ${special.selections.join(", ")}` : ""}`;
 		if (special?.kind === "cancelled") return "Cancelled";
 		return Object.entries(value).map(([key, item]) => `${key}: ${String(item ?? "")}`).join("; ");
 	}
@@ -14096,7 +14109,7 @@ function makeAnswerRecords(quiz, drafts, startedAt) {
 		return {
 			questionId: question.id,
 			response,
-			confidence: isQuestionAnswerComplete(question, draft) ? normalizeConfidence(draft?.confidence) : void 0,
+			confidence: isQuestionAnswerComplete(question, draft) && isConfidenceRequiredForQuestion(question, normalizeDisplayPolicy(quiz.displayPolicy)) ? normalizeConfidence(draft?.confidence) : void 0,
 			timeMs,
 			...meta ? {
 				meta,
@@ -14200,19 +14213,28 @@ function limitForGrading(value, maxChars) {
 	const text = String(value).replace(/\s+/g, " ").trim();
 	return text.length > maxChars ? text.slice(0, Math.max(0, maxChars - 1)) + "…" : text;
 }
+function isConfidenceRequiredForQuestion(question, displayPolicy) {
+	const record = question;
+	if (!displayPolicy.requireConfidence) return false;
+	if (record.disableConfidence === true) return false;
+	if (record.requireConfidence === false) return false;
+	if (record.confidenceRequired === false) return false;
+	if (record.confidence === false || record.confidence === "disabled") return false;
+	return true;
+}
 function isQuestionRequired(question, activityPolicy) {
 	return question.answerRequired ?? question.required ?? activityPolicy.defaultAnswerRequired;
 }
 function getQuestionStatus(question, draft, displayPolicy, activityPolicy) {
 	const required = isQuestionRequired(question, activityPolicy);
-	if (isReady(question, draft, displayPolicy, activityPolicy)) return required ? "ready" : "optional";
+	if (isReady(question, draft, displayPolicy, activityPolicy)) return "ready";
 	if (required) return hasResponse(draft) ? "incomplete" : "empty";
 	return hasResponse(draft) ? "draft" : "optional";
 }
 function isReady(question, draft, displayPolicy, activityPolicy) {
 	const required = isQuestionRequired(question, activityPolicy);
 	if (!isQuestionAnswerComplete(question, draft)) return !required;
-	if (displayPolicy.requireConfidence && normalizeConfidence(draft?.confidence) === void 0) return false;
+	if (isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === void 0) return false;
 	return true;
 }
 function hasMeaningfulText(value) {
@@ -14259,7 +14281,7 @@ function hasResponse(draft) {
 	if (typeof response === "string") return response.trim().length > 0;
 	if (Array.isArray(response)) return response.length > 0;
 	const special = asSpecialResponse(response);
-	if (special?.kind === "other") return special.text.trim().length > 0;
+	if (special?.kind === "other") return special.text.trim().length > 0 || (special.selections?.length ?? 0) > 0;
 	if (special?.kind === "cancelled") return true;
 	if (isMultiTypingResponse(response)) return Object.values(response).some((value) => value.trim().length > 0);
 	return true;
@@ -14267,10 +14289,14 @@ function hasResponse(draft) {
 function asSpecialResponse(value) {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 	const record = value;
-	if (record.kind === "other") return {
-		kind: "other",
-		text: typeof record.text === "string" ? record.text : ""
-	};
+	if (record.kind === "other") {
+		const selections = Array.isArray(record.selections) ? record.selections.filter((item) => typeof item === "number" && Number.isInteger(item) && item >= 0) : void 0;
+		return {
+			kind: "other",
+			text: typeof record.text === "string" ? record.text : "",
+			...selections ? { selections } : {}
+		};
+	}
 	if (record.kind === "cancelled") return {
 		kind: "cancelled",
 		reason: typeof record.reason === "string" ? record.reason : void 0

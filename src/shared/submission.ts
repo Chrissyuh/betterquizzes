@@ -94,7 +94,7 @@ export function buildCompletionSummary(quiz: QuizSpec, answers: AnswerRecord[], 
   for (const question of requiredQuestions) {
     const answer = answerMap.get(question.id);
     if (!answerHasResponseForQuestion(question, answer)) missingRequiredQuestionIds.push(question.id);
-    if (displayPolicy.requireConfidence && answerHasResponseForQuestion(question, answer) && !isValidConfidenceValue(answer?.confidence)) missingRequiredConfidenceIds.push(question.id);
+    if (questionRequiresConfidence(question, displayPolicy) && answerHasResponseForQuestion(question, answer) && !isValidConfidenceValue(answer?.confidence)) missingRequiredConfidenceIds.push(question.id);
   }
 
   const requiredAnswered = requiredQuestions.length - missingRequiredQuestionIds.length;
@@ -112,6 +112,21 @@ export function buildCompletionSummary(quiz: QuizSpec, answers: AnswerRecord[], 
 }
 
 export 
+
+function questionRequiresConfidence(question: Question, displayPolicy: DisplayPolicy): boolean {
+  const record = question as Question & {
+    requireConfidence?: boolean;
+    confidenceRequired?: boolean;
+    disableConfidence?: boolean;
+    confidence?: boolean | "required" | "optional" | "disabled";
+  };
+  if (!displayPolicy.requireConfidence) return false;
+  if (record.disableConfidence === true) return false;
+  if (record.requireConfidence === false) return false;
+  if (record.confidenceRequired === false) return false;
+  if (record.confidence === false || record.confidence === "disabled") return false;
+  return true;
+}
 
 function isValidConfidenceValue(value: unknown): value is 1 | 2 | 3 {
   return value === 1 || value === 2 || value === 3;
@@ -135,7 +150,7 @@ function answerHasResponseForQuestion(question: Question, answer: AnswerRecord |
     if (!Array.isArray(response) || !response.every((item) => typeof item === "string")) return false;
     return isTextSelectComplete(question, response);
   }
-  if (question.type === "multi_select") return Array.isArray(response) && response.length > 0;
+  if (question.type === "multi_select") return Array.isArray(response) && response.length > 0 || Boolean(response && typeof response === "object" && !Array.isArray(response) && (response as { kind?: unknown; text?: unknown; selections?: unknown }).kind === "other" && (typeof (response as { text?: unknown }).text === "string" && String((response as { text?: unknown }).text).trim().length > 0 || Array.isArray((response as { selections?: unknown }).selections) && ((response as { selections?: unknown[] }).selections ?? []).length > 0));
   return true;
 }
 
@@ -165,7 +180,7 @@ function answerHasResponse(answer: AnswerRecord | undefined): boolean {
   if (typeof response === "object") {
     const kind = (response as { kind?: unknown }).kind;
 
-    if (kind === "other") return typeof (response as { text?: unknown }).text === "string" && String((response as { text?: unknown }).text).trim().length > 0;
+    if (kind === "other") return typeof (response as { text?: unknown }).text === "string" && String((response as { text?: unknown }).text).trim().length > 0 || Array.isArray((response as { selections?: unknown }).selections) && ((response as { selections?: unknown[] }).selections ?? []).length > 0;
     if (kind === "cancelled") return true;
     return Object.values(response as Record<string, unknown>).some((value) => typeof value === "string" && value.trim().length > 0);
   }

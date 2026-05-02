@@ -1,3 +1,5 @@
+const V13_UX_INSTRUCTIONS = "BetterQuizzes V2/V13 UX guidance:\n- Disable confidence on subjective, preference, survey, fit-finding, reflection, opinion, and developer smoke-test questions unless confidence is genuinely meaningful.\n- For a whole subjective survey, set displayPolicy.requireConfidence:false. For one subjective question inside an otherwise objective quiz, set question.requireConfidence:false or question.disableConfidence:true.\n- Do not use unsupported preference-ranking settings. For ranked preferences, use supported ordering questions or ordinary multiple-choice/multi-select questions.\n- Multi-select \"Other\" must preserve the user's other selected choices. Do not design \"Other\" as a single-select replacement unless the question type is single-select multiple_choice.\n- Choice label UI rules: single-select choices use circular radio-style labels; multi-select choices use square checkbox-style labels.\n- For choice special cases, use choiceAnswerPolicy deliberately: at_least_one_correct, at_least_one_correct_with_none, or none_correct_with_none.";
+
 #!/usr/bin/env node
 /**
  * Stage 12.6 official-SDK stdio entrypoint.
@@ -40,7 +42,7 @@ const server = new McpServer({
   name: "betterquizzer-stage12-6",
   title: "BetterQuizzes Stage 12.6",
   version: VERSION,
-  instructions: MODEL_INSTRUCTIONS
+  instructions: MODEL_INSTRUCTIONS + "\n\n" + V13_UX_INSTRUCTIONS
 }, {
   capabilities: {
     tools: { listChanged: false },

@@ -80,6 +80,8 @@ export type QuizMetadata = {
   tags?: string[];
 };
 
+export type ChoiceAnswerPolicy = "at_least_one_correct" | "at_least_one_correct_with_none" | "none_correct_with_none";
+
 export type ChoiceBehavior = {
   /** Add an Other textbox choice. Unanswered items remain blank; Other can capture custom answers. */
   allowOther?: boolean;
@@ -217,7 +219,7 @@ export type Question =
   | OrderingQuestion
   | NumericQuestion;
 
-export type SpecialResponse = { kind: "other"; text: string } | { kind: "cancelled"; reason?: string };
+export type SpecialResponse = { kind: "other"; text: string; selections?: number[] } | { kind: "cancelled"; reason?: string };
 export type MultiTypingResponse = Record<string, string>;
 export type TextSelectResponse = string[];
 export type AnswerResponse = number | number[] | boolean | string | string[] | MatchingPair[] | MultiTypingResponse | TextSelectResponse | SpecialResponse | null;

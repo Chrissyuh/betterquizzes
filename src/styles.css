@@ -1430,3 +1430,21 @@ textarea,
 .result-shell .actions {
   justify-content: flex-start;
 }
+
+
+
+/* V13 UX: radio/circle vs checkbox/square labels and subjective confidence support */
+.choice.single-choice .choice-letter {
+  border-radius: 999px;
+}
+.choice.multi-choice .choice-letter {
+  border-radius: 8px;
+}
+.choice.multi-choice:not(.selected) .choice-letter {
+  color: transparent;
+  background: #fff;
+}
+.question-card .confidence-section[hidden] {
+  display: none;
+}
+

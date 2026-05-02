@@ -85,6 +85,9 @@ export function validateQuizSpec(input: unknown): ValidationResult<QuizSpec> {
       if (!nonEmpty(question.prompt)) errors.push(`${prefix}.prompt must be a non-empty string.`);
       if (question.answerRequired !== undefined && typeof question.answerRequired !== "boolean") errors.push(`${prefix}.answerRequired must be boolean when provided.`);
       if (question.required !== undefined && typeof question.required !== "boolean") errors.push(`${prefix}.required must be boolean when provided.`);
+      if (question.requireConfidence !== undefined && typeof question.requireConfidence !== "boolean") errors.push(`${prefix}.requireConfidence must be boolean when provided.`);
+      if (question.confidenceRequired !== undefined && typeof question.confidenceRequired !== "boolean") errors.push(`${prefix}.confidenceRequired must be boolean when provided.`);
+      if (question.disableConfidence !== undefined && typeof question.disableConfidence !== "boolean") errors.push(`${prefix}.disableConfidence must be boolean when provided.`);
       if (question.responseLimit !== undefined) {
         const limit = question.responseLimit as Record<string, unknown> | null;
         if (limit !== null && (typeof limit !== "object" || Array.isArray(limit))) {
@@ -171,7 +174,7 @@ export function validateQuizSession(input: unknown, quiz: QuizSpec): ValidationR
       if (!questionIds.has(String(answer?.questionId))) errors.push(`answers[${index}].questionId does not exist in quiz.`);
       if (!("response" in (answer ?? {}))) errors.push(`answers[${index}].response is required.`);
       const questionRequired = question ? question.answerRequired ?? question.required ?? activityPolicy.defaultAnswerRequired : true;
-      if (questionRequired && displayPolicy.requireConfidence && answer?.response !== null && answer?.confidence === undefined) errors.push(`answers[${index}].confidence is required by displayPolicy.`);
+      if (questionRequired && questionRequiresConfidence(question, displayPolicy) && answer?.response !== null && answer?.confidence === undefined) errors.push(`answers[${index}].confidence is required by displayPolicy.`);
       if (answer?.confidence !== undefined && ![1, 2, 3].includes(answer.confidence as 1 | 2 | 3)) errors.push(`answers[${index}].confidence must be an integer: 1=low, 2=medium, 3=high. Do not use decimals, percentages, or strings.`);
     });
   }
@@ -181,4 +184,16 @@ export function validateQuizSession(input: unknown, quiz: QuizSpec): ValidationR
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+
+function questionRequiresConfidence(question: unknown, displayPolicy: DisplayPolicy): boolean {
+  if (!displayPolicy.requireConfidence) return false;
+  if (!question || typeof question !== "object" || Array.isArray(question)) return displayPolicy.requireConfidence;
+  const record = question as Record<string, unknown>;
+  if (record.disableConfidence === true) return false;
+  if (record.requireConfidence === false) return false;
+  if (record.confidenceRequired === false) return false;
+  if (record.confidence === false || record.confidence === "disabled") return false;
+  return true;
 }

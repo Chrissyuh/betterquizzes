@@ -860,7 +860,8 @@ function QuestionCard({ question, draft, displayPolicy, activityPolicy, quizChoi
   const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy);
   const required = isQuestionRequired(question, activityPolicy);
   const answerComplete = isQuestionAnswerComplete(question, draft);
-  const confidenceValue = answerComplete ? normalizeConfidence(draft?.confidence) : undefined;
+  const confidenceRequired = isConfidenceRequiredForQuestion(question, displayPolicy);
+  const confidenceValue = answerComplete && confidenceRequired ? normalizeConfidence(draft?.confidence) : undefined;
   return (
     <section className={`card question-card ${status}`}>
       <div className="question-header">
@@ -868,10 +869,10 @@ function QuestionCard({ question, draft, displayPolicy, activityPolicy, quizChoi
       </div>
       <h2><RichInline text={question.prompt} /></h2>
       <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onChange={onChange} />
-      <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
+      {confidenceRequired ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
         <div><p className="confidence-heading">Confidence</p></div>
-        <ConfidencePicker value={confidenceValue} required={displayPolicy.requireConfidence} disabled={!answerComplete} onChange={(confidence) => onChange({ confidence })} />
-      </section>
+        <ConfidencePicker value={confidenceValue} required={confidenceRequired} disabled={!answerComplete} onChange={(confidence) => onChange({ confidence })} />
+      </section> : null}
     </section>
   );
 }
@@ -1848,7 +1849,7 @@ function formatAnswerForReview(value: unknown): string {
   if (Array.isArray(value)) return value.map((item) => typeof item === "object" ? JSON.stringify(item) : String(item)).join(" -> ");
   if (typeof value === "object") {
     const special = asSpecialResponse(value);
-    if (special?.kind === "other") return special.text || "Other";
+    if (special?.kind === "other") return `${special.text || "Other"}${special.selections?.length ? `; selected: ${special.selections.join(", ")}` : ""}`;
     if (special?.kind === "cancelled") return "Cancelled";
     return Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key}: ${String(item ?? "")}`).join("; ");
   }
@@ -2151,7 +2152,7 @@ function makeAnswerRecords(quiz: QuizSpec, drafts: Record<string, DraftAnswer>, 
     const response = normalizeResponseForSubmission(question, draft?.response ?? null);
     const timeMs = safeElapsedMs(draft, startedAt);
     const meta = buildAnswerMeta(question);
-    return { questionId: question.id, response, confidence: isQuestionAnswerComplete(question, draft) ? normalizeConfidence(draft?.confidence) : undefined, timeMs, ...(meta ? { meta, ...meta } : {}) };
+    return { questionId: question.id, response, confidence: isQuestionAnswerComplete(question, draft) && isConfidenceRequiredForQuestion(question, normalizeDisplayPolicy(quiz.displayPolicy)) ? normalizeConfidence(draft?.confidence) : undefined, timeMs, ...(meta ? { meta, ...meta } : {}) };
   });
 }
 
@@ -2266,13 +2267,29 @@ function limitForGrading(value: unknown, maxChars: number): string | undefined {
   return text.length > maxChars ? text.slice(0, Math.max(0, maxChars - 1)) + "…" : text;
 }
 
+
+function isConfidenceRequiredForQuestion(question: Question, displayPolicy: DisplayPolicy): boolean {
+  const record = question as Question & {
+    requireConfidence?: boolean;
+    confidenceRequired?: boolean;
+    disableConfidence?: boolean;
+    confidence?: boolean | "required" | "optional" | "disabled";
+  };
+  if (!displayPolicy.requireConfidence) return false;
+  if (record.disableConfidence === true) return false;
+  if (record.requireConfidence === false) return false;
+  if (record.confidenceRequired === false) return false;
+  if (record.confidence === false || record.confidence === "disabled") return false;
+  return true;
+}
+
 function isQuestionRequired(question: Question, activityPolicy: ActivityPolicy): boolean {
   return question.answerRequired ?? question.required ?? activityPolicy.defaultAnswerRequired;
 }
 
 function getQuestionStatus(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): "ready" | "draft" | "empty" | "incomplete" | "optional" {
   const required = isQuestionRequired(question, activityPolicy);
-  if (isReady(question, draft, displayPolicy, activityPolicy)) return required ? "ready" : "optional";
+  if (isReady(question, draft, displayPolicy, activityPolicy)) return "ready";
   if (required) return hasResponse(draft) ? "incomplete" : "empty";
   return hasResponse(draft) ? "draft" : "optional";
 }
@@ -2280,7 +2297,7 @@ function getQuestionStatus(question: Question, draft: DraftAnswer | undefined, d
 function isReady(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): boolean {
   const required = isQuestionRequired(question, activityPolicy);
   if (!isQuestionAnswerComplete(question, draft)) return !required;
-  if (displayPolicy.requireConfidence && normalizeConfidence(draft?.confidence) === undefined) return false;
+  if (isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === undefined) return false;
   return true;
 }
 
@@ -2341,16 +2358,21 @@ function hasResponse(draft: DraftAnswer | undefined): boolean {
   if (typeof response === "string") return response.trim().length > 0;
   if (Array.isArray(response)) return response.length > 0;
   const special = asSpecialResponse(response);
-  if (special?.kind === "other") return special.text.trim().length > 0;
+  if (special?.kind === "other") return special.text.trim().length > 0 || (special.selections?.length ?? 0) > 0;
   if (special?.kind === "cancelled") return true;
   if (isMultiTypingResponse(response)) return Object.values(response).some((value) => value.trim().length > 0);
   return true;
 }
 
-function asSpecialResponse(value: unknown): { kind: "other"; text: string } | { kind: "cancelled"; reason?: string } | null {
+function asSpecialResponse(value: unknown): { kind: "other"; text: string; selections?: number[] } | { kind: "cancelled"; reason?: string } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (record.kind === "other") return { kind: "other", text: typeof record.text === "string" ? record.text : "" };
+  if (record.kind === "other") {
+    const selections = Array.isArray(record.selections)
+      ? record.selections.filter((item): item is number => typeof item === "number" && Number.isInteger(item) && item >= 0)
+      : undefined;
+    return { kind: "other", text: typeof record.text === "string" ? record.text : "", ...(selections ? { selections } : {}) };
+  }
   if (record.kind === "cancelled") return { kind: "cancelled", reason: typeof record.reason === "string" ? record.reason : undefined };
   return null;
 }

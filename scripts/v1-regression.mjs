@@ -66,8 +66,16 @@ assert(!app.includes('selectedChoice ? "✓" : label'), "single-select choices m
 assert(!app.includes("required complete ✓"), "submission screen must not show numeric required-complete chip");
 assert(!app.includes("0/0 required complete"), "submission screen must not show 0/0 required complete");
 assert(app.includes("submission.completion.requiredTotal > 0"), "required-complete chip must only render when required questions exist");
-assert(!remoteServer.includes("do not penalize blank non-required"), "remote submission handoff must not use blanket non-penalty wording");
-assert(remoteServer.includes("Grade case-by-case") || remoteServer.includes("case-by-case"), "remote submission handoff must use case-by-case grading wording");
+assert(!remote.includes("do not penalize blank non-required"), "remote submission handoff must not use blanket non-penalty wording");
+assert(remote.includes("Grade case-by-case") || remote.includes("case-by-case"), "remote submission handoff must use case-by-case grading wording");
+
+assert(remote.includes("V13_UX_INSTRUCTIONS"), "server must include V13 subjective-confidence and other-choice UX instructions");
+assert(app.includes("isConfidenceRequiredForQuestion"), "widget must support per-question confidence disabling");
+assert(app.includes("special.selections"), "multi-select Other must preserve selected choices");
+assert(app.includes('return "ready";') || app.includes('if (answerComplete && confidenceComplete) return "ready";'), "completed optional questions must become ready/green");
+assert(styles.includes("V13 UX: radio/circle"), "choice marker shape CSS must be present");
+assert(types.includes("disableConfidence?: boolean"), "question type must support disabling confidence");
+assert(submission.includes("questionRequiresConfidence"), "submission completion must respect question-level confidence disabling");
 
 console.log("V1 polish regression checks passed.");
 
