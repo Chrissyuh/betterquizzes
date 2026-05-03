@@ -69,6 +69,19 @@ type FinishedSubmission = {
   followUpMessage?: string;
 };
 
+type GradePayload = {
+  kind?: string;
+  quizId: string;
+  sessionId?: string;
+  score?: number | null;
+  maxScore?: number | null;
+  percent?: number | null;
+  label?: string;
+  summary?: string;
+  items?: { questionId?: string; mark?: string; feedback?: string; points?: number | null; maxPoints?: number | null }[];
+  recordedAt?: string;
+};
+
 type PendingLaunch = {
   key: string;
   payload: HostQuizPayload;
@@ -307,6 +320,18 @@ async function fetchQuizFromServer(quizId: string): Promise<QuizSpec> {
   const record = body as { quiz?: QuizSpec };
   if (!record.quiz) throw new Error("Server response did not include a quiz.");
   return record.quiz;
+}
+
+
+async function fetchGradeFromServer(quizId: string, sessionId?: string): Promise<GradePayload | null> {
+  const base = getServerBase();
+  const path = "/api/grade/" + encodeURIComponent(quizId) + (sessionId ? "/" + encodeURIComponent(sessionId) : "");
+  const url = base ? base + path : path;
+  const response = await fetch(url, { headers: { accept: "application/json" } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) return null;
+  const record = body as { grade?: GradePayload | null };
+  return record.grade ?? null;
 }
 
 function buildFinishedFromPersistedSubmission(quiz: QuizSpec, launchId?: string): FinishedSubmission | null {
@@ -823,7 +848,15 @@ function SkipQuizScreen({
             <span>{answeredCount}/{totalCount} questions had draft answers</span>
             <span>Grading not requested</span>
           </div>
-          <div className="actions wrap">
+  
+        {recordedGrade ? <GradeSummaryCard grade={recordedGrade} /> : widgetMode ? (
+          <div className="grade-waiting-card" aria-live="polite">
+            <span className="grade-waiting-dot" />
+            <span>{gradePollingDone ? "ChatGPT feedback will appear in chat." : "Waiting for ChatGPT grade…"}</span>
+          </div>
+        ) : null}
+
+        <div className="actions wrap">
             <button className="primary" type="button" onClick={onResume}>Resume quiz</button>
             {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
           </div>
@@ -1810,6 +1843,37 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
   const compact = encodeCompactSubmission(submission);
   const prompt = buildLlmReturnPrompt(submission);
   const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
+  const [recordedGrade, setRecordedGrade] = useState<GradePayload | null>(null);
+  const [gradePollingDone, setGradePollingDone] = useState(false);
+
+  useEffect(() => {
+    if (!widgetMode) return;
+    let cancelled = false;
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      const grade = await fetchGradeFromServer(submission.quizId, submission.sessionId).catch(() => null);
+      if (cancelled) return;
+      if (grade) {
+        setRecordedGrade(grade);
+        setGradePollingDone(true);
+        return;
+      }
+      if (attempts >= 16) setGradePollingDone(true);
+    };
+    void poll();
+    const interval = window.setInterval(() => {
+      if (cancelled || attempts >= 16) {
+        window.clearInterval(interval);
+        return;
+      }
+      void poll();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [widgetMode, submission.quizId, submission.sessionId]);
 
   async function copy(name: string, text: string): Promise<void> {
     await copyText(text);
@@ -1842,6 +1906,39 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
 
     </main>
   );
+}
+
+
+function GradeSummaryCard({ grade }: { grade: GradePayload }): ReactElement {
+  const percent = getGradePercent(grade);
+  const hasNumeric = percent !== null;
+  const scoreText = grade.score !== null && grade.score !== undefined && grade.maxScore !== null && grade.maxScore !== undefined
+    ? String(grade.score) + "/" + String(grade.maxScore)
+    : hasNumeric
+      ? String(percent) + "%"
+      : "";
+  const ringStyle = hasNumeric ? { "--grade-percent": String(percent) } as React.CSSProperties : undefined;
+  return (
+    <section className={hasNumeric ? "grade-card grade-card-numeric" : "grade-card grade-card-qualitative"} aria-live="polite">
+      <div className={hasNumeric ? "grade-ring" : "grade-ring qualitative"} style={ringStyle}>
+        <span>{hasNumeric ? String(percent) + "%" : "✓"}</span>
+      </div>
+      <div>
+        <p className="eyebrow">Grade ready</p>
+        <h2>{grade.label || (hasNumeric ? "Graded" : "Feedback ready")}</h2>
+        {scoreText ? <p className="grade-score-text">{scoreText}</p> : null}
+        {grade.summary ? <p className="muted">{grade.summary}</p> : <p className="muted">ChatGPT recorded feedback for this submission.</p>}
+      </div>
+    </section>
+  );
+}
+
+function getGradePercent(grade: GradePayload): number | null {
+  if (typeof grade.percent === "number" && Number.isFinite(grade.percent)) return Math.max(0, Math.min(100, Math.round(grade.percent)));
+  if (typeof grade.score === "number" && typeof grade.maxScore === "number" && Number.isFinite(grade.score) && Number.isFinite(grade.maxScore) && grade.maxScore > 0) {
+    return Math.max(0, Math.min(100, Math.round((grade.score / grade.maxScore) * 100)));
+  }
+  return null;
 }
 
 function SubmissionReview({ submission }: { submission: SubmissionCapsule }): ReactElement {

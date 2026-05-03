@@ -102,6 +102,13 @@ assert(styles.includes("bq-staged-dot-arrival-v19"), "question dots must have st
 assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronger arrival animation");
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 
+assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
+assert(remote.includes("const grades = new Map();"), "server must store recorded grades");
+assert(remote.includes('url.pathname.startsWith("/api/grade/")'), "server must expose grade polling endpoint");
+assert(app.includes("fetchGradeFromServer"), "widget must poll for recorded grades");
+assert(app.includes("GradeSummaryCard"), "widget must display recorded grades");
+assert(styles.includes("V20: grade writeback"), "grade writeback CSS must be present");
+
 console.log("V1 polish regression checks passed.");
 
 // V9 stale submit-pipeline guards

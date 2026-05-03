@@ -51,6 +51,8 @@ const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certifi
 
 
 
+const V20_GRADE_WRITEBACK_INSTRUCTIONS = "BetterQuizzes V20 grade writeback guidance:\n- After grading a submitted BetterQuizzes activity, call record_grade exactly once with quizId, sessionId, score/maxScore when numeric scoring is appropriate, label, summary, and per-question items when useful.\n- Then reply concisely in chat. Do not recreate the quiz and do not call submit_answers again.\n- For subjective, survey, fit, preference, reflection, or developer smoke-test activities, do not invent a numeric score. Use score:null, maxScore:null, label such as Feedback ready or Needs review, and a concise summary.\n- For objective quizzes, include numeric score and maxScore when possible so the widget can show a grade ring.\n- Use visible question text and answer labels in feedback. Do not expose raw ids, JSON, or HTML to the user.";
+
 const V18_SUBMIT_UX_INSTRUCTIONS = "BetterQuizzes V18 submission guidance:\n- After submit, ChatGPT should grade immediately from the compact submission packet. Do not wait, do not call tools, and do not recreate the quiz.\n- Keep the first grading reply short. Use Score, Needs review, and Targeted review.\n- If the activity is a developer smoke test, prioritize UX findings over a numeric grade.\n- For matching, ordering, text-select, and multi-part questions, explain using visible labels/text instead of raw ids.\n- Do not output placeholder null values.";
 
 const V17_USER_OBSERVATION_UX_INSTRUCTIONS = "BetterQuizzes V17 user-observation UX guidance:\n- While building an incremental quiz, show that generation is still in progress. Do not let the UI look frozen when more questions are expected.\n- Include answer keys for objective questions whenever possible so ChatGPT can state the correct answers word-for-word after submission.\n- Do not rely on the app review screen to explain complex answers. ChatGPT should mention the important questions, user answers, and correct answers in readable language.\n- For matching, ordering, text-select, and multi-part questions, explain answers using the visible labels/text, not raw ids or internal data.\n- Ordering questions should use clear top/bottom labels and should not start in the correct order.\n- Keep mobile prompts, subtitles, labels, and placeholders concise so the app does not feel cramped.";
@@ -101,6 +103,7 @@ const CREATE_QUIZ_DESCRIPTION = "Create and open a BetterQuizzes activity. Input
 
 
 const quizzes = new Map();
+const grades = new Map();
 let lastQuizId = null;
 const builtInQuizzes = loadBuiltInQuizzes();
 for (const quiz of builtInQuizzes) quizzes.set(getQuizId(quiz), quiz);
@@ -108,6 +111,8 @@ for (const quiz of builtInQuizzes) quizzes.set(getQuizId(quiz), quiz);
 const tools = [
   { name: "create_quiz", title: "Open BetterQuizzes", description: CREATE_QUIZ_DESCRIPTION, inputSchema: CREATE_QUIZ_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] }, "openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Preparing quiz…", "openai/toolInvocation/invoked": "Quiz ready" } },
   { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers…", "openai/toolInvocation/invoked": "Answers submitted" } },
+  { name: "record_grade", title: "Record BetterQuizzes Grade", description: "Record ChatGPT's structured grade so the BetterQuizzes widget can display a score ring or qualitative feedback. Call this after grading a submitted quiz.", inputSchema: GRADE_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Recording grade…", "openai/toolInvocation/invoked": "Grade recorded" } },
+  { name: "get_grade", title: "Get BetterQuizzes Grade", description: "Return a recorded BetterQuizzes grade for a quiz/session.", inputSchema: { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } },
   { name: "inspect_quiz", title: "Inspect BetterQuizzes Quiz", description: "Return a short summary and render diagnostics for a stored quiz.", inputSchema: { type: "object", properties: { quizId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } }
 ];
 
@@ -209,6 +214,89 @@ function submitAnswers(id, args) {
     content: [{ type: "text", text: `Received ${submission.answers.length} BetterQuizzes answers.${(submission.completion?.requiredTotal ?? 0) > 0 ? ` Required questions complete: ${submission.completion?.requiredAnswered ?? "?"}/${submission.completion?.requiredTotal ?? "?"}.` : ""} Use the structured SubmissionCapsule as the source of truth. Grade case-by-case: strict checks may count skipped relevant questions wrong or Needs review, casual practice may omit blank optional answers, and developer smoke tests should prioritize app/UX findings over score. Explain mistakes and use confidence cautiously as a weak signal.` }],
     _meta: { ...packet, returnPrompt: makePrompt(submission) }
   });
+}
+
+
+function gradeStorageKey(quizId, sessionId = "") {
+  return String(quizId || "") + "::" + String(sessionId || "latest");
+}
+
+function toFiniteNumberOrNull(value) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeGradePayload(args = {}) {
+  const source = args.grade && typeof args.grade === "object" && !Array.isArray(args.grade) ? { ...args.grade, quizId: args.quizId ?? args.grade.quizId, sessionId: args.sessionId ?? args.grade.sessionId } : { ...args };
+  const quizId = String(source.quizId || "").trim();
+  const sessionId = String(source.sessionId || "").trim();
+  if (!quizId) throw new Error("record_grade requires quizId.");
+
+  const score = source.score === null ? null : toFiniteNumberOrNull(source.score);
+  const maxScore = source.maxScore === null ? null : toFiniteNumberOrNull(source.maxScore ?? source.max);
+  let percent = source.percent === null ? null : toFiniteNumberOrNull(source.percent);
+
+  if (percent === null && score !== null && maxScore !== null && maxScore > 0) {
+    percent = Math.max(0, Math.min(100, Math.round((score / maxScore) * 100)));
+  }
+
+  const items = Array.isArray(source.items) ? source.items.map((item) => ({
+    questionId: String(item?.questionId ?? ""),
+    mark: String(item?.mark ?? item?.status ?? "needs_review"),
+    points: item?.points === undefined || item?.points === null ? null : toFiniteNumberOrNull(item.points),
+    maxPoints: item?.maxPoints === undefined || item?.maxPoints === null ? null : toFiniteNumberOrNull(item.maxPoints),
+    feedback: typeof item?.feedback === "string" ? item.feedback : "",
+  })).filter((item) => item.questionId || item.feedback) : [];
+
+  return {
+    kind: "betterquizzer.grade",
+    version: "V1",
+    quizId,
+    sessionId,
+    score,
+    maxScore,
+    percent,
+    label: typeof source.label === "string" && source.label.trim() ? source.label.trim() : percent === null ? "Feedback ready" : percent >= 90 ? "Excellent" : percent >= 75 ? "Good" : percent >= 60 ? "Keep practicing" : "Needs review",
+    summary: typeof source.summary === "string" ? source.summary.trim() : "",
+    items,
+    recordedAt: new Date().toISOString()
+  };
+}
+
+function recordGrade(id, args = {}) {
+  try {
+    const grade = normalizeGradePayload(args);
+    grades.set(gradeStorageKey(grade.quizId, grade.sessionId), grade);
+    grades.set(gradeStorageKey(grade.quizId, "latest"), grade);
+    return okResponse(id, {
+      structuredContent: { ok: true, grade },
+      content: [{ type: "text", text: "BetterQuizzes grade recorded." }],
+      _meta: { ok: true, grade }
+    });
+  } catch (error) {
+    return errorResponse(id, -32602, error instanceof Error ? error.message : String(error));
+  }
+}
+
+function getGradeTool(id, args = {}) {
+  const quizId = String(args.quizId || "").trim();
+  const sessionId = String(args.sessionId || "").trim();
+  const grade = grades.get(gradeStorageKey(quizId, sessionId)) || grades.get(gradeStorageKey(quizId, "latest")) || null;
+  return okResponse(id, {
+    structuredContent: { ok: Boolean(grade), grade },
+    content: [{ type: "text", text: grade ? "BetterQuizzes grade found." : "No BetterQuizzes grade recorded yet." }],
+    _meta: { ok: Boolean(grade), grade }
+  });
+}
+
+function getGradeForUrl(url) {
+  const prefix = "/api/grade/";
+  const rest = decodeURIComponent(url.pathname.slice(prefix.length));
+  const parts = rest.split("/").filter(Boolean);
+  const quizId = parts[0] || "";
+  const sessionId = parts[1] || url.searchParams.get("sessionId") || "";
+  const grade = grades.get(gradeStorageKey(quizId, sessionId)) || grades.get(gradeStorageKey(quizId, "latest")) || null;
+  return { ok: Boolean(grade), grade };
 }
 
 function inspectQuiz(id, quizId) {
@@ -377,6 +465,35 @@ function buildCompletionSummary(quiz, answers, displayPolicy = normalizeDisplayP
 
 function questionRequiresConfidence(question, displayPolicy) {
   if (!displayPolicy?.requireConfidence) return false;
+const GRADE_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    quizId: { type: "string", minLength: 1 },
+    sessionId: { type: "string" },
+    score: { anyOf: [{ type: "number" }, { type: "null" }] },
+    maxScore: { anyOf: [{ type: "number" }, { type: "null" }] },
+    percent: { anyOf: [{ type: "number" }, { type: "null" }] },
+    label: { type: "string" },
+    summary: { type: "string" },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          questionId: { type: "string" },
+          mark: { type: "string" },
+          points: { anyOf: [{ type: "number" }, { type: "null" }] },
+          maxPoints: { anyOf: [{ type: "number" }, { type: "null" }] },
+          feedback: { type: "string" }
+        },
+        additionalProperties: true
+      }
+    },
+    grade: { type: "object", additionalProperties: true }
+  },
+  required: ["quizId"],
+  additionalProperties: true
+};
   if (!question || typeof question !== "object") return Boolean(displayPolicy.requireConfidence);
   if (question.disableConfidence === true) return false;
   if (question.requireConfidence === false) return false;

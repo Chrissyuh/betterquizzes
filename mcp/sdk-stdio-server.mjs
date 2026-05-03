@@ -1,3 +1,34 @@
+const GRADE_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    quizId: { type: "string", minLength: 1 },
+    sessionId: { type: "string" },
+    score: { anyOf: [{ type: "number" }, { type: "null" }] },
+    maxScore: { anyOf: [{ type: "number" }, { type: "null" }] },
+    percent: { anyOf: [{ type: "number" }, { type: "null" }] },
+    label: { type: "string" },
+    summary: { type: "string" },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          questionId: { type: "string" },
+          mark: { type: "string" },
+          points: { anyOf: [{ type: "number" }, { type: "null" }] },
+          maxPoints: { anyOf: [{ type: "number" }, { type: "null" }] },
+          feedback: { type: "string" }
+        },
+        additionalProperties: true
+      }
+    },
+    grade: { type: "object", additionalProperties: true }
+  },
+  required: ["quizId"],
+  additionalProperties: true
+};
+const V20_GRADE_WRITEBACK_INSTRUCTIONS = "BetterQuizzes V20 grade writeback guidance:\n- After grading a submitted BetterQuizzes activity, call record_grade exactly once with quizId, sessionId, score/maxScore when numeric scoring is appropriate, label, summary, and per-question items when useful.\n- Then reply concisely in chat. Do not recreate the quiz and do not call submit_answers again.\n- For subjective, survey, fit, preference, reflection, or developer smoke-test activities, do not invent a numeric score. Use score:null, maxScore:null, label such as Feedback ready or Needs review, and a concise summary.\n- For objective quizzes, include numeric score and maxScore when possible so the widget can show a grade ring.\n- Use visible question text and answer labels in feedback. Do not expose raw ids, JSON, or HTML to the user.";
+
 const V18_SUBMIT_UX_INSTRUCTIONS = "BetterQuizzes V18 submission guidance:\n- After submit, ChatGPT should grade immediately from the compact submission packet. Do not wait, do not call tools, and do not recreate the quiz.\n- Keep the first grading reply short. Use Score, Needs review, and Targeted review.\n- If the activity is a developer smoke test, prioritize UX findings over a numeric grade.\n- For matching, ordering, text-select, and multi-part questions, explain using visible labels/text instead of raw ids.\n- Do not output placeholder null values.";
 
 const V17_USER_OBSERVATION_UX_INSTRUCTIONS = "BetterQuizzes V17 user-observation UX guidance:\n- While building an incremental quiz, show that generation is still in progress. Do not let the UI look frozen when more questions are expected.\n- Include answer keys for objective questions whenever possible so ChatGPT can state the correct answers word-for-word after submission.\n- Do not rely on the app review screen to explain complex answers. ChatGPT should mention the important questions, user answers, and correct answers in readable language.\n- For matching, ordering, text-select, and multi-part questions, explain answers using the visible labels/text, not raw ids or internal data.\n- Ordering questions should use clear top/bottom labels and should not start in the correct order.\n- Keep mobile prompts, subtitles, labels, and placeholders concise so the app does not feel cramped.";
@@ -42,6 +73,7 @@ function cleanOrigin(value) {
 }
 
 const quizzes = new Map();
+const grades = new Map();
 let lastQuizId = null;
 
 const server = new McpServer({

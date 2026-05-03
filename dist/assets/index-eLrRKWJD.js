@@ -11888,6 +11888,15 @@ async function fetchQuizFromServer(quizId) {
 	if (!record.quiz) throw new Error("Server response did not include a quiz.");
 	return record.quiz;
 }
+async function fetchGradeFromServer(quizId, sessionId) {
+	const base = getServerBase();
+	const path = "/api/grade/" + encodeURIComponent(quizId) + (sessionId ? "/" + encodeURIComponent(sessionId) : "");
+	const url = base ? base + path : path;
+	const response = await fetch(url, { headers: { accept: "application/json" } });
+	const body = await response.json().catch(() => ({}));
+	if (!response.ok) return null;
+	return body.grade ?? null;
+}
 function buildFinishedFromPersistedSubmission(quiz, launchId) {
 	const state = getPersistedSubmissionState(getQuizId(quiz), launchId);
 	if (!state?.submission) return null;
@@ -12455,6 +12464,11 @@ function SkipQuizScreen({ mode, widgetMode, title, answeredCount, totalCount, su
 						" questions had draft answers"
 					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Grading not requested" })]
 				}),
+				recordedGrade ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GradeSummaryCard, { grade: recordedGrade }) : widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "grade-waiting-card",
+					"aria-live": "polite",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "grade-waiting-dot" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: gradePollingDone ? "ChatGPT feedback will appear in chat." : "Waiting for ChatGPT grade…" })]
+				}) : null,
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "actions wrap",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
@@ -13749,6 +13763,40 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 	encodeCompactSubmission(submission);
 	buildLlmReturnPrompt(submission);
 	const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
+	const [recordedGrade, setRecordedGrade] = (0, import_react.useState)(null);
+	const [gradePollingDone, setGradePollingDone] = (0, import_react.useState)(false);
+	(0, import_react.useEffect)(() => {
+		if (!widgetMode) return;
+		let cancelled = false;
+		let attempts = 0;
+		const poll = async () => {
+			attempts += 1;
+			const grade = await fetchGradeFromServer(submission.quizId, submission.sessionId).catch(() => null);
+			if (cancelled) return;
+			if (grade) {
+				setRecordedGrade(grade);
+				setGradePollingDone(true);
+				return;
+			}
+			if (attempts >= 16) setGradePollingDone(true);
+		};
+		poll();
+		const interval = window.setInterval(() => {
+			if (cancelled || attempts >= 16) {
+				window.clearInterval(interval);
+				return;
+			}
+			poll();
+		}, 1500);
+		return () => {
+			cancelled = true;
+			window.clearInterval(interval);
+		};
+	}, [
+		widgetMode,
+		submission.quizId,
+		submission.sessionId
+	]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
 		className: "shell narrow result-shell",
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
@@ -13799,6 +13847,42 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 			]
 		})
 	});
+}
+function GradeSummaryCard({ grade }) {
+	const percent = getGradePercent(grade);
+	const hasNumeric = percent !== null;
+	const scoreText = grade.score !== null && grade.score !== void 0 && grade.maxScore !== null && grade.maxScore !== void 0 ? String(grade.score) + "/" + String(grade.maxScore) : hasNumeric ? String(percent) + "%" : "";
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: hasNumeric ? "grade-card grade-card-numeric" : "grade-card grade-card-qualitative",
+		"aria-live": "polite",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: hasNumeric ? "grade-ring" : "grade-ring qualitative",
+			style: hasNumeric ? { "--grade-percent": String(percent) } : void 0,
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: hasNumeric ? String(percent) + "%" : "✓" })
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "eyebrow",
+				children: "Grade ready"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: grade.label || (hasNumeric ? "Graded" : "Feedback ready") }),
+			scoreText ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "grade-score-text",
+				children: scoreText
+			}) : null,
+			grade.summary ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "muted",
+				children: grade.summary
+			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "muted",
+				children: "ChatGPT recorded feedback for this submission."
+			})
+		] })]
+	});
+}
+function getGradePercent(grade) {
+	if (typeof grade.percent === "number" && Number.isFinite(grade.percent)) return Math.max(0, Math.min(100, Math.round(grade.percent)));
+	if (typeof grade.score === "number" && typeof grade.maxScore === "number" && Number.isFinite(grade.score) && Number.isFinite(grade.maxScore) && grade.maxScore > 0) return Math.max(0, Math.min(100, Math.round(grade.score / grade.maxScore * 100)));
+	return null;
 }
 function getFinishedGradeStatus(finished, widgetMode) {
 	if (finished.followUpStatus) return finished.followUpStatus;
