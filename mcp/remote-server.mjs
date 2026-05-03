@@ -14,9 +14,7 @@ const V2_BUILDER_INSTRUCTIONS = [
 ].join("\n");
 
 const START_QUIZ_INPUT_SCHEMA = {
-  if (bqV36ServeEarlyLegalRoute(req, res)) return;
-
-  type: "object",
+type: "object",
   additionalProperties: false,
   properties: {
     title: { type: "string", description: "Quiz title shown to the user." },
@@ -525,41 +523,78 @@ function listedWidgetResources() {
   }));
 }
 
-// BEGIN BETTERQUIZZES V36 EARLY LEGAL ROUTES
-const BQ_V36_PRIVACY_HTML = "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>Privacy | BetterQuizzes</title>\n  <link rel=\"icon\" href=\"/favicon.png\" />\n  <style>\n    :root { color: #111827; background: #f6f4ef; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }\n    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 10% 0%, #dbeafe 0, transparent 32%), linear-gradient(135deg, #fbfaf7, #eef4ff); }\n    main { width: min(900px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0; }\n    section { background: rgba(255,255,255,.92); border: 1px solid #d8dee8; border-radius: 28px; padding: clamp(24px, 5vw, 44px); box-shadow: 0 24px 70px rgba(17,24,39,.10); }\n    img { width: 64px; height: 64px; border-radius: 18px; }\n    h1 { font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -.05em; margin: 16px 0; }\n    h2 { margin-top: 28px; }\n    p, li { color: #4b5563; line-height: 1.65; }\n    a { color: #2947d3; font-weight: 800; }\n  </style>\n</head>\n<body>\n  <main>\n    <section>\n      <img src=\"/brand/betterquizzes-logo-light.png\" alt=\"BetterQuizzes logo\" />\n      <h1>Privacy Policy</h1>\n      <p>BetterQuizzes helps people take interactive quizzes generated through ChatGPT. This page explains the data the app handles.</p>\n\n      <h2>What the app handles</h2>\n      <ul>\n        <li>Quiz content, including questions, answer choices, and answer keys provided by ChatGPT.</li>\n        <li>Your quiz responses, confidence ratings, draft progress, and submission status.</li>\n        <li>Grade writeback data when ChatGPT records a score or feedback for a submitted quiz.</li>\n        <li>Basic technical data needed to load the widget, recover drafts, and display results.</li>\n      </ul>\n\n      <h2>How data is used</h2>\n      <p>Data is used to render the quiz, save progress, submit answers, request grading, and show grade feedback. BetterQuizzes does not sell personal data.</p>\n\n      <h2>Storage</h2>\n      <p>Drafts and submissions may be stored temporarily in the browser or server memory so the widget can recover from refreshes and show grades. Hosted server memory may reset during redeploys or restarts.</p>\n\n      <h2>Third parties</h2>\n      <p>BetterQuizzes is designed for use inside ChatGPT. Your use of ChatGPT is also governed by OpenAI’s terms and privacy policy.</p>\n\n      <h2>Contact</h2>\n      <p>For privacy questions, contact the BetterQuizzes developer through the project’s support channel or GitHub repository.</p>\n\n      <p><a href=\"/\">Back to BetterQuizzes</a> · <a href=\"/terms\">Terms</a></p>\n    </section>\n  </main>\n</body>\n</html>\n";
-const BQ_V36_TERMS_HTML = "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>Terms | BetterQuizzes</title>\n  <link rel=\"icon\" href=\"/favicon.png\" />\n  <style>\n    :root { color: #111827; background: #f6f4ef; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; }\n    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 90% 0%, #ccfbf1 0, transparent 30%), linear-gradient(135deg, #fbfaf7, #eef4ff); }\n    main { width: min(900px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0; }\n    section { background: rgba(255,255,255,.92); border: 1px solid #d8dee8; border-radius: 28px; padding: clamp(24px, 5vw, 44px); box-shadow: 0 24px 70px rgba(17,24,39,.10); }\n    img { width: 64px; height: 64px; border-radius: 18px; }\n    h1 { font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1; letter-spacing: -.05em; margin: 16px 0; }\n    h2 { margin-top: 28px; }\n    p, li { color: #4b5563; line-height: 1.65; }\n    a { color: #2947d3; font-weight: 800; }\n  </style>\n</head>\n<body>\n  <main>\n    <section>\n      <img src=\"/brand/betterquizzes-logo-light.png\" alt=\"BetterQuizzes logo\" />\n      <h1>Terms of Use</h1>\n      <p>By using BetterQuizzes, you agree to use it as an educational quiz tool and to review generated content for accuracy before relying on it.</p>\n\n      <h2>Educational use</h2>\n      <p>BetterQuizzes provides interactive practice and answer collection. It is not a replacement for a teacher, official curriculum, or professional advice.</p>\n\n      <h2>User responsibility</h2>\n      <ul>\n        <li>Review quizzes before assigning or relying on them.</li>\n        <li>Do not submit sensitive personal information unless it is necessary for the quiz.</li>\n        <li>Use the app lawfully and respectfully.</li>\n      </ul>\n\n      <h2>Generated content</h2>\n      <p>Questions, answer keys, and feedback may be generated by ChatGPT and can contain mistakes. Check important content before using it for grades or instruction.</p>\n\n      <h2>Availability</h2>\n      <p>The hosted service may change, restart, or be unavailable during maintenance, testing, or deployment.</p>\n\n      <h2>Contact</h2>\n      <p>For questions about these terms, contact the BetterQuizzes developer through the project’s support channel or GitHub repository.</p>\n\n      <p><a href=\"/\">Back to BetterQuizzes</a> · <a href=\"/privacy\">Privacy</a></p>\n    </section>\n  </main>\n</body>\n</html>\n";
 
-function bqV36CleanPathname(value) {
+const PORT = Number(process.env.PORT || 8787);
+const HOST = process.env.HOST || (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
+const DIST_DIR = join(process.cwd(), "dist");
+
+
+// BEGIN BETTERQUIZZES V37 LEGAL ROUTES
+const BQ_V37_FALLBACK_PRIVACY_HTML = "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>Privacy | BetterQuizzes</title>\n</head>\n<body>\n  <main>\n    <h1>Privacy Policy</h1>\n    <p>BetterQuizzes handles quiz content, answers, confidence ratings, draft progress, submissions, and grade writeback data so the quiz app can work.</p>\n    <p>BetterQuizzes does not sell personal data.</p>\n    <p><a href=\"/\">Back to BetterQuizzes</a> · <a href=\"/terms\">Terms</a></p>\n  </main>\n</body>\n</html>\n";
+const BQ_V37_FALLBACK_TERMS_HTML = "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>Terms | BetterQuizzes</title>\n</head>\n<body>\n  <main>\n    <h1>Terms of Use</h1>\n    <p>BetterQuizzes is an educational quiz tool. Review generated content for accuracy before relying on it.</p>\n    <p><a href=\"/\">Back to BetterQuizzes</a> · <a href=\"/privacy\">Privacy</a></p>\n  </main>\n</body>\n</html>\n";
+
+function bqV37CleanPathname(value) {
   const clean = String(value || "/").split("?")[0].split("#")[0].replace(/\/+$/, "");
   return clean || "/";
 }
 
-function bqV36LegalHtmlForPath(pathname) {
-  const route = bqV36CleanPathname(pathname);
+function bqV37RequestPathname(req) {
+  try {
+    const origin = "https://" + String(req?.headers?.host || "betterquizzes.local");
+    return new URL(req?.url || "/", origin).pathname;
+  } catch {
+    return String(req?.url || "/").split("?")[0];
+  }
+}
 
-  if (route === "/privacy" || route === "/privacy.html") return BQ_V36_PRIVACY_HTML;
-  if (route === "/terms" || route === "/terms.html") return BQ_V36_TERMS_HTML;
+function bqV37LegalRouteInfo(pathname) {
+  const route = bqV37CleanPathname(pathname);
+
+  if (route === "/privacy" || route === "/privacy.html") {
+    return {
+      files: [
+        join(DIST_DIR, "privacy/index.html"),
+        join(DIST_DIR, "privacy.html"),
+        join(process.cwd(), "public", "privacy", "index.html"),
+        join(process.cwd(), "public", "privacy.html")
+      ],
+      fallback: BQ_V37_FALLBACK_PRIVACY_HTML
+    };
+  }
+
+  if (route === "/terms" || route === "/terms.html") {
+    return {
+      files: [
+        join(DIST_DIR, "terms/index.html"),
+        join(DIST_DIR, "terms.html"),
+        join(process.cwd(), "public", "terms", "index.html"),
+        join(process.cwd(), "public", "terms.html")
+      ],
+      fallback: BQ_V37_FALLBACK_TERMS_HTML
+    };
+  }
 
   return null;
 }
 
-function bqV36ServeEarlyLegalRoute(req, res) {
+function bqV37ReadLegalHtml(info) {
+  for (const file of info.files) {
+    if (existsSync(file)) return readFileSync(file, "utf8");
+  }
+
+  return info.fallback;
+}
+
+function bqV37ServeLegalRoute(req, res) {
   const method = String(req?.method || "GET").toUpperCase();
 
   if (method !== "GET" && method !== "HEAD") return false;
 
-  let pathname = "/";
+  const info = bqV37LegalRouteInfo(bqV37RequestPathname(req));
 
-  try {
-    const origin = "https://" + String(req?.headers?.host || "betterquizzes.local");
-    pathname = new URL(req?.url || "/", origin).pathname;
-  } catch {
-    pathname = String(req?.url || "/").split("?")[0];
-  }
+  if (!info) return false;
 
-  const html = bqV36LegalHtmlForPath(pathname);
-
-  if (!html) return false;
+  const html = bqV37ReadLegalHtml(info);
 
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
@@ -578,11 +613,8 @@ function bqV36ServeEarlyLegalRoute(req, res) {
 
   return true;
 }
-// END BETTERQUIZZES V36 EARLY LEGAL ROUTES
+// END BETTERQUIZZES V37 LEGAL ROUTES
 
-const PORT = Number(process.env.PORT || 8787);
-const HOST = process.env.HOST || (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
-const DIST_DIR = join(process.cwd(), "dist");
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
 2. To start an activity, call create_quiz exactly once with {"quiz": BetterQuizzesQuizSpecV2}. Do not call create_quiz with raw questions only.
@@ -717,7 +749,9 @@ if (submitAnswersAlias && !tools.some((tool) => tool.name === "record_submission
 }
 
 const server = createServer(async (request, response) => {
-  try {
+  
+  if (bqV37ServeLegalRoute(request, response)) return;
+try {
     setBaseHeaders(response);
 
     if (request.method === "OPTIONS") {
