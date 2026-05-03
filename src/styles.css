@@ -2324,3 +2324,96 @@ body {
 .bq-chatgpt-host .footer-button {
   display: none !important;
 }
+
+
+/* V41 question nav overflow containment
+   The question-number rail may scroll horizontally, but it must never resize
+   the ChatGPT widget, page, iframe, or app shell. */
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden !important;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+main,
+.app,
+.app-shell,
+.quiz-shell,
+.quiz-screen,
+.widget-shell,
+.widget-frame,
+.bq-widget,
+.bq-app,
+.card,
+.hero,
+.nav-card,
+.question-card {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.nav-card {
+  overflow: hidden !important;
+}
+
+.question-dots {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  gap: .55rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: .6rem .65rem .75rem !important;
+  margin: -.25rem 0 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  scroll-padding-inline: .65rem;
+}
+
+.question-dots .dot,
+.dot {
+  flex: 0 0 auto !important;
+}
+
+.question-dots::-webkit-scrollbar {
+  height: 7px;
+}
+
+.question-dots::-webkit-scrollbar-track {
+  background: rgba(226, 232, 240, .7);
+  border-radius: 999px;
+}
+
+.question-dots::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, .45);
+  border-radius: 999px;
+}
+
+.question-dots::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, .6);
+}
+
+.dot.active::after {
+  inset: -5px;
+}
+
+@media (max-width: 720px) {
+  .question-dots {
+    gap: .45rem;
+    padding: .65rem .6rem .8rem !important;
+  }
+
+  .dot {
+    min-width: 44px;
+  }
+}
+/* END V41 question nav overflow containment */
