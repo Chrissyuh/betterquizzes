@@ -2230,3 +2230,48 @@ body {
   text-decoration: none;
   transform: translateY(-1px);
 }
+
+
+/* V38 visible homepage legal links */
+.home-legal-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: .55rem;
+  margin: 1.5rem auto 0;
+  padding-bottom: .5rem;
+}
+
+.home-legal-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: .45rem .78rem;
+  border-radius: 999px;
+  border: 1px solid rgba(36, 71, 242, .18);
+  background: rgba(255, 255, 255, .76);
+  color: #2447f2;
+  text-decoration: none;
+  font-size: .82rem;
+  font-weight: 900;
+  box-shadow: 0 8px 20px rgba(16, 24, 40, .06);
+}
+
+.home-legal-links a:hover {
+  border-color: rgba(36, 71, 242, .36);
+  background: #ffffff;
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 520px) {
+  .home-legal-links {
+    margin-top: 1rem;
+  }
+
+  .home-legal-links a {
+    flex: 1;
+    max-width: 140px;
+  }
+}

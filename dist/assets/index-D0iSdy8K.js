@@ -12017,6 +12017,19 @@ function quizFingerprint(quiz) {
 		prompts: quiz.questions.map((question) => question.prompt)
 	});
 }
+function BetterQuizzesHomeLegalLinks() {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", {
+		className: "home-legal-links",
+		"aria-label": "Legal links",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+			href: "/privacy",
+			children: "Privacy"
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+			href: "/terms",
+			children: "Terms"
+		})]
+	});
+}
 function ImportScreen({ error, onLoadQuiz }) {
 	const [text, setText] = (0, import_react.useState)("");
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
@@ -12079,7 +12092,8 @@ function ImportScreen({ error, onLoadQuiz }) {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("small", { children: [sample.questions.length, " questions"] })
 					]
 				}, sample.quizId ?? sample.title))
-			})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(BetterQuizzesHomeLegalLinks, {})
 		]
 	});
 }

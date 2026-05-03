@@ -471,6 +471,16 @@ function quizFingerprint(quiz: QuizSpec): string {
 }
 
 
+
+function BetterQuizzesHomeLegalLinks() {
+  return (
+    <nav className="home-legal-links" aria-label="Legal links">
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+    </nav>
+  );
+}
+
 function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz: (quiz: QuizSpec) => void }): ReactElement {
   const [text, setText] = useState("");
 
@@ -527,7 +537,9 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
       </section>
 
       
-    </main>
+    
+      <BetterQuizzesHomeLegalLinks />
+</main>
   );
 }
 
