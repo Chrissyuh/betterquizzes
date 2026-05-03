@@ -1052,36 +1052,6 @@ function getOrderingItems(question: OrderingLike): { id: string; text: string }[
     .filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
 }
 
-
-function bqV23OrderingKey(item) {
-  if (item && typeof item === "object") {
-    return String(item.id ?? item.value ?? item.label ?? item.text ?? JSON.stringify(item));
-  }
-
-  return String(item);
-}
-
-function bqV23SameOrdering(left, right) {
-  if (!Array.isArray(left) || !Array.isArray(right)) return false;
-  if (left.length !== right.length || left.length < 2) return false;
-  return left.every((item, index) => bqV23OrderingKey(item) === bqV23OrderingKey(right[index]));
-}
-
-function bqV23AvoidAlreadyCorrectOrdering(question, items, initialOrder) {
-  const answerOrder =
-    question?.answer ??
-    question?.correctAnswer ??
-    question?.correctOrder ??
-    question?.answerKey ??
-    question?.order ??
-    items;
-
-  if (!Array.isArray(initialOrder) || initialOrder.length < 2) return initialOrder;
-  if (!bqV23SameOrdering(initialOrder, answerOrder)) return initialOrder;
-
-  return [...initialOrder.slice(1), initialOrder[0]];
-}
-
 function getInitialOrderingOrder(question: OrderingLike, items = getOrderingItems(question)): string[] {
   const itemIds = items.map((item) => item.id);
   const answer = Array.isArray((question as OrderingLike & { answer?: unknown }).answer)

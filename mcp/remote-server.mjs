@@ -3,6 +3,496 @@ import { createServer } from "node:http";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 
+// BEGIN BETTERQUIZZES V23 BUILDER REPAIR
+const V2_BUILDER_INSTRUCTIONS = [
+  "Use start_quiz, add_question, repair_question, and finalize_quiz for incremental BetterQuizzes quiz building.",
+  "Keep the public product name BetterQuizzes.",
+  "Keep the internal compatibility schema exactly betterquizzer.quiz version 2.",
+  "Required questions should be rare; practice quizzes should not make every question required by default.",
+  "Disable confidence for subjective, preference, survey, reflection, and developer smoke-test questions.",
+  "Use repair_question when a question is missing required fields or needs replacement."
+].join("\n");
+
+const START_QUIZ_INPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    title: { type: "string", description: "Quiz title shown to the user." },
+    description: { type: "string", description: "Optional short quiz description." },
+    topic: { type: "string", description: "Topic, standard, or learning objective." },
+    expectedQuestionCount: { type: "integer", minimum: 1 },
+    instructions: { type: "string", description: "Authoring constraints or user preferences." },
+    metadata: { type: "object", additionalProperties: true }
+  },
+  required: ["title"]
+};
+
+const ADD_QUESTION_INPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: true,
+  properties: {
+    draftId: { type: "string", description: "Draft id returned by start_quiz." },
+    question: { type: "object", additionalProperties: true, description: "One BetterQuizzes v2 question object." },
+    repairedQuestion: { type: "object", additionalProperties: true, description: "Replacement question for repair_question." },
+    replace: { type: "boolean", description: "Replace an existing question instead of appending." },
+    repair: { type: "boolean", description: "Whether this call is repairing a rejected question." },
+    replaceQuestionId: { type: "string" },
+    replaceIndex: { type: "integer", minimum: 0 },
+    reason: { type: "string" }
+  }
+};
+
+const FINALIZE_QUIZ_INPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: true,
+  properties: {
+    draftId: { type: "string", description: "Draft id returned by start_quiz." },
+    quiz: { type: "object", additionalProperties: true, description: "Optional complete quiz object." },
+    questions: {
+      type: "array",
+      items: { type: "object", additionalProperties: true },
+      description: "Optional explicit question list."
+    },
+    title: { type: "string" },
+    description: { type: "string" },
+    metadata: { type: "object", additionalProperties: true }
+  }
+};
+
+const V23_BUILDER_TOOL_DEFS = [
+  {
+    name: "start_quiz",
+    description: "Start an incremental BetterQuizzes draft. " + V2_BUILDER_INSTRUCTIONS,
+    inputSchema: START_QUIZ_INPUT_SCHEMA
+  },
+  {
+    name: "add_question",
+    description: "Add one validated question to an incremental BetterQuizzes draft.",
+    inputSchema: ADD_QUESTION_INPUT_SCHEMA
+  },
+  {
+    name: "repair_question",
+    description: "Replace or repair one invalid or incomplete question in an incremental BetterQuizzes draft.",
+    inputSchema: ADD_QUESTION_INPUT_SCHEMA
+  },
+  {
+    name: "finalize_quiz",
+    description: "Finalize an incremental BetterQuizzes draft into a betterquizzer.quiz v2 quiz object.",
+    inputSchema: FINALIZE_QUIZ_INPUT_SCHEMA
+  }
+];
+
+const V23_BUILDER_TOOL_NAMES = new Set([
+  "start_quiz",
+  "add_question",
+  "repair_question",
+  "finalize_quiz"
+]);
+
+const v23QuizDrafts = globalThis.__betterQuizzesV23Drafts ?? new Map();
+globalThis.__betterQuizzesV23Drafts = v23QuizDrafts;
+
+function v23Id(prefix) {
+  return prefix + "_" + Math.random().toString(36).slice(2, 10) + "_" + Date.now().toString(36);
+}
+
+function v23TextResponse(payload) {
+  const text = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+
+  return {
+    content: [
+      {
+        type: "text",
+        text
+      }
+    ],
+    structuredContent:
+      payload && typeof payload === "object"
+        ? payload
+        : {
+            ok: true,
+            message: text
+          }
+  };
+}
+
+function v23QuestionPrompt(question) {
+  return String(
+    question?.prompt ??
+      question?.question ??
+      question?.text ??
+      question?.title ??
+      ""
+  ).trim();
+}
+
+function v23QuestionType(question) {
+  return String(question?.type ?? question?.kind ?? question?.questionType ?? "").trim();
+}
+
+function v23IsSubjectiveQuestion(question) {
+  const joined = [
+    question?.type,
+    question?.kind,
+    question?.category,
+    question?.mode,
+    question?.intent,
+    question?.prompt,
+    question?.question,
+    question?.text
+  ]
+    .map((value) => String(value ?? "").toLowerCase())
+    .join(" ");
+
+  return [
+    "subjective",
+    "preference",
+    "survey",
+    "reflection",
+    "developer smoke-test",
+    "developer_smoke_test",
+    "smoke-test",
+    "smoke_test"
+  ].some((needle) => joined.includes(needle));
+}
+
+function v23NormalizeChoices(value) {
+  if (!Array.isArray(value)) return value;
+
+  return value.map((choice, index) => {
+    if (choice && typeof choice === "object") {
+      return {
+        id: choice.id ?? choice.value ?? choice.key ?? "choice_" + (index + 1),
+        label: choice.label ?? choice.text ?? choice.value ?? String(choice.id ?? index + 1),
+        ...choice
+      };
+    }
+
+    return {
+      id: "choice_" + (index + 1),
+      label: String(choice),
+      value: choice
+    };
+  });
+}
+
+function v23SameOrder(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length || left.length < 2) return false;
+
+  return left.every((item, index) => {
+    const a = typeof item === "object" && item !== null ? item.id ?? item.value ?? item.label ?? item.text : item;
+    const b =
+      typeof right[index] === "object" && right[index] !== null
+        ? right[index].id ?? right[index].value ?? right[index].label ?? right[index].text
+        : right[index];
+
+    return String(a) === String(b);
+  });
+}
+
+function v23RotateIfAlreadyCorrect(items, answerOrder) {
+  if (!Array.isArray(items) || items.length < 2) return items;
+  if (!v23SameOrder(items, answerOrder)) return items;
+
+  return [...items.slice(1), items[0]];
+}
+
+function v23NormalizeQuestion(rawQuestion, index = 0) {
+  const question = { ...(rawQuestion ?? {}) };
+
+  if (!question.id) question.id = "q" + (index + 1);
+  if (!question.prompt && question.question) question.prompt = question.question;
+  if (!question.type && question.kind) question.type = question.kind;
+
+  const type = String(question.type ?? "").toLowerCase();
+
+  if (Array.isArray(question.options) && !Array.isArray(question.choices)) {
+    question.choices = question.options;
+  }
+
+  if (Array.isArray(question.choices)) {
+    question.choices = v23NormalizeChoices(question.choices);
+  }
+
+  if (type.includes("single") || type.includes("radio") || type === "multiple_choice") {
+    question.choiceStyle = question.choiceStyle ?? "radio";
+  }
+
+  if (type.includes("multi") || type.includes("checkbox")) {
+    question.choiceStyle = question.choiceStyle ?? "checkbox";
+    question.otherBehavior = {
+      ...(question.otherBehavior ?? {}),
+      preserveOtherSelections: true
+    };
+  }
+
+  if (type.includes("matching")) {
+    const pairs = question.pairs ?? question.matches ?? question.items;
+
+    if (Array.isArray(pairs) && pairs.length > 1 && !question.shuffleAnswers) {
+      question.shuffleAnswers = true;
+    }
+  }
+
+  if (type.includes("ordering") || type.includes("drag")) {
+    const answerOrder =
+      question.answer ??
+      question.correctAnswer ??
+      question.correctOrder ??
+      question.answerKey ??
+      question.items;
+
+    if (Array.isArray(question.items)) {
+      question.items = v23RotateIfAlreadyCorrect(question.items, answerOrder);
+    } else if (Array.isArray(question.choices)) {
+      question.choices = v23RotateIfAlreadyCorrect(question.choices, answerOrder);
+    }
+  }
+
+  if (v23IsSubjectiveQuestion(question)) {
+    question.disableConfidence = true;
+    question.requireConfidence = false;
+    question.confidenceRequired = false;
+    question.confidence = "disabled";
+  } else {
+    if (question.required === undefined) question.required = false;
+
+    if (question.requireConfidence === undefined && question.confidenceRequired === undefined) {
+      question.requireConfidence = false;
+    }
+  }
+
+  return question;
+}
+
+function v23ValidateQuestion(question) {
+  const issues = [];
+  const type = v23QuestionType(question).toLowerCase();
+  const prompt = v23QuestionPrompt(question);
+
+  if (!question || typeof question !== "object") {
+    return ["Question must be an object."];
+  }
+
+  if (!prompt) issues.push("Question needs a prompt/question text.");
+  if (!type) issues.push("Question needs a type.");
+
+  const choices = question.choices ?? question.options;
+
+  if (
+    type.includes("single") ||
+    type.includes("multi") ||
+    type.includes("choice") ||
+    type.includes("select")
+  ) {
+    if (!Array.isArray(choices) || choices.length < 2) {
+      issues.push("Choice/select questions need at least two choices.");
+    }
+  }
+
+  if (type.includes("matching")) {
+    const pairs = question.pairs ?? question.matches ?? question.items;
+
+    if (!Array.isArray(pairs) || pairs.length < 2) {
+      issues.push("Matching questions need at least two pairs/items.");
+    }
+  }
+
+  if (type.includes("ordering") || type.includes("drag")) {
+    const items = question.items ?? question.choices ?? question.options;
+
+    if (!Array.isArray(items) || items.length < 2) {
+      issues.push("Ordering questions need at least two items.");
+    }
+  }
+
+  return issues;
+}
+
+function v23RepairRequest(question, issues, context = {}) {
+  return v23TextResponse({
+    ok: false,
+    needsRepair: true,
+    tool: "repair_question",
+    issues,
+    repairRequest: {
+      instruction:
+        "Repair this one question and call repair_question with repairedQuestion plus replace:true. Keep BetterQuizzes v2 compatibility.",
+      context,
+      question
+    }
+  });
+}
+
+function startQuiz(input = {}) {
+  const draftId = input.draftId || v23Id("draft");
+
+  const draft = {
+    draftId,
+    schema: "betterquizzer.quiz",
+    version: 2,
+    title: String(input.title ?? "Untitled BetterQuizzes quiz"),
+    description: input.description ?? "",
+    topic: input.topic ?? "",
+    expectedQuestionCount: input.expectedQuestionCount ?? undefined,
+    instructions: input.instructions ?? "",
+    metadata: input.metadata ?? {},
+    questions: [],
+    createdAt: new Date().toISOString()
+  };
+
+  v23QuizDrafts.set(draftId, draft);
+
+  return v23TextResponse({
+    ok: true,
+    draftId,
+    draft,
+    instructions: V2_BUILDER_INSTRUCTIONS,
+    next: "Call add_question once per question. Use repair_question only when replacing a bad question."
+  });
+}
+
+function addQuestion(input = {}) {
+  const draftId = input.draftId || input.quizId || "default";
+
+  const existingDraft =
+    v23QuizDrafts.get(draftId) ??
+    {
+      draftId,
+      schema: "betterquizzer.quiz",
+      version: 2,
+      title: input.title ?? "Untitled BetterQuizzes quiz",
+      description: input.description ?? "",
+      metadata: {},
+      questions: [],
+      createdAt: new Date().toISOString()
+    };
+
+  const rawQuestion = input.repairedQuestion ?? input.question;
+  const question = v23NormalizeQuestion(rawQuestion, existingDraft.questions.length);
+  const issues = v23ValidateQuestion(question);
+
+  if (issues.length) {
+    return v23RepairRequest(question, issues, {
+      draftId,
+      replace: Boolean(input.replace),
+      repair: Boolean(input.repair),
+      replaceQuestionId: input.replaceQuestionId,
+      replaceIndex: input.replaceIndex
+    });
+  }
+
+  const shouldReplace = Boolean(input.replace || input.repair || input.repairedQuestion);
+
+  if (shouldReplace) {
+    let replaceIndex = Number.isInteger(input.replaceIndex) ? input.replaceIndex : -1;
+
+    if (replaceIndex < 0 && input.replaceQuestionId) {
+      replaceIndex = existingDraft.questions.findIndex((candidate) => candidate?.id === input.replaceQuestionId);
+    }
+
+    if (replaceIndex >= 0 && replaceIndex < existingDraft.questions.length) {
+      existingDraft.questions[replaceIndex] = question;
+    } else {
+      existingDraft.questions.push(question);
+    }
+  } else {
+    existingDraft.questions.push(question);
+  }
+
+  existingDraft.updatedAt = new Date().toISOString();
+  v23QuizDrafts.set(draftId, existingDraft);
+
+  return v23TextResponse({
+    ok: true,
+    draftId,
+    question,
+    questionCount: existingDraft.questions.length,
+    draft: existingDraft,
+    next: "Continue with add_question, repair_question, or finalize_quiz."
+  });
+}
+
+function finalizeQuiz(input = {}) {
+  const draftId = input.draftId || input.quizId || "default";
+  const draft = v23QuizDrafts.get(draftId);
+
+  const rawQuestions =
+    input.questions ??
+    input.quiz?.questions ??
+    draft?.questions ??
+    [];
+
+  const questions = Array.isArray(rawQuestions)
+    ? rawQuestions.map((question, index) => v23NormalizeQuestion(question, index))
+    : [];
+
+  const invalid = questions
+    .map((question, index) => ({
+      index,
+      id: question?.id,
+      issues: v23ValidateQuestion(question)
+    }))
+    .filter((entry) => entry.issues.length);
+
+  if (invalid.length) {
+    return v23TextResponse({
+      ok: false,
+      needsRepair: true,
+      tool: "repair_question",
+      invalid,
+      repairRequest: {
+        instruction:
+          "Repair the invalid questions one at a time using repair_question, then call finalize_quiz again."
+      }
+    });
+  }
+
+  const quiz = {
+    schema: "betterquizzer.quiz",
+    version: 2,
+    title: input.title ?? input.quiz?.title ?? draft?.title ?? "Untitled BetterQuizzes quiz",
+    description: input.description ?? input.quiz?.description ?? draft?.description ?? "",
+    metadata: {
+      ...(draft?.metadata ?? {}),
+      ...(input.quiz?.metadata ?? {}),
+      ...(input.metadata ?? {})
+    },
+    questions
+  };
+
+  v23QuizDrafts.set(draftId, {
+    ...(draft ?? {}),
+    ...quiz,
+    draftId,
+    finalizedAt: new Date().toISOString()
+  });
+
+  return v23TextResponse({
+    ok: true,
+    draftId,
+    quiz,
+    questionCount: questions.length
+  });
+}
+
+function handleV23BuilderTool(name, input = {}) {
+  if (name === "start_quiz") return startQuiz(input);
+  if (name === "add_question") return addQuestion(input);
+  if (name === "repair_question") {
+    return addQuestion({
+      ...input,
+      replace: input.replace ?? true,
+      repair: true
+    });
+  }
+  if (name === "finalize_quiz") return finalizeQuiz(input);
+
+  return undefined;
+}
+// END BETTERQUIZZES V23 BUILDER REPAIR
+
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];

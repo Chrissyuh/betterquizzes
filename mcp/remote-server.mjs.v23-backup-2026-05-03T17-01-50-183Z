@@ -1,496 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-
-// BEGIN BETTERQUIZZES V23 BUILDER REPAIR
-const V2_BUILDER_INSTRUCTIONS = [
-  "Use start_quiz, add_question, repair_question, and finalize_quiz for incremental BetterQuizzes quiz building.",
-  "Keep the public product name BetterQuizzes.",
-  "Keep the internal compatibility schema exactly betterquizzer.quiz version 2.",
-  "Required questions should be rare; practice quizzes should not make every question required by default.",
-  "Disable confidence for subjective, preference, survey, reflection, and developer smoke-test questions.",
-  "Use repair_question when a question is missing required fields or needs replacement."
-].join("\n");
-
-const START_QUIZ_INPUT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    title: { type: "string", description: "Quiz title shown to the user." },
-    description: { type: "string", description: "Optional short quiz description." },
-    topic: { type: "string", description: "Topic, standard, or learning objective." },
-    expectedQuestionCount: { type: "integer", minimum: 1 },
-    instructions: { type: "string", description: "Authoring constraints or user preferences." },
-    metadata: { type: "object", additionalProperties: true }
-  },
-  required: ["title"]
-};
-
-const ADD_QUESTION_INPUT_SCHEMA = {
-  type: "object",
-  additionalProperties: true,
-  properties: {
-    draftId: { type: "string", description: "Draft id returned by start_quiz." },
-    question: { type: "object", additionalProperties: true, description: "One BetterQuizzes v2 question object." },
-    repairedQuestion: { type: "object", additionalProperties: true, description: "Replacement question for repair_question." },
-    replace: { type: "boolean", description: "Replace an existing question instead of appending." },
-    repair: { type: "boolean", description: "Whether this call is repairing a rejected question." },
-    replaceQuestionId: { type: "string" },
-    replaceIndex: { type: "integer", minimum: 0 },
-    reason: { type: "string" }
-  }
-};
-
-const FINALIZE_QUIZ_INPUT_SCHEMA = {
-  type: "object",
-  additionalProperties: true,
-  properties: {
-    draftId: { type: "string", description: "Draft id returned by start_quiz." },
-    quiz: { type: "object", additionalProperties: true, description: "Optional complete quiz object." },
-    questions: {
-      type: "array",
-      items: { type: "object", additionalProperties: true },
-      description: "Optional explicit question list."
-    },
-    title: { type: "string" },
-    description: { type: "string" },
-    metadata: { type: "object", additionalProperties: true }
-  }
-};
-
-const V23_BUILDER_TOOL_DEFS = [
-  {
-    name: "start_quiz",
-    description: "Start an incremental BetterQuizzes draft. " + V2_BUILDER_INSTRUCTIONS,
-    inputSchema: START_QUIZ_INPUT_SCHEMA
-  },
-  {
-    name: "add_question",
-    description: "Add one validated question to an incremental BetterQuizzes draft.",
-    inputSchema: ADD_QUESTION_INPUT_SCHEMA
-  },
-  {
-    name: "repair_question",
-    description: "Replace or repair one invalid or incomplete question in an incremental BetterQuizzes draft.",
-    inputSchema: ADD_QUESTION_INPUT_SCHEMA
-  },
-  {
-    name: "finalize_quiz",
-    description: "Finalize an incremental BetterQuizzes draft into a betterquizzer.quiz v2 quiz object.",
-    inputSchema: FINALIZE_QUIZ_INPUT_SCHEMA
-  }
-];
-
-const V23_BUILDER_TOOL_NAMES = new Set([
-  "start_quiz",
-  "add_question",
-  "repair_question",
-  "finalize_quiz"
-]);
-
-const v23QuizDrafts = globalThis.__betterQuizzesV23Drafts ?? new Map();
-globalThis.__betterQuizzesV23Drafts = v23QuizDrafts;
-
-function v23Id(prefix) {
-  return prefix + "_" + Math.random().toString(36).slice(2, 10) + "_" + Date.now().toString(36);
-}
-
-function v23TextResponse(payload) {
-  const text = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
-
-  return {
-    content: [
-      {
-        type: "text",
-        text
-      }
-    ],
-    structuredContent:
-      payload && typeof payload === "object"
-        ? payload
-        : {
-            ok: true,
-            message: text
-          }
-  };
-}
-
-function v23QuestionPrompt(question) {
-  return String(
-    question?.prompt ??
-      question?.question ??
-      question?.text ??
-      question?.title ??
-      ""
-  ).trim();
-}
-
-function v23QuestionType(question) {
-  return String(question?.type ?? question?.kind ?? question?.questionType ?? "").trim();
-}
-
-function v23IsSubjectiveQuestion(question) {
-  const joined = [
-    question?.type,
-    question?.kind,
-    question?.category,
-    question?.mode,
-    question?.intent,
-    question?.prompt,
-    question?.question,
-    question?.text
-  ]
-    .map((value) => String(value ?? "").toLowerCase())
-    .join(" ");
-
-  return [
-    "subjective",
-    "preference",
-    "survey",
-    "reflection",
-    "developer smoke-test",
-    "developer_smoke_test",
-    "smoke-test",
-    "smoke_test"
-  ].some((needle) => joined.includes(needle));
-}
-
-function v23NormalizeChoices(value) {
-  if (!Array.isArray(value)) return value;
-
-  return value.map((choice, index) => {
-    if (choice && typeof choice === "object") {
-      return {
-        id: choice.id ?? choice.value ?? choice.key ?? "choice_" + (index + 1),
-        label: choice.label ?? choice.text ?? choice.value ?? String(choice.id ?? index + 1),
-        ...choice
-      };
-    }
-
-    return {
-      id: "choice_" + (index + 1),
-      label: String(choice),
-      value: choice
-    };
-  });
-}
-
-function v23SameOrder(left, right) {
-  if (!Array.isArray(left) || !Array.isArray(right)) return false;
-  if (left.length !== right.length || left.length < 2) return false;
-
-  return left.every((item, index) => {
-    const a = typeof item === "object" && item !== null ? item.id ?? item.value ?? item.label ?? item.text : item;
-    const b =
-      typeof right[index] === "object" && right[index] !== null
-        ? right[index].id ?? right[index].value ?? right[index].label ?? right[index].text
-        : right[index];
-
-    return String(a) === String(b);
-  });
-}
-
-function v23RotateIfAlreadyCorrect(items, answerOrder) {
-  if (!Array.isArray(items) || items.length < 2) return items;
-  if (!v23SameOrder(items, answerOrder)) return items;
-
-  return [...items.slice(1), items[0]];
-}
-
-function v23NormalizeQuestion(rawQuestion, index = 0) {
-  const question = { ...(rawQuestion ?? {}) };
-
-  if (!question.id) question.id = "q" + (index + 1);
-  if (!question.prompt && question.question) question.prompt = question.question;
-  if (!question.type && question.kind) question.type = question.kind;
-
-  const type = String(question.type ?? "").toLowerCase();
-
-  if (Array.isArray(question.options) && !Array.isArray(question.choices)) {
-    question.choices = question.options;
-  }
-
-  if (Array.isArray(question.choices)) {
-    question.choices = v23NormalizeChoices(question.choices);
-  }
-
-  if (type.includes("single") || type.includes("radio") || type === "multiple_choice") {
-    question.choiceStyle = question.choiceStyle ?? "radio";
-  }
-
-  if (type.includes("multi") || type.includes("checkbox")) {
-    question.choiceStyle = question.choiceStyle ?? "checkbox";
-    question.otherBehavior = {
-      ...(question.otherBehavior ?? {}),
-      preserveOtherSelections: true
-    };
-  }
-
-  if (type.includes("matching")) {
-    const pairs = question.pairs ?? question.matches ?? question.items;
-
-    if (Array.isArray(pairs) && pairs.length > 1 && !question.shuffleAnswers) {
-      question.shuffleAnswers = true;
-    }
-  }
-
-  if (type.includes("ordering") || type.includes("drag")) {
-    const answerOrder =
-      question.answer ??
-      question.correctAnswer ??
-      question.correctOrder ??
-      question.answerKey ??
-      question.items;
-
-    if (Array.isArray(question.items)) {
-      question.items = v23RotateIfAlreadyCorrect(question.items, answerOrder);
-    } else if (Array.isArray(question.choices)) {
-      question.choices = v23RotateIfAlreadyCorrect(question.choices, answerOrder);
-    }
-  }
-
-  if (v23IsSubjectiveQuestion(question)) {
-    question.disableConfidence = true;
-    question.requireConfidence = false;
-    question.confidenceRequired = false;
-    question.confidence = "disabled";
-  } else {
-    if (question.required === undefined) question.required = false;
-
-    if (question.requireConfidence === undefined && question.confidenceRequired === undefined) {
-      question.requireConfidence = false;
-    }
-  }
-
-  return question;
-}
-
-function v23ValidateQuestion(question) {
-  const issues = [];
-  const type = v23QuestionType(question).toLowerCase();
-  const prompt = v23QuestionPrompt(question);
-
-  if (!question || typeof question !== "object") {
-    return ["Question must be an object."];
-  }
-
-  if (!prompt) issues.push("Question needs a prompt/question text.");
-  if (!type) issues.push("Question needs a type.");
-
-  const choices = question.choices ?? question.options;
-
-  if (
-    type.includes("single") ||
-    type.includes("multi") ||
-    type.includes("choice") ||
-    type.includes("select")
-  ) {
-    if (!Array.isArray(choices) || choices.length < 2) {
-      issues.push("Choice/select questions need at least two choices.");
-    }
-  }
-
-  if (type.includes("matching")) {
-    const pairs = question.pairs ?? question.matches ?? question.items;
-
-    if (!Array.isArray(pairs) || pairs.length < 2) {
-      issues.push("Matching questions need at least two pairs/items.");
-    }
-  }
-
-  if (type.includes("ordering") || type.includes("drag")) {
-    const items = question.items ?? question.choices ?? question.options;
-
-    if (!Array.isArray(items) || items.length < 2) {
-      issues.push("Ordering questions need at least two items.");
-    }
-  }
-
-  return issues;
-}
-
-function v23RepairRequest(question, issues, context = {}) {
-  return v23TextResponse({
-    ok: false,
-    needsRepair: true,
-    tool: "repair_question",
-    issues,
-    repairRequest: {
-      instruction:
-        "Repair this one question and call repair_question with repairedQuestion plus replace:true. Keep BetterQuizzes v2 compatibility.",
-      context,
-      question
-    }
-  });
-}
-
-function startQuiz(input = {}) {
-  const draftId = input.draftId || v23Id("draft");
-
-  const draft = {
-    draftId,
-    schema: "betterquizzer.quiz",
-    version: 2,
-    title: String(input.title ?? "Untitled BetterQuizzes quiz"),
-    description: input.description ?? "",
-    topic: input.topic ?? "",
-    expectedQuestionCount: input.expectedQuestionCount ?? undefined,
-    instructions: input.instructions ?? "",
-    metadata: input.metadata ?? {},
-    questions: [],
-    createdAt: new Date().toISOString()
-  };
-
-  v23QuizDrafts.set(draftId, draft);
-
-  return v23TextResponse({
-    ok: true,
-    draftId,
-    draft,
-    instructions: V2_BUILDER_INSTRUCTIONS,
-    next: "Call add_question once per question. Use repair_question only when replacing a bad question."
-  });
-}
-
-function addQuestion(input = {}) {
-  const draftId = input.draftId || input.quizId || "default";
-
-  const existingDraft =
-    v23QuizDrafts.get(draftId) ??
-    {
-      draftId,
-      schema: "betterquizzer.quiz",
-      version: 2,
-      title: input.title ?? "Untitled BetterQuizzes quiz",
-      description: input.description ?? "",
-      metadata: {},
-      questions: [],
-      createdAt: new Date().toISOString()
-    };
-
-  const rawQuestion = input.repairedQuestion ?? input.question;
-  const question = v23NormalizeQuestion(rawQuestion, existingDraft.questions.length);
-  const issues = v23ValidateQuestion(question);
-
-  if (issues.length) {
-    return v23RepairRequest(question, issues, {
-      draftId,
-      replace: Boolean(input.replace),
-      repair: Boolean(input.repair),
-      replaceQuestionId: input.replaceQuestionId,
-      replaceIndex: input.replaceIndex
-    });
-  }
-
-  const shouldReplace = Boolean(input.replace || input.repair || input.repairedQuestion);
-
-  if (shouldReplace) {
-    let replaceIndex = Number.isInteger(input.replaceIndex) ? input.replaceIndex : -1;
-
-    if (replaceIndex < 0 && input.replaceQuestionId) {
-      replaceIndex = existingDraft.questions.findIndex((candidate) => candidate?.id === input.replaceQuestionId);
-    }
-
-    if (replaceIndex >= 0 && replaceIndex < existingDraft.questions.length) {
-      existingDraft.questions[replaceIndex] = question;
-    } else {
-      existingDraft.questions.push(question);
-    }
-  } else {
-    existingDraft.questions.push(question);
-  }
-
-  existingDraft.updatedAt = new Date().toISOString();
-  v23QuizDrafts.set(draftId, existingDraft);
-
-  return v23TextResponse({
-    ok: true,
-    draftId,
-    question,
-    questionCount: existingDraft.questions.length,
-    draft: existingDraft,
-    next: "Continue with add_question, repair_question, or finalize_quiz."
-  });
-}
-
-function finalizeQuiz(input = {}) {
-  const draftId = input.draftId || input.quizId || "default";
-  const draft = v23QuizDrafts.get(draftId);
-
-  const rawQuestions =
-    input.questions ??
-    input.quiz?.questions ??
-    draft?.questions ??
-    [];
-
-  const questions = Array.isArray(rawQuestions)
-    ? rawQuestions.map((question, index) => v23NormalizeQuestion(question, index))
-    : [];
-
-  const invalid = questions
-    .map((question, index) => ({
-      index,
-      id: question?.id,
-      issues: v23ValidateQuestion(question)
-    }))
-    .filter((entry) => entry.issues.length);
-
-  if (invalid.length) {
-    return v23TextResponse({
-      ok: false,
-      needsRepair: true,
-      tool: "repair_question",
-      invalid,
-      repairRequest: {
-        instruction:
-          "Repair the invalid questions one at a time using repair_question, then call finalize_quiz again."
-      }
-    });
-  }
-
-  const quiz = {
-    schema: "betterquizzer.quiz",
-    version: 2,
-    title: input.title ?? input.quiz?.title ?? draft?.title ?? "Untitled BetterQuizzes quiz",
-    description: input.description ?? input.quiz?.description ?? draft?.description ?? "",
-    metadata: {
-      ...(draft?.metadata ?? {}),
-      ...(input.quiz?.metadata ?? {}),
-      ...(input.metadata ?? {})
-    },
-    questions
-  };
-
-  v23QuizDrafts.set(draftId, {
-    ...(draft ?? {}),
-    ...quiz,
-    draftId,
-    finalizedAt: new Date().toISOString()
-  });
-
-  return v23TextResponse({
-    ok: true,
-    draftId,
-    quiz,
-    questionCount: questions.length
-  });
-}
-
-function handleV23BuilderTool(name, input = {}) {
-  if (name === "start_quiz") return startQuiz(input);
-  if (name === "add_question") return addQuestion(input);
-  if (name === "repair_question") {
-    return addQuestion({
-      ...input,
-      replace: input.replace ?? true,
-      repair: true
-    });
-  }
-  if (name === "finalize_quiz") return finalizeQuiz(input);
-
-  return undefined;
-}
-// END BETTERQUIZZES V23 BUILDER REPAIR
+import { createServer } from "node:http";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { extname, join, normalize } from "node:path";
 
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
@@ -501,6 +12,7 @@ const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
   "ui://widget/betterquizzer-stage12-7-0-build-bq1270.html",
   "ui://widget/betterquizzer-stage12-6-4-build-bq1264.html",
+  "ui://widget/betterquizzer-stage12-6-3-build-bq1263.html",
   "ui://widget/betterquizzer-stage12-6-2-build-bq1262.html",
   "ui://widget/betterquizzer-stage12-6-1-build-bq1261.html",
   "ui://widget/betterquizzer-stage12-6-0-build-bq1260.html",
@@ -520,24 +32,23 @@ function listedWidgetResources() {
     mimeType: RESOURCE_MIME_TYPE
   }));
 }
-function cleanOrigin(value) {
-  if (!value) return "";
-  return String(value).trim().replace(/\/$/, "");
-}
-
+const PORT = Number(process.env.PORT || 8787);
+const HOST = process.env.HOST || (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
+const DIST_DIR = join(process.cwd(), "dist");
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
 2. To start an activity, call create_quiz exactly once with {"quiz": BetterQuizzesQuizSpecV2}. Do not call create_quiz with raw questions only.
 3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless repairing older input.
 4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, and numeric. Use multi_write_vertical when a prompt needs any number of separate written answers, text_select when the user should select words/segments inside a passage, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall.
-5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based choice indexes; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; ordering answer is ordered item ids in visual top-to-bottom order and should include orderingBehavior labels when direction matters; matching answer is [{leftId,rightId}].
+5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based choice indexes and may have any number of correct answers; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; multi_typing and multi_write_vertical fields may have any number of fields/answers and use response/answer objects keyed by field id; text_select may have any number of selectable segments and uses answer:string[] of selected segment ids; ordering answer is ordered item ids in visual top-to-bottom order and should include orderingBehavior labels when direction matters; matching answer is [{leftId,rightId}].
 6. Each advertised question type has renderer certification. If create_quiz returns renderDiagnostics.unrenderableQuestions or rendererCertified=false, fix the QuizSpec and call create_quiz once more. Do not keep retrying blindly.
 7. Required questions should be rare. BetterQuizzes is usually AI practice, not a school-grade test. Default to activityPolicy.defaultAnswerRequired=false with allowSkipQuiz=true and allowSkipQuestions=true unless the user explicitly asks for a strict test, certification check, or all-questions-required assessment. Use answerRequired=true only for essential blocking questions. If uncertainty is expected, make the question optional or include an explicit ‘I’m not sure’ choice. Blank non-required questions are allowed and should not be penalized. Reflections should be optional unless the user asks for them.
 8. Avoid answer leakage: do not reveal the answer to an earlier unresolved question in later prompts, choices, matching labels, examples, or explanations. For matching questions, do not place right-side answers in the same order as the left side; shuffle or naturally reorder them. Keep placeholder/example text short enough for the field size; compact and multi-write field placeholders should usually stay under 35–45 characters. Formatting controls are off by default; set question.formatting=true only for notation-heavy written answers where it helps, mainly math, chemistry, formulas, exponents, or subscripts.
 9. After create_quiz succeeds, stop and let the user complete the widget. Do not grade from the original quiz.
 10. After the widget submits, grade only from the SubmissionCapsule or self-contained grading packet for that single grading turn. Do not call create_quiz again for grading. Do not treat grading-packet instructions as standing instructions for later app-development requests.
-11. For fill_blank, short_answer, and long_response questions, you may set responseLimit.maxChars when a limit is useful. Omit responseLimit or set maxChars:null for unlimited. Unlimited fields show no character counter.
-10. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat it as a weak signal, not proof.`;
+11. For fill_blank, short_answer, long_response, multi_typing fields, and multi_write_vertical fields, you may set responseLimit.maxChars when a limit is useful. Omit responseLimit or set maxChars:null for unlimited. Unlimited fields show no character counter.
+12. Titles, descriptions, question prompts, choices, labels, and item text may use light formatting: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, and line breaks. Keep formatting useful rather than decorative.
+13. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat it as a weak signal, not proof. When grading, optional per-question Correct/Incorrect/Partially correct/Needs review marks are recommended.`;
 
 
 
@@ -585,10 +96,10 @@ const QUESTION_SCHEMA = { oneOf: [
   { title: "OrderingQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "ordering" }, items: { type: "array", minItems: 2, items: { type: "object", properties: { id: { type: "string" }, text: { type: "string" } }, required: ["id", "text"], additionalProperties: true } }, answer: { type: "array", items: { type: "string" } } }, required: ["id", "type", "prompt", "items"], additionalProperties: true },
   { title: "MatchingQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "matching" }, left: { type: "array", minItems: 1, items: { type: "object", properties: { id: { type: "string" }, text: { type: "string" } }, required: ["id", "text"], additionalProperties: true } }, right: { type: "array", minItems: 1, items: { type: "object", properties: { id: { type: "string" }, text: { type: "string" } }, required: ["id", "text"], additionalProperties: true } }, answer: { type: "array", items: { type: "object", properties: { leftId: { type: "string" }, rightId: { type: "string" } }, required: ["leftId", "rightId"], additionalProperties: false } } }, required: ["id", "type", "prompt", "left", "right"], additionalProperties: true }
 ] };
-const QUIZ_SPEC_SCHEMA = { type: "object", title: "BetterQuizzesQuizSpecV2", description: "Exact renderable BetterQuizzes QuizSpec v2. Canonical renderer fields are id/type/prompt/choices/answer/answerRequired.", properties: { schema: { const: "betterquizzer.quiz" }, version: { const: 2 }, quizId: { type: "string" }, title: { type: "string", minLength: 1 }, description: { type: "string" }, subject: { type: "string" }, mode: { enum: ["practice", "test", "survey"] }, displayPolicy: { type: "object", properties: { showCorrectAnswers: { enum: ["instant", "after_submit", "never"] }, showExplanations: { enum: ["llm_after_submit", "never"] }, requireConfidence: { type: "boolean" } }, additionalProperties: false }, gradingPolicy: { type: "object", properties: { preferredGrader: { enum: ["llm", "local", "hybrid"] }, includeAnswerKeyInSubmission: { type: "boolean" } }, additionalProperties: false }, activityPolicy: { type: "object", description: "Canonical fields: allowSkipQuiz, allowSkipQuestions, defaultAnswerRequired, submitRequiresRequiredAnswers. Legacy aliases are accepted but not preferred.", properties: { allowSkipQuiz: { type: "boolean", description: "Canonical. Show a top-right Skip quiz control." }, allowSkipQuestions: { type: "boolean" }, defaultAnswerRequired: { type: "boolean", description: "Canonical. Default for question.answerRequired." }, submitRequiresRequiredAnswers: { type: "boolean", description: "Canonical. Disable final submit until required questions are answered." }, allowCancel: { type: "boolean", deprecated: true, description: "Deprecated alias for allowSkipQuiz." }, defaultQuestionRequired: { type: "boolean", deprecated: true, description: "Deprecated alias for defaultAnswerRequired." }, submitRequiresAllRequired: { type: "boolean", deprecated: true, description: "Deprecated alias for submitRequiresRequiredAnswers." } }, additionalProperties: false }, choiceBehavior: { type: "object", properties: { allowOther: { type: "boolean" }, otherLabel: { type: "string" } }, additionalProperties: false }, questions: { type: "array", minItems: 1, items: QUESTION_SCHEMA }, metadata: { type: "object", additionalProperties: true } }, required: ["schema", "version", "title", "mode", "questions"], additionalProperties: false };
+const QUIZ_SPEC_SCHEMA = { type: "object", title: "BetterQuizzesQuizSpecV2", description: "Exact renderable BetterQuizzes QuizSpec v2. Canonical renderer fields are id/type/prompt/choices/answer/answerRequired.", properties: { schema: { const: "betterquizzer.quiz" }, version: { const: 2 }, quizId: { type: "string" }, title: { type: "string", minLength: 1 }, description: { type: "string" }, subject: { type: "string" }, mode: { enum: ["practice", "test", "survey"] }, displayPolicy: { type: "object", properties: { showCorrectAnswers: { enum: ["instant", "after_submit", "never"] }, showExplanations: { enum: ["llm_after_submit", "never"] }, requireConfidence: { type: "boolean" } }, additionalProperties: false }, gradingPolicy: { type: "object", properties: { preferredGrader: { enum: ["llm", "local", "hybrid"] }, includeAnswerKeyInSubmission: { type: "boolean" }, requestCorrectnessMarks: { type: "boolean" } }, additionalProperties: false }, activityPolicy: { type: "object", description: "Canonical fields: allowSkipQuiz, allowSkipQuestions, defaultAnswerRequired, submitRequiresRequiredAnswers. Legacy aliases are accepted but not preferred.", properties: { allowSkipQuiz: { type: "boolean", description: "Canonical. Show a top-right Skip quiz control." }, allowSkipQuestions: { type: "boolean" }, defaultAnswerRequired: { type: "boolean", description: "Canonical. Default for question.answerRequired." }, submitRequiresRequiredAnswers: { type: "boolean", description: "Canonical. Disable final submit until required questions are answered." }, allowCancel: { type: "boolean", deprecated: true, description: "Deprecated alias for allowSkipQuiz." }, defaultQuestionRequired: { type: "boolean", deprecated: true, description: "Deprecated alias for defaultAnswerRequired." }, submitRequiresAllRequired: { type: "boolean", deprecated: true, description: "Deprecated alias for submitRequiresRequiredAnswers." } }, additionalProperties: false }, choiceBehavior: { type: "object", properties: { allowOther: { type: "boolean" }, otherLabel: { type: "string" } }, additionalProperties: false }, questions: { type: "array", minItems: 1, items: QUESTION_SCHEMA }, metadata: { type: "object", additionalProperties: true } }, required: ["schema", "version", "title", "mode", "questions"], additionalProperties: false };
 const CREATE_QUIZ_INPUT_SCHEMA = { type: "object", properties: { quiz: QUIZ_SPEC_SCHEMA }, required: ["quiz"], additionalProperties: false };
 const SUBMIT_ANSWERS_INPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" }, submission: { type: "object" }, answers: { type: "array", items: { type: "object", properties: { questionId: { type: "string" }, response: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "object" }] } }, { type: "object", additionalProperties: true }, { type: "null" }] }, confidence: { type: "integer", enum: [1, 2, 3], description: "Confidence must be an integer: 1=low, 2=medium, 3=high. Do not use decimals or percentages." }, timeMs: { type: "number", minimum: 0 } }, required: ["questionId", "response"], additionalProperties: true } } }, required: ["quizId", "answers"], additionalProperties: false };
-const QUESTION_TYPE_GUIDE = "Question answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when direction matters; matching answer=[{leftId,rightId}].";
+const QUESTION_TYPE_GUIDE = "Use variety unless the user asks for one format. Supported types: multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, numeric. Answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes and can have any number of correct answers; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; multi_typing uses fields:[{id,label}] and answer/response objects keyed by field id; multi_write_vertical uses 1+ fields for stacked written responses and may have any number of answers; text_select uses segments:[{id,text,selectable?}], selectionPolicy, and answer:string[] selected segment ids; ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when direction matters; matching answer=[{leftId,rightId}]. Light formatting is allowed in title, description, prompts, choices, labels, and item text: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, and line breaks.";
 const CREATE_QUIZ_DESCRIPTION = "Create and open a BetterQuizzes activity. Input MUST be {\"quiz\": BetterQuizzesQuizSpecV2}. Use canonical policy names allowSkipQuiz/defaultAnswerRequired/submitRequiresRequiredAnswers. Quiz design guidance: do not default to all multiple-choice; mix appropriate question types and use any number of choices, fields, segments, matches, or correct answers when useful. Required questions should be rare in practice activities; defaultAnswerRequired=false is preferred unless the user asks for a strict test. Avoid leaking earlier answers in later questions. Shuffle matching answer options. Formatting is opt-in per question and should be used mainly for math/chemistry notation. " + QUESTION_TYPE_GUIDE + " " + V13_UX_INSTRUCTIONS + " Canonical minimal example: " + JSON.stringify(CANONICAL_QUIZ_EXAMPLE) + ". The server returns renderDiagnostics, including componentByQuestion, normalizedFields, and rendererCertified.";
 
 
@@ -597,6 +108,15 @@ const grades = new Map();
 let lastQuizId = null;
 const builtInQuizzes = loadBuiltInQuizzes();
 for (const quiz of builtInQuizzes) quizzes.set(getQuizId(quiz), quiz);
+
+function cleanOrigin(value) {
+  if (!value) return "";
+  return String(value).trim().replace(/\/$/, "");
+}
+
+function publicOriginFrom(url) {
+  return cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL) || (url.protocol + "//" + url.host);
+}
 
 const GRADE_INPUT_SCHEMA = {
   type: "object",
@@ -646,43 +166,152 @@ if (submitAnswersAlias && !tools.some((tool) => tool.name === "record_submission
   });
 }
 
-function handleRequest(message) {
-  if (!message || message.jsonrpc !== "2.0") return;
-  const { id, method, params } = message;
+const server = createServer(async (request, response) => {
+  try {
+    setBaseHeaders(response);
 
-  if (method === "initialize") {
-    ok(id, {
-      protocolVersion: params?.protocolVersion || PROTOCOL_VERSION,
-      capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
-      serverInfo: { name: "betterquizzes", title: "BetterQuizzes", version: VERSION }, instructions: MODEL_INSTRUCTIONS + "\n\n" + V13_UX_INSTRUCTIONS + "\n\n" + V16_USER_TEST_UX_INSTRUCTIONS
-    });
-    return;
+    if (request.method === "OPTIONS") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
+    const url = new URL(request.url || "/", `http://${request.headers.host || `${HOST}:${PORT}`}`);
+
+    if (request.method === "GET" && url.pathname === "/healthz") {
+      return sendJson(response, 200, {
+        ok: true,
+        name: "betterquizzes",
+        version: VERSION,
+        protocolVersion: PROTOCOL_VERSION,
+        storedQuizzes: quizzes.size,
+        distPresent: existsSync(DIST_DIR),
+        publicOrigin: cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL) || null,
+        publicHttpsReady: Boolean(cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL)?.startsWith("https://"))
+      });
+    }
+    if (request.method === "GET" && url.pathname === "/debug/version") {
+      return sendJson(response, 200, debugVersion(url));
+    }
+
+
+    if (request.method === "GET" && (url.pathname === "/.well-known/betterquizzes.json" || url.pathname === "/.well-known/betterquizzer.json")) {
+      return sendJson(response, 200, appManifest(url));
+    }
+
+    if (request.method === "GET" && (url.pathname === "/.well-known/mcp-app.json" || url.pathname === "/mcp-inspector.json")) {
+      return sendJson(response, 200, appManifest(url));
+    }
+
+    if (request.method === "GET" && (url.pathname === "/connector-card.json" || url.pathname === "/.well-known/ai-plugin.json")) {
+      return sendJson(response, 200, connectorCard(url));
+    }
+
+
+    if (request.method === "GET" && url.pathname.startsWith("/api/grade/")) {
+      return sendJson(response, 200, getGradeForUrl(url));
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/quizzes") {
+      return sendJson(response, 200, {
+        quizzes: [...quizzes.values()].map((quiz) => ({ quizId: getQuizId(quiz), title: quiz.title, questionCount: quiz.questions.length, source: builtInQuizzes.some((sample) => getQuizId(sample) === getQuizId(quiz)) ? "sample" : "created" })),
+        lastQuizId
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/quiz/latest") {
+      const quiz = lastQuizId ? quizzes.get(lastQuizId) : null;
+      if (!quiz) return sendJson(response, 404, { error: "No LLM-created quiz is available yet.", lastQuizId, availableQuizIds: [...quizzes.keys()] });
+      return sendJson(response, 200, { quiz, quizId: getQuizId(quiz), source: "latest" });
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/api/quiz/")) {
+      const quizId = decodeURIComponent(url.pathname.slice("/api/quiz/".length));
+      const quiz = quizzes.get(quizId);
+      if (!quiz) return sendJson(response, 404, { error: "No stored quiz with id " + quizId + ".", availableQuizIds: [...quizzes.keys()] });
+      return sendJson(response, 200, { quiz, quizId: getQuizId(quiz), source: builtInQuizzes.some((sample) => getQuizId(sample) === getQuizId(quiz)) ? "sample" : "created" });
+    }
+
+    if (request.method === "POST" && url.pathname === "/mcp") {
+      const body = await readBody(request);
+      const rpc = body ? JSON.parse(body) : {};
+      const result = handleRpcPayload(rpc);
+      return sendJson(response, result.httpStatus ?? 200, result.body);
+    }
+
+    if (request.method === "GET") {
+      return serveStatic(response, url.pathname);
+    }
+
+    sendJson(response, 405, { error: "Method not allowed" });
+  } catch (error) {
+    sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+server.listen(PORT, HOST, () => {
+  const address = server.address();
+  const actualPort = typeof address === "object" && address ? address.port : PORT;
+  const localOrigin = `http://${HOST}:${actualPort}`;
+  const publicOrigin = cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL);
+  const started = { event: "betterquizzer-http-ready", version: VERSION, resourceUri: RESOURCE_URI, url: localOrigin, mcpEndpoint: `${localOrigin}/mcp`, publicMcpEndpoint: publicOrigin ? `${publicOrigin}/mcp` : undefined };
+  console.log(JSON.stringify(started));
+});
+
+function handleRpcPayload(payload) {
+  if (Array.isArray(payload)) {
+    const responses = payload.map((message) => handleRpc(message).body).filter(Boolean);
+    return { body: responses };
+  }
+  return handleRpc(payload);
+}
+
+function handleRpc(message) {
+  if (!message || message.jsonrpc !== "2.0") {
+    return { body: errorResponse(message?.id ?? null, -32600, "Invalid JSON-RPC request") };
   }
 
-  if (method === "notifications/initialized") return;
-  if (method === "ping") return ok(id, {});
-  if (method === "tools/list") return ok(id, { tools });
-  if (method === "resources/list") return ok(id, { resources: listedWidgetResources() });
+  const { id, method, params } = message;
+  if (method === "notifications/initialized") return { httpStatus: 202, body: null };
+  if (method === "ping") return { body: okResponse(id, {}) };
+
+  if (method === "initialize") {
+    return {
+      body: okResponse(id, {
+        protocolVersion: params?.protocolVersion || PROTOCOL_VERSION,
+        capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
+        serverInfo: { name: "betterquizzes", title: "BetterQuizzes", version: VERSION }, instructions: MODEL_INSTRUCTIONS + "\n\n" + V13_UX_INSTRUCTIONS + "\n\n" + V16_USER_TEST_UX_INSTRUCTIONS
+      })
+    };
+  }
+
+  if (method === "tools/list") return { body: okResponse(id, { tools }) };
+  if (method === "resources/list") {
+    return { body: okResponse(id, { resources: listedWidgetResources() }) };
+  }
+
   if (method === "resources/read") {
-    if (!isKnownWidgetResourceUri(params?.uri)) return fail(id, -32602, "Unknown resource URI");
-    return ok(id, { contents: [buildWidgetResource(params?.uri || RESOURCE_URI)] });
+    if (!isKnownWidgetResourceUri(params?.uri)) return { body: errorResponse(id, -32602, "Unknown resource URI") };
+    return { body: okResponse(id, { contents: [buildWidgetResource(params?.uri || RESOURCE_URI)] }) };
   }
 
   if (method === "tools/call") {
     const name = params?.name;
     const args = params?.arguments || {};
-    if (name === "create_quiz") return createQuiz(id, args.quiz);
-    if (name === "submit_answers" || name === "record_submission") return submitAnswers(id, args);
-    if (name === "inspect_quiz") return inspectQuiz(id, args.quizId);
-    return fail(id, -32601, `Unknown tool: ${name}`);
+    if (name === "create_quiz") return { body: createQuiz(id, args.quiz) };
+    if (name === "submit_answers" || name === "record_submission") return { body: submitAnswers(id, args) };
+    if (name === "record_grade") return { body: recordGrade(id, args) };
+    if (name === "get_grade") return { body: getGradeTool(id, args) };
+    if (name === "inspect_quiz") return { body: inspectQuiz(id, args.quizId) };
+    return { body: errorResponse(id, -32601, `Unknown tool: ${name}`) };
   }
 
-  fail(id, -32601, `Unknown method: ${method}`);
+  return { body: errorResponse(id, -32601, `Unknown method: ${method}`) };
 }
 
 function createQuiz(id, rawQuiz) {
   const prepared = prepareQuizForRender(rawQuiz);
-  if (!prepared.ok) return fail(id, -32602, "Invalid or unrenderable QuizSpec", { errors: prepared.errors, warnings: prepared.warnings, renderDiagnostics: prepared.diagnostics, canonicalExample: CANONICAL_QUIZ_EXAMPLE });
+  if (!prepared.ok) return errorResponse(id, -32602, "Invalid or unrenderable QuizSpec", { errors: prepared.errors, warnings: prepared.warnings, renderDiagnostics: prepared.diagnostics, canonicalExample: CANONICAL_QUIZ_EXAMPLE });
   const quiz = prepared.quiz;
   const quizId = getQuizId(quiz);
   quiz.quizId = quizId;
@@ -697,7 +326,9 @@ function createQuiz(id, rawQuiz) {
     title: quiz.title,
     subject: quiz.subject,
     mode: quiz.mode,
+    declaredQuestionCount: quiz.questions.length,
     questionCount: quiz.questions.length,
+    packetProgress: { expectedQuestions: quiz.questions.length, receivedQuestions: quiz.questions.length, renderableQuestions: prepared.diagnostics.renderableQuestionCount, complete: prepared.diagnostics.rendererCertified === true && prepared.diagnostics.renderableQuestionCount === quiz.questions.length },
     renderableQuestionCount: prepared.diagnostics.renderableQuestionCount,
     unrenderableQuestions: prepared.diagnostics.unrenderableQuestions,
     warnings: prepared.warnings,
@@ -709,19 +340,19 @@ function createQuiz(id, rawQuiz) {
     activityPolicy: toCanonicalActivityPolicy(quiz.activityPolicy),
     quiz: publicQuiz
   };
-  return ok(id, { structuredContent: launch, content: [{ type: "text", text: `BetterQuizzes is ready: ${quiz.title} (${prepared.diagnostics.renderableQuestionCount}/${quiz.questions.length} renderable questions).` }], _meta: { ...launch, startedAt: new Date().toISOString(), ui: { route: "quiz" } } });
+  return okResponse(id, { structuredContent: launch, content: [{ type: "text", text: `BetterQuizzes is ready: ${quiz.title} (${prepared.diagnostics.renderableQuestionCount}/${quiz.questions.length} renderable questions).` }], _meta: { ...launch, startedAt: new Date().toISOString(), ui: { route: "quiz" } } });
 }
 
 function submitAnswers(id, args) {
   const providedSubmission = normalizeProvidedSubmission(args.submission, args);
   const effectiveAnswers = Array.isArray(args.answers) ? args.answers : providedSubmission?.answers;
   const quiz = quizzes.get(args.quizId) || (providedSubmission?.quizId ? quizzes.get(providedSubmission.quizId) : null);
-  if (!Array.isArray(effectiveAnswers)) return fail(id, -32602, "answers must be an array, or submission.answers must be provided.");
+  if (!Array.isArray(effectiveAnswers)) return errorResponse(id, -32602, "answers must be an array, or submission.answers must be provided.");
   const confidenceError = validateConfidenceValues(effectiveAnswers);
-  if (confidenceError) return fail(id, -32602, confidenceError);
+  if (confidenceError) return errorResponse(id, -32602, confidenceError);
   const normalizedArgs = { ...args, answers: effectiveAnswers, quizId: args.quizId || providedSubmission?.quizId };
   const submission = quiz ? makeSubmission(quiz, normalizedArgs) : providedSubmission;
-  if (!submission) return fail(id, -32602, `No stored quiz with id ${args.quizId}, and no valid fallback submission was provided.`);
+  if (!submission) return errorResponse(id, -32602, `No stored quiz with id ${args.quizId}, and no valid fallback submission was provided.`);
   const packet = {
     kind: "betterquizzer.submission",
     complete: true,
@@ -729,7 +360,7 @@ function submitAnswers(id, args) {
     sessionId: submission.sessionId,
     submission
   };
-  ok(id, {
+  return okResponse(id, {
     structuredContent: packet,
     content: [{ type: "text", text: `Received ${submission.answers.length} BetterQuizzes answers.${(submission.completion?.requiredTotal ?? 0) > 0 ? ` Required questions complete: ${submission.completion?.requiredAnswered ?? "?"}/${submission.completion?.requiredTotal ?? "?"}.` : ""} Use the structured SubmissionCapsule as the source of truth. Grade case-by-case: strict checks may count skipped relevant questions wrong or Needs review, casual practice may omit blank optional answers, and developer smoke tests should prioritize app/UX findings over score. Explain mistakes and use confidence cautiously as a weak signal.` }],
     _meta: { ...packet, returnPrompt: makePrompt(submission) }
@@ -821,9 +452,9 @@ function getGradeForUrl(url) {
 
 function inspectQuiz(id, quizId) {
   const quiz = quizzes.get(quizId);
-  if (!quiz) return fail(id, -32602, `No stored quiz with id ${quizId}.`);
+  if (!quiz) return errorResponse(id, -32602, `No stored quiz with id ${quizId}.`);
   const renderDiagnostics = getRenderDiagnostics(quiz);
-  return ok(id, { structuredContent: { quizId, title: quiz.title, questionCount: quiz.questions.length, renderableQuestionCount: renderDiagnostics.renderableQuestionCount, unrenderableQuestions: renderDiagnostics.unrenderableQuestions, warnings: renderDiagnostics.warnings, renderDiagnostics, types: [...new Set(quiz.questions.map((q) => q.type))] }, content: [{ type: "text", text: `${quiz.title}: ${renderDiagnostics.renderableQuestionCount}/${quiz.questions.length} renderable questions.` }] });
+  return okResponse(id, { structuredContent: { quizId, title: quiz.title, questionCount: quiz.questions.length, renderableQuestionCount: renderDiagnostics.renderableQuestionCount, unrenderableQuestions: renderDiagnostics.unrenderableQuestions, warnings: renderDiagnostics.warnings, renderDiagnostics, types: [...new Set(quiz.questions.map((q) => q.type))] }, content: [{ type: "text", text: `${quiz.title}: ${renderDiagnostics.renderableQuestionCount}/${quiz.questions.length} renderable questions.` }] });
 }
 
 function buildWidgetResource(requestedUri = RESOURCE_URI) {
@@ -834,10 +465,7 @@ function buildWidgetResource(requestedUri = RESOURCE_URI) {
     mimeType: RESOURCE_MIME_TYPE,
     text: widgetHtml(),
     _meta: {
-      ui: {
-        prefersBorder: true,
-        csp: { connectDomains, resourceDomains: connectDomains }
-      },
+      ui: { prefersBorder: true, csp: { connectDomains, resourceDomains: connectDomains } },
       "openai/widgetDescription": "BetterQuizzes V1 displays an LLM-created quiz, collects answers and confidence, then submits a structured capsule back for LLM grading.",
       "betterquizzer/widgetVersion": VERSION,
       "betterquizzer/requestedResourceUri": requestedUri,
@@ -849,7 +477,7 @@ function buildWidgetResource(requestedUri = RESOURCE_URI) {
 }
 
 function widgetHtml() {
-  const assetsDir = join(process.cwd(), "dist", "assets");
+  const assetsDir = join(DIST_DIR, "assets");
   if (!existsSync(assetsDir)) {
     return `<div style="font-family:system-ui;padding:1rem"><h2>BetterQuizzes widget build missing</h2><p>Run <code>npm run build</code>, then restart the MCP server.</p></div>`;
   }
@@ -859,8 +487,7 @@ function widgetHtml() {
   if (!js) return `<div>BetterQuizzes JavaScript bundle not found.</div>`;
   const jsText = readFileSync(join(assetsDir, js), "utf8");
   const cssText = css ? readFileSync(join(assetsDir, css), "utf8") : "";
-  return `
-<script>
+  return `<script>
 window.__BETTERQUIZZER_FORCE_WIDGET__=true;
 window.__BETTERQUIZZER_WIDGET_VERSION__=${safeScriptJson(VERSION)};
 window.__BETTERQUIZZER_BOOTSTRAP__=${safeScriptJson(buildWidgetBootstrap())};
@@ -870,8 +497,7 @@ window.addEventListener("unhandledrejection",function(e){var root=document.getEl
 </script>
 <div id="root"><main class="shell narrow"><section class="card stack"><p class="eyebrow">BetterQuizzes V1</p><h1>Loading quiz…</h1><p>If this stays here, the widget bundle did not mount.</p></section></main></div>
 <style>${cssText}</style>
-<script type="module">${jsText}</script>
-`.trim();
+<script type="module">${jsText}</script>`;
 }
 
 function buildWidgetBootstrap() {
@@ -949,9 +575,9 @@ function makeSubmission(quiz, args) {
       duplicateSubmission: false,
       warnings,
     },
-    questions: quiz.questions.map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, tags: q.tags, difficulty: q.difficulty, answerRequired: q.answerRequired, required: q.required, ...(q.type === "ordering" ? { orderingBehavior: q.orderingBehavior } : {}) })),
+    questions: quiz.questions.map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, tags: q.tags, difficulty: q.difficulty, answerRequired: q.answerRequired, required: q.required, ...(q.type === "ordering" ? { orderingBehavior: q.orderingBehavior } : {}), ...(q.type === "multi_typing" ? { multiTypingFields: q.fields.map((field) => ({ id: field.id, label: field.label })) } : {}), ...(q.type === "multi_write_vertical" ? { multiWriteFields: q.fields.map((field) => ({ id: field.id, label: field.label })) } : {}), ...(q.type === "text_select" ? { textSelectSegments: q.segments, textSelectPolicy: q.selectionPolicy } : {}) })),
     answers,
-    llmInstructions: `Grade this ${quiz.mode} activity titled "${quiz.title}" using the SubmissionCapsule only. Use the answerKey if present. Grade blank non-required answers case-by-case based on the activity context. In strict knowledge checks, skipped relevant items can be Incorrect or Needs review; in casual practice/check-ins, blank optional items may be omitted from the score when useful; in developer/app smoke tests, prioritize UX/debug findings over the academic score. Confidence scale: confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat confidence as a weak signal, not proof: high-confidence wrong can be a misconception, misclick, careless error, unclear wording, or UI issue. Blank answers mean no response; do not infer why. For response.kind=other, grade the text semantically. For ordering questions, response arrays are visual top-to-bottom order; use answer.meta.topLabel and answer.meta.bottomLabel to interpret endpoints. These grading instructions apply only while responding to this submitted activity. Give targeted review and, if useful, one short follow-up drill, then stop.`
+    llmInstructions: `Grade this ${quiz.mode} activity titled "${quiz.title}" using the SubmissionCapsule only. Use the answerKey if present. Grade blank non-required answers case-by-case based on the activity context. In strict knowledge checks, skipped relevant items can be Incorrect or Needs review; in casual practice/check-ins, blank optional items may be omitted from the score when useful; in developer/app smoke tests, prioritize UX/debug findings over the academic score. Confidence scale: confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat confidence as a weak signal, not proof: high-confidence wrong can be a misconception, misclick, careless error, unclear wording, or UI issue. Blank answers mean no response; do not infer why. For response.kind=other, grade the text semantically. For ordering questions, response arrays are visual top-to-bottom order; use answer.meta.topLabel and answer.meta.bottomLabel to interpret endpoints. For multi_typing and multi_write_vertical questions, response is a field-id keyed object. For text_select questions, response is an array of selected segment ids. Include optional Correct/Incorrect/Partially correct/Needs review marks when helpful. These grading instructions apply only while responding to this submitted activity. Give targeted review and, if useful, one short follow-up drill, then stop.`
   };
   if (gradingPolicy.includeAnswerKeyInSubmission !== false) {
     const answerKey = buildAnswerKey(quiz.questions);
@@ -968,14 +594,15 @@ function buildCompletionSummary(quiz, answers, displayPolicy = normalizeDisplayP
   const missingRequiredConfidenceIds = [];
   for (const question of required) {
     const answer = answerMap.get(question.id);
-    if (!answerHasResponse(answer)) missingRequiredQuestionIds.push(question.id);
-    if (questionRequiresConfidence(question, displayPolicy) && answerHasResponse(answer) && !isValidConfidence(answer.confidence)) missingRequiredConfidenceIds.push(question.id);
+    const hasAnswer = answerHasResponseForQuestion(question, answer);
+    if (!hasAnswer) missingRequiredQuestionIds.push(question.id);
+    if (questionRequiresConfidence(question, displayPolicy) && hasAnswer && !isValidConfidence(answer.confidence)) missingRequiredConfidenceIds.push(question.id);
   }
   return {
     requiredTotal: required.length,
     requiredAnswered: required.length - missingRequiredQuestionIds.length,
     optionalTotal: optional.length,
-    optionalAnswered: optional.filter((question) => answerHasResponse(answerMap.get(question.id))).length,
+    optionalAnswered: optional.filter((question) => answerHasResponseForQuestion(question, answerMap.get(question.id))).length,
     missingRequiredQuestionIds,
     missingRequiredConfidenceIds,
     isComplete: missingRequiredQuestionIds.length === 0 && missingRequiredConfidenceIds.length === 0,
@@ -998,6 +625,37 @@ function isQuestionRequired(question, activityPolicy) {
   return question.answerRequired ?? question.required ?? activityPolicy.defaultAnswerRequired;
 }
 
+function answerHasResponseForQuestion(question, answer) {
+  if (!answerHasResponse(answer)) return false;
+  const response = answer?.response;
+  if (question?.type === "multi_typing" || question?.type === "multi_write_vertical") {
+    if (!response || typeof response !== "object" || Array.isArray(response) || response.kind) return false;
+    return Array.isArray(question.fields) && question.fields.every((field) => typeof response[field.id] === "string" && response[field.id].trim().length > 0);
+  }
+  if (question?.type === "matching") {
+    if (!Array.isArray(response) || !Array.isArray(question.left) || !Array.isArray(question.right)) return false;
+    const rightIds = new Set(question.right.map((item) => item.id));
+    return question.left.every((left) => response.some((pair) => pair && pair.leftId === left.id && rightIds.has(pair.rightId)));
+  }
+  if (question?.type === "ordering") return Array.isArray(response) && Array.isArray(question.items) && response.length >= question.items.length;
+  if (question?.type === "text_select") return isCompleteTextSelectAnswer(question, response);
+  return true;
+}
+
+function isCompleteTextSelectAnswer(question, response) {
+  if (!Array.isArray(response) || !Array.isArray(question.segments)) return false;
+  const selectableIds = new Set(question.segments.filter((segment) => segment && segment.selectable !== false).map((segment) => segment.id));
+  const selected = response.filter((id) => selectableIds.has(id));
+  const policy = question.selectionPolicy && typeof question.selectionPolicy === "object" ? question.selectionPolicy : {};
+  if (policy.mode === "exact_count" || Number.isInteger(policy.count)) return selected.length === (Number.isInteger(policy.count) ? policy.count : 1);
+  if (policy.mode === "range") {
+    if (Number.isInteger(policy.min) && selected.length < policy.min) return false;
+    if (Number.isInteger(policy.max) && selected.length > policy.max) return false;
+    return selected.length > 0 || policy.min === 0;
+  }
+  return selected.length > 0;
+}
+
 function answerHasResponse(answer) {
   if (!answer) return false;
   const response = answer.response;
@@ -1007,6 +665,7 @@ function answerHasResponse(answer) {
   if (typeof response === "object") {
     if (response.kind === "other") return typeof response.text === "string" && response.text.trim().length > 0 || Array.isArray(response.selections) && response.selections.length > 0;
     if (response.kind === "cancelled") return true;
+    return Object.values(response).some((value) => typeof value === "string" && value.trim().length > 0);
   }
   return true;
 }
@@ -1014,6 +673,11 @@ function answerHasResponse(answer) {
 function buildAnswerKey(questions) {
   return questions.flatMap((q) => {
     if (q.answer !== undefined) return [{ questionId: q.id, answer: q.answer, tolerance: q.tolerance, unit: q.unit, expectedKeywords: q.expectedKeywords, rubric: q.rubric }];
+    if ((q.type === "multi_typing" || q.type === "multi_write_vertical") && Array.isArray(q.fields)) {
+      const fieldAnswers = Object.fromEntries(q.fields.filter((field) => field.answer !== undefined).map((field) => [field.id, field.answer]));
+      const fieldKeywords = Object.fromEntries(q.fields.filter((field) => field.expectedKeywords !== undefined).map((field) => [field.id, field.expectedKeywords]));
+      if (Object.keys(fieldAnswers).length || Object.keys(fieldKeywords).length) return [{ questionId: q.id, answer: Object.keys(fieldAnswers).length ? fieldAnswers : undefined, expectedKeywords: Object.keys(fieldKeywords).length ? fieldKeywords : undefined }];
+    }
     if (q.expectedKeywords || q.rubric) return [{ questionId: q.id, expectedKeywords: q.expectedKeywords, rubric: q.rubric }];
     return [];
   });
@@ -1030,7 +694,7 @@ function makePrompt(submission) {
     `Completion: ${submission.completion?.requiredAnswered ?? "?"}/${submission.completion?.requiredTotal ?? "?"} required answered; missing: ${missing.join(", ") || "none"}.`,
     "Grade using the structured SubmissionCapsule returned by the tool. Do not recreate the quiz. Grade blank non-required answers case-by-case based on whether this is strict assessment, casual practice, or developer/app testing.",
     "Use confidence cautiously as a weak signal. If answer text conflicts with confidence, prioritize the answer text.",
-    "For ordering questions, response arrays are visual top-to-bottom order; use answer.meta.topLabel and answer.meta.bottomLabel to interpret endpoints.",
+    "For ordering questions, response arrays are visual top-to-bottom order; use answer.meta.topLabel and answer.meta.bottomLabel to interpret endpoints. For multi_typing and multi_write_vertical questions, response is a field-id keyed object. For text_select questions, response is selected segment ids. Include optional Correct/Incorrect/Partially correct/Needs review marks when helpful.",
   ].join("\n");
 }
 
@@ -1068,7 +732,7 @@ function prepareQuizForRender(input) {
   return { ok: errors.length === 0, quiz, errors, warnings: diagnostics.warnings, diagnostics };
 }
 const SUPPORTED_QUESTION_TYPES = new Set(["multiple_choice", "multi_select", "true_false", "fill_blank", "short_answer", "long_response", "multi_typing", "multi_write_vertical", "text_select", "matching", "ordering", "numeric"]);
-const QUESTION_TYPE_ALIASES = new Map([["multipleChoice", "multiple_choice"], ["multiple-choice", "multiple_choice"], ["mcq", "multiple_choice"], ["multiSelect", "multi_select"], ["multi-select", "multi_select"], ["trueFalse", "true_false"], ["true-false", "true_false"], ["fillBlank", "fill_blank"], ["fill-in-the-blank", "fill_blank"], ["shortAnswer", "short_answer"], ["short-answer", "short_answer"], ["longResponse", "long_response"], ["long-response", "long_response"], ["multiTyping", "multi_typing"], ["multi-typing", "multi_typing"], ["multiWriteVertical", "multi_write_vertical"], ["multi-write-vertical", "multi_write_vertical"], ["textSelect", "text_select"], ["text-select", "text_select"]]);
+const QUESTION_TYPE_ALIASES = new Map([["multipleChoice", "multiple_choice"], ["multiple-choice", "multiple_choice"], ["mcq", "multiple_choice"], ["multiSelect", "multi_select"], ["multi-select", "multi_select"], ["trueFalse", "true_false"], ["true-false", "true_false"], ["fillBlank", "fill_blank"], ["fill-in-the-blank", "fill_blank"], ["shortAnswer", "short_answer"], ["short-answer", "short_answer"], ["longResponse", "long_response"], ["long-response", "long_response"], ["multiTyping", "multi_typing"], ["multi-typing", "multi_typing"], ["multi_input", "multi_typing"], ["multi-input", "multi_typing"], ["multiWriteVertical", "multi_write_vertical"], ["multi-write-vertical", "multi_write_vertical"], ["multi_write", "multi_write_vertical"], ["multi-write", "multi_write_vertical"], ["multiWrite", "multi_write_vertical"], ["textSelect", "text_select"], ["text-select", "text_select"], ["select_text", "text_select"], ["select-text", "text_select"]]);
 function normalizeQuestion(raw, index, warnings, normalizedFields = []) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
   const q = { ...raw };
@@ -1089,7 +753,35 @@ function normalizeQuestion(raw, index, warnings, normalizedFields = []) {
     q.orderingBehavior = normalizeOrderingBehavior(q.orderingBehavior, q.prompt);
     if (!raw.orderingBehavior) normalizedFields.push({ path: `questions[${index}].orderingBehavior`, from: "prompt", to: "orderingBehavior" });
   }
+  if ((q.type === "multi_typing" || q.type === "multi_write_vertical") && Array.isArray(q.fields)) {
+    q.fields = q.fields.map((field, fieldIndex) => normalizeTypingField(field, fieldIndex));
+  }
+  if (q.type === "text_select") {
+    if (!Array.isArray(q.segments) && Array.isArray(q.selectableSegments)) q.segments = q.selectableSegments;
+    if (Array.isArray(q.segments)) q.segments = q.segments.map((segment, segmentIndex) => normalizeTextSelectSegment(segment, segmentIndex)).filter(Boolean);
+    q.selectionPolicy = normalizeTextSelectPolicy(q.selectionPolicy ?? q.selectPolicy ?? q.selection ?? q.select);
+  }
   return q;
+}
+function normalizeTypingField(field, fieldIndex) {
+  const raw = field && typeof field === "object" && !Array.isArray(field) ? field : {};
+  return { ...raw, id: String(raw.id ?? `field${fieldIndex + 1}`), label: String(raw.label ?? raw.id ?? `Field ${fieldIndex + 1}`) };
+}
+function normalizeTextSelectSegment(segment, segmentIndex) {
+  if (typeof segment === "string") return { id: `segment${segmentIndex + 1}`, text: segment, selectable: true };
+  if (!segment || typeof segment !== "object" || Array.isArray(segment)) return null;
+  const id = String(segment.id ?? `segment${segmentIndex + 1}`);
+  const text = String(segment.text ?? segment.label ?? segment.value ?? "");
+  if (!id.trim() || !text.trim()) return null;
+  return { ...segment, id, text, selectable: segment.selectable === false ? false : true };
+}
+function normalizeTextSelectPolicy(raw) {
+  const policy = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const count = Number.isInteger(policy.count) && policy.count > 0 ? policy.count : undefined;
+  const min = Number.isInteger(policy.min) && policy.min >= 0 ? policy.min : undefined;
+  const max = Number.isInteger(policy.max) && policy.max > 0 ? policy.max : undefined;
+  const mode = policy.mode === "exact_count" || policy.mode === "exact" || count !== undefined ? "exact_count" : policy.mode === "range" || min !== undefined || max !== undefined ? "range" : "all_that_apply";
+  return { mode, ...(count !== undefined ? { count } : {}), ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}), ...(typeof policy.instruction === "string" && policy.instruction.trim() ? { instruction: policy.instruction.trim() } : {}) };
 }
 function normalizeChoices(choices, index, warnings) {
   const ids = [], texts = [];
@@ -1145,10 +837,10 @@ function getRenderDiagnostics(quiz, inheritedWarnings = [], normalizedFields = [
     }
     componentByQuestion[String(questionId)] = rendererComponentForType(q.type);
     if ((q.type === "multiple_choice" || q.type === "multi_select") && (!Array.isArray(q.choices) || q.choices.length < 1 || !q.choices.every((choice) => typeof choice === "string" && choice.trim().length > 0))) unrenderableQuestions.push({ index, questionId, reason: "Choice question requires choices: string[] with at least one non-empty choice." });
-    if (q.type === "matching" && (!Array.isArray(q.left) || !Array.isArray(q.right) || q.left.length < 1 || q.right.length < 1 || !q.left.every(isRenderableItem) || !q.right.every(isRenderableItem))) unrenderableQuestions.push({ index, questionId, reason: "Matching question requires left and right arrays of {id,text} items." });
     if (q.type === "multi_typing" && (!Array.isArray(q.fields) || q.fields.length < 2 || !q.fields.every(isRenderableTypingField))) unrenderableQuestions.push({ index, questionId, reason: "Multi-typing question requires fields: {id,label}[] with at least two valid fields." });
     if (q.type === "multi_write_vertical" && (!Array.isArray(q.fields) || q.fields.length < 1 || !q.fields.every(isRenderableTypingField))) unrenderableQuestions.push({ index, questionId, reason: "Multi-write vertical question requires fields: {id,label}[] with at least one valid field." });
-    if (q.type === "text_select" && (!Array.isArray(q.segments) || q.segments.length < 1 || !q.segments.every(isRenderableTextSegment))) unrenderableQuestions.push({ index, questionId, reason: "Text-select question requires segments: {id,text}[] with at least one valid segment." });
+    if (q.type === "text_select" && (!Array.isArray(q.segments) || q.segments.length < 1 || !q.segments.every(isRenderableTextSelectSegment))) unrenderableQuestions.push({ index, questionId, reason: "Text-select question requires segments: {id,text}[] with at least one valid segment." });
+    if (q.type === "matching" && (!Array.isArray(q.left) || !Array.isArray(q.right) || q.left.length < 1 || q.right.length < 1 || !q.left.every(isRenderableItem) || !q.right.every(isRenderableItem))) unrenderableQuestions.push({ index, questionId, reason: "Matching question requires left and right arrays of {id,text} items." });
     if (q.type === "ordering" && (!Array.isArray(q.items) || q.items.length < 2 || !q.items.every(isRenderableItem))) unrenderableQuestions.push({ index, questionId, reason: "Ordering question requires items: {id,text}[] with at least two valid items." });
     validateAnswerShape(q, questionId, answerKeyWarnings);
   });
@@ -1158,13 +850,13 @@ function getRenderDiagnostics(quiz, inheritedWarnings = [], normalizedFields = [
 function rendererComponentForType(type) {
   return ({ multiple_choice: "MultipleChoiceQuestion", multi_select: "MultiSelectQuestion", true_false: "TrueFalseQuestion", fill_blank: "FillBlankQuestion", short_answer: "ShortAnswerQuestion", long_response: "LongResponseQuestion", multi_typing: "MultiTypingQuestion", multi_write_vertical: "MultiWriteVerticalQuestion", text_select: "TextSelectQuestion", numeric: "NumericQuestion", ordering: "OrderingQuestion", matching: "MatchingQuestion" })[type] || "UnsupportedQuestion";
 }
-function isRenderableTypingField(field) {
-  return Boolean(field) && typeof field === "object" && isNonEmptyString(field.id) && isNonEmptyString(field.label);
-}
-function isRenderableTextSegment(segment) {
-  return Boolean(segment) && typeof segment === "object" && isNonEmptyString(segment.id) && isNonEmptyString(segment.text);
-}
 function isRenderableItem(item) {
+  return Boolean(item) && typeof item === "object" && isNonEmptyString(item.id) && isNonEmptyString(item.text);
+}
+function isRenderableTypingField(item) {
+  return Boolean(item) && typeof item === "object" && isNonEmptyString(item.id) && isNonEmptyString(item.label);
+}
+function isRenderableTextSelectSegment(item) {
   return Boolean(item) && typeof item === "object" && isNonEmptyString(item.id) && isNonEmptyString(item.text);
 }
 function validateAnswerShape(q, questionId, warnings) {
@@ -1174,8 +866,8 @@ function validateAnswerShape(q, questionId, warnings) {
   if (q.type === "true_false" && typeof q.answer !== "boolean") warnings.push(`${questionId}: true_false answer should be boolean.`);
   if (q.type === "numeric" && typeof q.answer !== "number") warnings.push(`${questionId}: numeric answer should be a number.`);
   if ((q.type === "fill_blank" || q.type === "short_answer") && !(typeof q.answer === "string" || Array.isArray(q.answer))) warnings.push(`${questionId}: ${q.type} answer should be string or string[].`);
-  if ((q.type === "multi_typing" || q.type === "multi_write_vertical") && (!q.answer || typeof q.answer !== "object" || Array.isArray(q.answer))) warnings.push(`${questionId}: ${q.type} answer should be a field-id keyed object.`);
-  if (q.type === "text_select" && !Array.isArray(q.answer)) warnings.push(`${questionId}: text_select answer should be selected segment ids.`);
+  if ((q.type === "multi_typing" || q.type === "multi_write_vertical") && q.answer !== undefined && (!q.answer || typeof q.answer !== "object" || Array.isArray(q.answer))) warnings.push(`${questionId}: ${q.type} answer should be a field-id keyed object.`);
+  if (q.type === "text_select" && q.answer !== undefined && !Array.isArray(q.answer)) warnings.push(`${questionId}: text_select answer should be string[] selected segment ids.`);
   if (q.type === "ordering" && Array.isArray(q.items) && Array.isArray(q.answer)) {
     const ids = new Set(q.items.map((item) => item.id));
     if (!q.answer.every((id) => ids.has(id))) warnings.push(`${questionId}: ordering answer should contain only item ids from items[].`);
@@ -1191,11 +883,19 @@ function getQuizId(quiz) {
 }
 
 function normalizeDisplayPolicy(policy = {}) {
-  return { showCorrectAnswers: policy.showCorrectAnswers || "after_submit", showExplanations: policy.showExplanations || "llm_after_submit", requireConfidence: policy.requireConfidence ?? true };
+  return {
+    showCorrectAnswers: policy.showCorrectAnswers || "after_submit",
+    showExplanations: policy.showExplanations || "llm_after_submit",
+    requireConfidence: policy.requireConfidence ?? true
+  };
 }
 
 function normalizeGradingPolicy(policy = {}) {
-  return { preferredGrader: policy.preferredGrader || "llm", includeAnswerKeyInSubmission: policy.includeAnswerKeyInSubmission ?? true };
+  return {
+    preferredGrader: policy.preferredGrader || "llm",
+    includeAnswerKeyInSubmission: policy.includeAnswerKeyInSubmission ?? true,
+    requestCorrectnessMarks: policy.requestCorrectnessMarks ?? true
+  };
 }
 
 function normalizeActivityPolicy(policy = {}, warnings = [], normalizedFields = []) {
@@ -1228,30 +928,138 @@ function toPublicQuiz(quiz) {
   return { ...quiz, activityPolicy: toCanonicalActivityPolicy(quiz.activityPolicy) };
 }
 
-function ok(id, result) { send({ jsonrpc: "2.0", id, result }); }
-function fail(id, code, message, data) { send({ jsonrpc: "2.0", id, error: { code, message, ...(data ? { data } : {}) } }); }
-function send(message) {
-  const body = JSON.stringify(message);
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n${body}`);
+function debugVersion(url) {
+  const origin = publicOriginFrom(url);
+  const assetsDir = join(DIST_DIR, "assets");
+  const files = existsSync(assetsDir) ? readdirSync(assetsDir) : [];
+  const js = files.find((file) => file.endsWith(".js")) || null;
+  const css = files.find((file) => file.endsWith(".css")) || null;
+  const jsText = js ? readFileSync(join(assetsDir, js), "utf8") : "";
+  return {
+    ok: true,
+    name: "betterquizzes",
+    version: VERSION,
+    stage: "V1",
+    build: "bqv1p2",
+    protocolVersion: PROTOCOL_VERSION,
+    publicOrigin: origin,
+    widgetResource: RESOURCE_URI,
+    resourceAliases: RESOURCE_URI_ALIASES,
+    distPresent: existsSync(DIST_DIR),
+    assets: { js, css },
+    contains: {
+      version: jsText.includes(VERSION),
+      responseLimit: jsText.includes("responseLimit"),
+      dragHandle: jsText.includes("drag-handle"),
+      stalePreviousMinor: jsText.includes(["12", "4"].join(".")),
+      staleAncient: jsText.includes(["12", "0"].join(".")),
+      staleLegacyStage: jsText.includes(["Stage", "11.3"].join(" "))
+    }
+  };
 }
 
-let buffer = Buffer.alloc(0);
-process.stdin.on("data", (chunk) => {
-  buffer = Buffer.concat([buffer, chunk]);
-  while (true) {
-    const headerEnd = buffer.indexOf("\r\n\r\n");
-    if (headerEnd === -1) return;
-    const header = buffer.slice(0, headerEnd).toString("utf8");
-    const match = /Content-Length:\s*(\d+)/i.exec(header);
-    if (!match) {
-      buffer = buffer.slice(headerEnd + 4);
-      continue;
+function connectorCard(url) {
+  const origin = publicOriginFrom(url);
+  return {
+    name: "BetterQuizzes",
+    description: "Open LLM-created quizzes in a clean interface, collect answers and confidence, and return a structured SubmissionCapsule for LLM grading.",
+    mcpEndpoint: origin + "/mcp",
+    health: origin + "/healthz",
+    manifest: origin + "/.well-known/mcp-app.json",
+    inspector: origin + "/mcp-inspector.json",
+    connectorSetup: {
+      connectorName: "BetterQuizzes",
+      connectorUrl: origin + "/mcp",
+      instructions: "Use this HTTPS /mcp URL when creating a connector in ChatGPT developer mode. After connecting, the model should call create_quiz with a complete QuizSpec v2, then grade from the SubmissionCapsule returned by submit_answers."
     }
-    const length = Number(match[1]);
-    const bodyStart = headerEnd + 4;
-    if (buffer.length < bodyStart + length) return;
-    const body = buffer.slice(bodyStart, bodyStart + length).toString("utf8");
-    buffer = buffer.slice(bodyStart + length);
-    try { handleRequest(JSON.parse(body)); } catch (error) { fail(null, -32700, error instanceof Error ? error.message : String(error)); }
+  };
+}
+
+function appManifest(url) {
+  const origin = publicOriginFrom(url);
+  return {
+    name: "BetterQuizzes",
+    title: "BetterQuizzes",
+    version: VERSION,
+    stage: "V1",
+    description: "A neutral LLM-controlled quiz UI that returns structured answer submissions for model grading and tutoring.",
+    protocolVersion: PROTOCOL_VERSION,
+    supportedProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
+    transport: { type: "streamable-http", endpoint: origin + "/mcp", stateless: true },
+    mcpEndpoint: "/mcp",
+    health: "/healthz",
+    widgetResource: RESOURCE_URI,
+    resourceAliases: RESOURCE_URI_ALIASES,
+    resourceMimeType: RESOURCE_MIME_TYPE,
+    tools: tools.map((tool) => ({ name: tool.name, title: tool.title, description: tool.description })),
+    privacy: { storesQuizDataInMemoryOnly: true, durableStorage: false, authenticationRequired: false },
+    development: { inspectorTarget: origin + "/mcp", localWebApp: origin + "/" },
+    modelInstructions: MODEL_INSTRUCTIONS
+  };
+}
+
+function setBaseHeaders(response) {
+  response.setHeader("Access-Control-Allow-Origin", process.env.CORS_ORIGIN || "*");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "content-type,authorization,mcp-session-id,mcp-protocol-version,accept");
+  response.setHeader("MCP-Protocol-Version", PROTOCOL_VERSION);
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("Referrer-Policy", "no-referrer");
+  response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  response.setHeader("Cache-Control", "no-store, max-age=0");
+}
+
+function sendJson(response, status, value) {
+  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  response.end(JSON.stringify(value, null, 2));
+}
+
+function okResponse(id, result) {
+  return { jsonrpc: "2.0", id, result };
+}
+
+function errorResponse(id, code, message, data) {
+  return { jsonrpc: "2.0", id, error: { code, message, ...(data ? { data } : {}) } };
+}
+
+function readBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => resolve(body));
+    request.on("error", reject);
+  });
+}
+
+function serveStatic(response, pathname) {
+  if (!existsSync(DIST_DIR)) return sendJson(response, 404, { error: "dist missing; run npm run build first" });
+  const safePath = normalize(decodeURIComponent(pathname)).replace(/^(\.\.(\/|\\|$))+/, "");
+  const filePath = safePath === "/" || safePath === "." ? join(DIST_DIR, "index.html") : join(DIST_DIR, safePath);
+  if (!filePath.startsWith(DIST_DIR)) return sendJson(response, 403, { error: "forbidden" });
+  if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+    const fallback = join(DIST_DIR, "index.html");
+    if (existsSync(fallback)) return sendFile(response, fallback);
+    return sendJson(response, 404, { error: "not found" });
   }
-});
+  return sendFile(response, filePath);
+}
+
+function sendFile(response, filePath) {
+  const type = contentType(filePath);
+  response.writeHead(200, { "Content-Type": type });
+  response.end(readFileSync(filePath));
+}
+
+function contentType(filePath) {
+  const ext = extname(filePath).toLowerCase();
+  return {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon"
+  }[ext] || "application/octet-stream";
+}

@@ -136,10 +136,6 @@ export type BaseQuestion = {
   choiceBehavior?: ChoiceBehavior;
   /** AI-configurable text response limits. Omit or set maxChars:null for unlimited. */
   responseLimit?: ResponseLimit;
-  requireConfidence?: boolean;
-  confidenceRequired?: boolean;
-  disableConfidence?: boolean;
-  confidence?: boolean | "required" | "optional" | "disabled";
 };
 
 export type MultipleChoiceQuestion = BaseQuestion & { type: "multiple_choice"; choices: string[]; answer?: number };
@@ -263,10 +259,6 @@ export type QuestionSnapshot = {
   multiWriteFields?: { id: string; label: string }[];
   textSelectSegments?: { id: string; text: string; selectable?: boolean }[];
   textSelectPolicy?: TextSelectPolicy;
-  requireConfidence?: boolean;
-  confidenceRequired?: boolean;
-  disableConfidence?: boolean;
-  confidence?: boolean | "required" | "optional" | "disabled";
 };
 
 export type AnswerKeyEntry = {
