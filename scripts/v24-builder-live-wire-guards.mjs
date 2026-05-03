@@ -88,9 +88,9 @@ if (fs.existsSync("scripts/v1-regression.mjs")) {
 }
 
 if (failures.length) {
-  console.error("V23 regression guards failed:");
+  console.error("V24 live builder tool guards failed:");
   for (const failure of failures) console.error(" - " + failure);
   process.exit(1);
 }
 
-console.log("V23 regression guards passed.");
+console.log("V24 live builder tool guards passed.");

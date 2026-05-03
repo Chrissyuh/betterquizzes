@@ -12156,7 +12156,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 			return {
 				...previous,
 				[currentQuestion.id]: {
-					response: getInitialOrderingOrder(currentQuestion, items),
+					response: bqV26AvoidAlreadyCorrectOrdering(currentQuestion, items, getInitialOrderingOrder(currentQuestion, items)),
 					confidence: existing?.confidence,
 					firstSeenAt: existing?.firstSeenAt ?? now,
 					lastUpdatedAt: existing?.lastUpdatedAt ?? now
@@ -12744,6 +12744,30 @@ function getOrderingItems(question) {
 		id: String(item.id),
 		text: String(item.text)
 	})).filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
+}
+function bqV26OrderingKey(item) {
+	if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") return String(item);
+	if (item && typeof item === "object") {
+		const record = item;
+		return String(record.id ?? record.value ?? record.label ?? record.text ?? JSON.stringify(record));
+	}
+	return String(item ?? "");
+}
+function bqV26SameOrdering(left, right) {
+	if (!Array.isArray(left) || !Array.isArray(right)) return false;
+	if (left.length !== right.length || left.length < 2) return false;
+	return left.every((item, index) => bqV26OrderingKey(item) === bqV26OrderingKey(right[index]));
+}
+function bqV26QuestionAnswerOrder(question, items) {
+	const record = question;
+	const candidate = record.answer ?? record.correctAnswer ?? record.correctOrder ?? record.answerKey ?? record.order;
+	if (Array.isArray(candidate)) return candidate;
+	return items.map((item) => item.id);
+}
+function bqV26AvoidAlreadyCorrectOrdering(question, items, order) {
+	if (!Array.isArray(order) || order.length < 2) return order;
+	if (!bqV26SameOrdering(order, bqV26QuestionAnswerOrder(question, items))) return order;
+	return [...order.slice(1), order[0]];
 }
 function getInitialOrderingOrder(question, items = getOrderingItems(question)) {
 	const itemIds = items.map((item) => item.id);

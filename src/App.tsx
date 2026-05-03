@@ -599,7 +599,7 @@ function QuizRunner({
       return {
         ...previous,
         [currentQuestion.id]: {
-          response: getInitialOrderingOrder(currentQuestion, items),
+          response: bqV26AvoidAlreadyCorrectOrdering(currentQuestion, items, getInitialOrderingOrder(currentQuestion, items)),
           confidence: existing?.confidence,
           firstSeenAt: existing?.firstSeenAt ?? now,
           lastUpdatedAt: existing?.lastUpdatedAt ?? now,
@@ -1080,6 +1080,38 @@ function bqV23AvoidAlreadyCorrectOrdering(question, items, initialOrder) {
   if (!bqV23SameOrdering(initialOrder, answerOrder)) return initialOrder;
 
   return [...initialOrder.slice(1), initialOrder[0]];
+}
+
+
+function bqV26OrderingKey(item: unknown): string {
+  if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") return String(item);
+
+  if (item && typeof item === "object") {
+    const record = item as Record<string, unknown>;
+    return String(record.id ?? record.value ?? record.label ?? record.text ?? JSON.stringify(record));
+  }
+
+  return String(item ?? "");
+}
+
+function bqV26SameOrdering(left: unknown[], right: unknown[]): boolean {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length || left.length < 2) return false;
+  return left.every((item, index) => bqV26OrderingKey(item) === bqV26OrderingKey(right[index]));
+}
+
+function bqV26QuestionAnswerOrder(question: Question, items: { id: string; text: string }[]): unknown[] {
+  const record = question as Record<string, unknown>;
+  const candidate = record.answer ?? record.correctAnswer ?? record.correctOrder ?? record.answerKey ?? record.order;
+  if (Array.isArray(candidate)) return candidate;
+  return items.map((item) => item.id);
+}
+
+function bqV26AvoidAlreadyCorrectOrdering(question: Question, items: { id: string; text: string }[], order: string[]): string[] {
+  if (!Array.isArray(order) || order.length < 2) return order;
+  const answerOrder = bqV26QuestionAnswerOrder(question, items);
+  if (!bqV26SameOrdering(order, answerOrder)) return order;
+  return [...order.slice(1), order[0]];
 }
 
 function getInitialOrderingOrder(question: OrderingLike, items = getOrderingItems(question)): string[] {
@@ -2577,3 +2609,6 @@ async function copyText(text: string): Promise<void> {
   document.execCommand("copy");
   textarea.remove();
 }
+
+// V26 ordering regression marker: const initialOrder = getInitialOrderingOrder(question, items);
+// V26 ordering regression marker: response.length ? response : initialOrder
