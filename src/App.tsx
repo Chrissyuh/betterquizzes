@@ -75,6 +75,20 @@ function bqV40ApplyHostClass() {
 
 bqV40ApplyHostClass();
 
+
+function bqV44ShouldUseEarlyMobileFollowUp() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  if (!bqV40IsChatGptHost()) return false;
+
+  const userAgent = navigator.userAgent.toLowerCase();
+  const looksMobile =
+    /iphone|ipad|ipod|android|mobile/.test(userAgent) ||
+    (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches) ||
+    navigator.maxTouchPoints > 0;
+
+  return looksMobile;
+}
+
 type Screen = "loading" | "import" | "quiz" | "submission";
 type DraftAnswer = {
   response: AnswerResponse;
@@ -735,6 +749,29 @@ function QuizRunner({
       });
     }
 
+    let bqV44EarlyFollowUpResult: Awaited<ReturnType<typeof sendSubmissionFollowUp>> | null = null;
+
+    if (widgetMode && bqV44ShouldUseEarlyMobileFollowUp()) {
+      bqV44EarlyFollowUpResult = await sendSubmissionFollowUp(buildLlmReturnPrompt(submission), 4500);
+
+      if (bqV44EarlyFollowUpResult.status === "sent") {
+        submission.status = {
+          ...(submission.status ?? { localSaved: true, hostSubmitted: false, followUpRequested: false, duplicateSubmission: false, warnings: [] }),
+          followUpRequested: true,
+        };
+
+        persistSubmissionState({
+          status: "grade_requested",
+          quizId: submission.quizId,
+          launchId,
+          currentIndex,
+          drafts,
+          session,
+          submission,
+        });
+      }
+    }
+
     let hostSubmitted = false;
     let bridgeError: string | null = null;
     let hostResult: ToolResultLike | null = null;
@@ -770,8 +807,9 @@ function QuizRunner({
         });
       }
 
-      const firstStatus: SubmissionDeliveryStatus = widgetMode ? "requesting_grade" : "submitted";
-      onFinish({ submission, session, hostSubmitted, followUpRequested: false, followUpStatus: firstStatus, followUpAttempts: 0, followUpMessage: bridgeError ?? undefined });
+      const bqV44EarlyFollowUpSent = bqV44EarlyFollowUpResult?.status === "sent";
+      const firstStatus: SubmissionDeliveryStatus = bqV44EarlyFollowUpSent ? "grade_requested" : widgetMode ? "requesting_grade" : "submitted";
+      onFinish({ submission, session, hostSubmitted, followUpRequested: bqV44EarlyFollowUpSent, followUpStatus: firstStatus, followUpAttempts: 0, followUpMessage: bridgeError ?? undefined });
 
       if (widgetMode) {
         void requestChatGptGradeOnce({

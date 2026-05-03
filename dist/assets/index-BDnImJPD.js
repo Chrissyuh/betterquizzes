@@ -11011,23 +11011,33 @@ async function submitToHost(submission, timeoutMs = 8e3) {
 }
 async function sendSubmissionFollowUp(prompt, timeoutMs = 8e3) {
 	const bridge = getOpenAiBridge();
-	if (!bridge?.sendFollowUpMessage) return {
+	const sendFollowUpMessage = bridge?.sendFollowUpMessage;
+	if (!sendFollowUpMessage) return {
 		status: "unavailable",
 		message: "ChatGPT follow-up is unavailable in this host session."
 	};
-	try {
-		await withTimeout(Promise.resolve(bridge.sendFollowUpMessage({
+	const attempts = [
+		{
 			prompt,
 			scrollToBottom: true
-		})), timeoutMs, "Timed out sending follow-up message");
+		},
+		{ prompt },
+		{
+			prompt,
+			scrollToBottom: false
+		}
+	];
+	let lastMessage = "";
+	for (const message of attempts) try {
+		await withTimeout(Promise.resolve(sendFollowUpMessage.call(bridge, message)), timeoutMs, "Timed out sending follow-up message");
 		return { status: "sent" };
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		return {
-			status: message.toLowerCase().includes("timed out") ? "timeout" : "failed",
-			message
-		};
+		lastMessage = error instanceof Error ? error.message : String(error);
 	}
+	return {
+		status: lastMessage.toLowerCase().includes("timed out") ? "timeout" : "failed",
+		message: lastMessage || "ChatGPT follow-up failed."
+	};
 }
 function asSubmissionBridgeStatus(value) {
 	switch (value) {
@@ -11661,6 +11671,12 @@ function bqV40ApplyHostClass() {
 	else document.documentElement.classList.remove("bq-chatgpt-host");
 }
 bqV40ApplyHostClass();
+function bqV44ShouldUseEarlyMobileFollowUp() {
+	if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+	if (!bqV40IsChatGptHost()) return false;
+	const userAgent = navigator.userAgent.toLowerCase();
+	return /iphone|ipad|ipod|android|mobile/.test(userAgent) || typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+}
 var SAMPLE_QUIZZES = [
 	tiny_demo_default,
 	aphg_demo_default,
@@ -12256,6 +12272,31 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 			session,
 			submission
 		});
+		let bqV44EarlyFollowUpResult = null;
+		if (widgetMode && bqV44ShouldUseEarlyMobileFollowUp()) {
+			bqV44EarlyFollowUpResult = await sendSubmissionFollowUp(buildLlmReturnPrompt(submission), 4500);
+			if (bqV44EarlyFollowUpResult.status === "sent") {
+				submission.status = {
+					...submission.status ?? {
+						localSaved: true,
+						hostSubmitted: false,
+						followUpRequested: false,
+						duplicateSubmission: false,
+						warnings: []
+					},
+					followUpRequested: true
+				};
+				persistSubmissionState({
+					status: "grade_requested",
+					quizId: submission.quizId,
+					launchId,
+					currentIndex,
+					drafts,
+					session,
+					submission
+				});
+			}
+		}
 		let hostSubmitted = false;
 		let bridgeError = null;
 		let hostResult = null;
@@ -12290,12 +12331,13 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 					error: bridgeError ?? void 0
 				});
 			}
+			const bqV44EarlyFollowUpSent = bqV44EarlyFollowUpResult?.status === "sent";
 			onFinish({
 				submission,
 				session,
 				hostSubmitted,
-				followUpRequested: false,
-				followUpStatus: widgetMode ? "requesting_grade" : "submitted",
+				followUpRequested: bqV44EarlyFollowUpSent,
+				followUpStatus: bqV44EarlyFollowUpSent ? "grade_requested" : widgetMode ? "requesting_grade" : "submitted",
 				followUpAttempts: 0,
 				followUpMessage: bridgeError ?? void 0
 			});

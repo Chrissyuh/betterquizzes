@@ -218,17 +218,37 @@ export async function submitToHost(submission: SubmissionCapsule, timeoutMs = 80
 
 export async function sendSubmissionFollowUp(prompt: string, timeoutMs = 8000): Promise<FollowUpSendResult> {
   const bridge = getOpenAiBridge();
-  if (!bridge?.sendFollowUpMessage) {
+  const sendFollowUpMessage = bridge?.sendFollowUpMessage;
+
+  if (!sendFollowUpMessage) {
     return { status: "unavailable", message: "ChatGPT follow-up is unavailable in this host session." };
   }
 
-  try {
-    await withTimeout(Promise.resolve(bridge.sendFollowUpMessage({ prompt, scrollToBottom: true })), timeoutMs, "Timed out sending follow-up message");
-    return { status: "sent" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { status: message.toLowerCase().includes("timed out") ? "timeout" : "failed", message };
+  const attempts: { prompt: string; scrollToBottom?: boolean }[] = [
+    { prompt, scrollToBottom: true },
+    { prompt },
+    { prompt, scrollToBottom: false },
+  ];
+
+  let lastMessage = "";
+
+  for (const message of attempts) {
+    try {
+      await withTimeout(
+        Promise.resolve(sendFollowUpMessage.call(bridge, message)),
+        timeoutMs,
+        "Timed out sending follow-up message"
+      );
+      return { status: "sent" };
+    } catch (error) {
+      lastMessage = error instanceof Error ? error.message : String(error);
+    }
   }
+
+  return {
+    status: lastMessage.toLowerCase().includes("timed out") ? "timeout" : "failed",
+    message: lastMessage || "ChatGPT follow-up failed."
+  };
 }
 
 function asSubmissionBridgeStatus(value: unknown): SubmissionBridgeState["status"] {
