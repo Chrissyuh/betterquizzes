@@ -524,30 +524,7 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
         ))}
       </section>
 
-      <section className="card stack">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Try it</p>
-            <h2>Open a sample quiz or import your own</h2>
-          </div>
-          <label className="file-button">
-            Upload .bqz/.json
-            <input
-              accept=".bqz,.json,application/json"
-              type="file"
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                if (file) void loadFile(file);
-              }}
-            />
-          </label>
-        </div>
-        <textarea className="code-input" value={text} placeholder="Paste a BetterQuizzes quiz JSON packet here..." onChange={(event) => setText(event.currentTarget.value)} />
-        {error ? <div className="notice-box" role="status">{error}</div> : null}
-        <div className="actions">
-          <button className="primary" type="button" disabled={!text.trim()} onClick={loadFromText}>Load quiz</button>
-        </div>
-      </section>
+      
     </main>
   );
 }

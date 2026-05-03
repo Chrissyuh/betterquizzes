@@ -12017,18 +12017,6 @@ function quizFingerprint(quiz) {
 }
 function ImportScreen({ error, onLoadQuiz }) {
 	const [text, setText] = (0, import_react.useState)("");
-	function loadFromText() {
-		try {
-			onLoadQuiz(JSON.parse(text));
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			alert(`Invalid JSON: ${message}`);
-		}
-	}
-	async function loadFile(file) {
-		const fileText = await file.text();
-		onLoadQuiz(JSON.parse(fileText));
-	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "shell",
 		children: [
@@ -12089,49 +12077,6 @@ function ImportScreen({ error, onLoadQuiz }) {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("small", { children: [sample.questions.length, " questions"] })
 					]
 				}, sample.quizId ?? sample.title))
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-				className: "card stack",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "section-heading",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-							className: "eyebrow",
-							children: "Try it"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Open a sample quiz or import your own" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
-							className: "file-button",
-							children: ["Upload .bqz/.json", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-								accept: ".bqz,.json,application/json",
-								type: "file",
-								onChange: (event) => {
-									const file = event.currentTarget.files?.[0];
-									if (file) loadFile(file);
-								}
-							})]
-						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
-						className: "code-input",
-						value: text,
-						placeholder: "Paste a BetterQuizzes quiz JSON packet here...",
-						onChange: (event) => setText(event.currentTarget.value)
-					}),
-					error ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "notice-box",
-						role: "status",
-						children: error
-					}) : null,
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "actions",
-						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							className: "primary",
-							type: "button",
-							disabled: !text.trim(),
-							onClick: loadFromText,
-							children: "Load quiz"
-						})
-					})
-				]
 			})
 		]
 	});
