@@ -264,6 +264,12 @@ function WidgetLoading({ progress }: { progress?: HydrationProgress | null } = {
           </div>
         </div>
       </section>
+
+      <footer className="site-footer">
+        <span>BetterQuizzes is an interactive quiz app for ChatGPT.</span>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </footer>
     </main>
   );
 }
@@ -273,8 +279,8 @@ function QuizSetupIssue({ message }: { message: string }): ReactElement {
     <main className="shell narrow">
       <section className="card stack">
         <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
-        <h1>Quiz launch interrupted</h1>
-        <p>The quiz packet did not finish arriving. Send the quiz again from the chat; BetterQuizzes will recover automatically if a complete tool input is still available.</p>
+        <h1>Quiz did not finish loading</h1>
+        <p>The quiz did not arrive completely. Ask ChatGPT to send it again, and BetterQuizzes will reopen it when the full quiz is available.</p>
         <details>
           <summary>Technical details</summary>
           <pre className="error-box">{message}</pre>
@@ -483,11 +489,28 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
   return (
     <main className="shell">
       <section className="hero card">
-        <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
-        <h1>Native-ready quiz interface for LLMs.</h1>
+        <div className="site-brand-row">
+          <img className="site-logo" src="/brand/betterquizzes-logo-light.png" alt="" />
+          <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+        </div>
+        <h1>Interactive quizzes that feel built for the lesson.</h1>
         <p>
-          Run it as a normal web app, or launch it as a ChatGPT Apps-style widget from the MCP tool server. BetterQuizzes collects answers and confidence; the LLM grades and teaches.
+          Build, take, and review mixed-format practice quizzes with answer capture, confidence checks, ordering, matching, typed responses, and grade writeback.
         </p>
+      </section>
+
+      <section className="project-panel card">
+        <div>
+          <p className="eyebrow">What it does</p>
+          <h2>BetterQuizzes turns a ChatGPT prompt into a real quiz experience.</h2>
+          <p>It keeps the chat flexible while giving students a structured place to answer, review, submit, and receive feedback.</p>
+        </div>
+        <div className="feature-pills" aria-label="BetterQuizzes features">
+          <span>Mixed question types</span>
+          <span>Draft recovery</span>
+          <span>Grade writeback</span>
+          <span>Mobile-friendly UI</span>
+        </div>
       </section>
 
       <section className="grid three">
@@ -504,8 +527,8 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
       <section className="card stack">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Import</p>
-            <h2>Paste a QuizSpec v2 JSON object</h2>
+            <p className="eyebrow">Try it</p>
+            <h2>Open a sample quiz or import your own</h2>
           </div>
           <label className="file-button">
             Upload .bqz/.json
@@ -519,10 +542,10 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
             />
           </label>
         </div>
-        <textarea className="code-input" value={text} placeholder="Paste BetterQuizzes QuizSpec JSON here..." onChange={(event) => setText(event.currentTarget.value)} />
+        <textarea className="code-input" value={text} placeholder="Paste a BetterQuizzes quiz JSON packet here..." onChange={(event) => setText(event.currentTarget.value)} />
         {error ? <div className="notice-box" role="status">{error}</div> : null}
         <div className="actions">
-          <button className="primary" type="button" disabled={!text.trim()} onClick={loadFromText}>Load pasted quiz</button>
+          <button className="primary" type="button" disabled={!text.trim()} onClick={loadFromText}>Load quiz</button>
         </div>
       </section>
     </main>
@@ -762,7 +785,7 @@ function QuizRunner({
     return (
       <main className="shell narrow">
         <section className="card stack">
-          <h1>No question found.</h1>
+          <h1>This question could not be found.</h1>
           <button type="button" onClick={onReset}>Back to import</button>
         </section>
       </main>
@@ -2662,4 +2685,3 @@ async function copyText(text: string): Promise<void> {
   textarea.remove();
 }
 
-// V26 ordering regression marker: response.length ? response : bqV27OrderingInitialOrder(question)

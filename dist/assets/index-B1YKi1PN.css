@@ -1954,3 +1954,202 @@ textarea,
     height: 76px;
   }
 }
+
+
+/* V29 brand/site/legal polish: identity, landing page, and clipped active-dot repair. */
+:root {
+  --bq-v29-ink: #101828;
+  --bq-v29-muted: #56637a;
+  --bq-v29-paper: #fffdf8;
+  --bq-v29-line: rgba(35, 48, 72, 0.14);
+  --bq-v29-blue: #2447f2;
+  --bq-v29-cyan: #00aeca;
+  --bq-v29-shadow: 0 22px 60px rgba(16, 24, 40, 0.12);
+}
+
+body {
+  background:
+    radial-gradient(circle at 16% 8%, rgba(36, 71, 242, 0.14) 0, transparent 28%),
+    radial-gradient(circle at 86% 12%, rgba(0, 174, 202, 0.16) 0, transparent 28%),
+    linear-gradient(135deg, #fffaf0 0%, #f4f7ff 50%, #eef7f6 100%);
+}
+
+.card {
+  border-color: var(--bq-v29-line);
+  box-shadow: var(--bq-v29-shadow);
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 220px;
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,255,255,0.84)),
+    radial-gradient(circle at 88% 16%, rgba(0,174,202,.24), transparent 34%);
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  right: -80px;
+  top: -110px;
+  width: 320px;
+  height: 320px;
+  border-radius: 90px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, rgba(36,71,242,.16), rgba(0,174,202,.16));
+  pointer-events: none;
+}
+
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.site-brand-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.site-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(36, 71, 242, .20);
+  flex: 0 0 auto;
+}
+
+.hero h1 {
+  max-width: 13ch;
+  color: var(--bq-v29-ink);
+}
+
+.project-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr);
+  gap: 1.25rem;
+  align-items: center;
+  margin: 1rem 0;
+  background:
+    linear-gradient(135deg, rgba(16,24,40,.96), rgba(30,50,92,.94)),
+    radial-gradient(circle at top right, rgba(0,174,202,.35), transparent 30%);
+  color: white;
+  border: 0;
+}
+
+.project-panel h2 {
+  margin: .15rem 0 .6rem;
+  font-size: clamp(1.45rem, 3vw, 2.2rem);
+  line-height: 1.05;
+  letter-spacing: -.04em;
+}
+
+.project-panel p {
+  color: rgba(255,255,255,.78);
+  margin: 0;
+}
+
+.project-panel .eyebrow {
+  color: #9ee7f2;
+}
+
+.feature-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  justify-content: flex-end;
+}
+
+.feature-pills span {
+  padding: .55rem .7rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.18);
+  color: white;
+  font-weight: 800;
+  font-size: .86rem;
+}
+
+.sample-card {
+  border: 1px solid rgba(35, 48, 72, 0.10);
+  box-shadow: 0 14px 38px rgba(16, 24, 40, 0.07);
+}
+
+.sample-card:hover {
+  border-color: rgba(36, 71, 242, .28);
+}
+
+/* Fix clipped active-question aura. The glow now has room to breathe. */
+.nav-card {
+  overflow: visible;
+}
+
+.question-dots {
+  overflow: visible;
+  padding: .35rem;
+  margin: -.35rem;
+}
+
+.dot {
+  position: relative;
+  isolation: isolate;
+}
+
+.dot.active {
+  box-shadow:
+    0 0 0 4px rgba(36, 71, 242, .12),
+    0 10px 22px rgba(16, 24, 40, .14);
+  transform: translateY(-1px);
+}
+
+.dot.active::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 14px;
+  border: 2px solid rgba(36, 71, 242, .24);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 1rem;
+  align-items: center;
+  justify-content: center;
+  margin: 2rem 0 0;
+  color: #667085;
+  font-weight: 750;
+}
+
+.site-footer a {
+  color: var(--bq-v29-blue);
+  text-decoration: none;
+  font-weight: 900;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+  .hero h1 {
+    max-width: none;
+  }
+
+  .project-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-pills {
+    justify-content: flex-start;
+  }
+
+  .question-dots {
+    padding: .45rem;
+    margin: -.45rem;
+  }
+}

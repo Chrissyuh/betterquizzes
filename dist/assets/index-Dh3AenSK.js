@@ -11804,9 +11804,9 @@ function WidgetLoading({ progress } = {}) {
 	const received = progress?.receivedQuestions ?? 0;
 	const complete = Boolean(progress?.complete || expected > 0 && received >= expected);
 	const percent = expected > 0 ? Math.min(100, Math.round(Math.max(0, received) / expected * 100)) : 0;
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "shell narrow",
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 			className: "card stack center-card loading-card",
 			children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
@@ -11828,7 +11828,20 @@ function WidgetLoading({ progress } = {}) {
 					})
 				})
 			]
-		})
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("footer", {
+			className: "site-footer",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "BetterQuizzes is an interactive quiz app for ChatGPT." }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+					href: "/privacy",
+					children: "Privacy"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+					href: "/terms",
+					children: "Terms"
+				})
+			]
+		})]
 	});
 }
 function QuizSetupIssue({ message }) {
@@ -11844,8 +11857,8 @@ function QuizSetupIssue({ message }) {
 						children: WIDGET_VERSION_LABEL
 					})]
 				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Quiz launch interrupted" }),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "The quiz packet did not finish arriving. Send the quiz again from the chat; BetterQuizzes will recover automatically if a complete tool input is still available." }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Quiz did not finish loading" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "The quiz did not arrive completely. Ask ChatGPT to send it again, and BetterQuizzes will reopen it when the full quiz is available." }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("details", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("summary", { children: "Technical details" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
 					className: "error-box",
 					children: message
@@ -12022,16 +12035,43 @@ function ImportScreen({ error, onLoadQuiz }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 				className: "hero card",
 				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-						className: "eyebrow eyebrow-row",
-						children: ["BetterQuizzes ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "version-chip",
-							children: WIDGET_VERSION_LABEL
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "site-brand-row",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+							className: "site-logo",
+							src: "/brand/betterquizzes-logo-light.png",
+							alt: ""
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+							className: "eyebrow eyebrow-row",
+							children: ["BetterQuizzes ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "version-chip",
+								children: WIDGET_VERSION_LABEL
+							})]
 						})]
 					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Native-ready quiz interface for LLMs." }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "Run it as a normal web app, or launch it as a ChatGPT Apps-style widget from the MCP tool server. BetterQuizzes collects answers and confidence; the LLM grades and teaches." })
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Interactive quizzes that feel built for the lesson." }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "Build, take, and review mixed-format practice quizzes with answer capture, confidence checks, ordering, matching, typed responses, and grade writeback." })
 				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "project-panel card",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "eyebrow",
+						children: "What it does"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "BetterQuizzes turns a ChatGPT prompt into a real quiz experience." }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "It keeps the chat flexible while giving students a structured place to answer, review, submit, and receive feedback." })
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "feature-pills",
+					"aria-label": "BetterQuizzes features",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Mixed question types" }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Draft recovery" }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Grade writeback" }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Mobile-friendly UI" })
+					]
+				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
 				className: "grid three",
@@ -12057,8 +12097,8 @@ function ImportScreen({ error, onLoadQuiz }) {
 						className: "section-heading",
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "eyebrow",
-							children: "Import"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Paste a QuizSpec v2 JSON object" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+							children: "Try it"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Open a sample quiz or import your own" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
 							className: "file-button",
 							children: ["Upload .bqz/.json", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 								accept: ".bqz,.json,application/json",
@@ -12073,7 +12113,7 @@ function ImportScreen({ error, onLoadQuiz }) {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
 						className: "code-input",
 						value: text,
-						placeholder: "Paste BetterQuizzes QuizSpec JSON here...",
+						placeholder: "Paste a BetterQuizzes quiz JSON packet here...",
 						onChange: (event) => setText(event.currentTarget.value)
 					}),
 					error ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
@@ -12088,7 +12128,7 @@ function ImportScreen({ error, onLoadQuiz }) {
 							type: "button",
 							disabled: !text.trim(),
 							onClick: loadFromText,
-							children: "Load pasted quiz"
+							children: "Load quiz"
 						})
 					})
 				]
@@ -12312,7 +12352,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 		className: "shell narrow",
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 			className: "card stack",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "No question found." }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "This question could not be found." }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 				type: "button",
 				onClick: onReset,
 				children: "Back to import"
