@@ -81,6 +81,14 @@ assert(styles.includes("V15: fade in newly-added questions"), "newly-added quest
 assert(styles.includes("bq-question-fade-in"), "question card fade animation must exist");
 assert(styles.includes("bq-question-dot-fade-in"), "question nav dot fade animation must exist");
 
+assert(styles.includes("V17: user-observation polish"), "V17 user-observation polish CSS must be present");
+assert(styles.includes("transition: width 260ms ease-out"), "progress bar must animate smoothly");
+assert(styles.includes("height: 10px"), "progress bar must be slightly thicker");
+assert(styles.includes("submit-not-ready"), "submit secondary state must be styled");
+assert(styles.includes("build-next-card"), "incremental generation card styling must be present");
+assert(app.includes("V17 scroll active question into view"), "question navigation must scroll active question into view");
+assert(remote.includes("V17_USER_OBSERVATION_UX_INSTRUCTIONS"), "model instructions must include V17 user observation guidance");
+
 console.log("V1 polish regression checks passed.");
 
 // V9 stale submit-pipeline guards

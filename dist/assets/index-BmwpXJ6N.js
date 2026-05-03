@@ -12097,6 +12097,15 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 	normalizeGradingPolicy(quiz.gradingPolicy);
 	const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
 	const current = quiz.questions[currentIndex];
+	(0, import_react.useEffect)(() => {
+		const id = window.setTimeout(() => {
+			document.querySelector(".question-card")?.scrollIntoView({
+				behavior: "smooth",
+				block: "start"
+			});
+		}, 40);
+		return () => window.clearTimeout(id);
+	}, [currentIndex]);
 	quiz.questions.filter((question) => isQuestionRequired(question, activityPolicy));
 	const completeQuestionCount = quiz.questions.filter((question) => isQuestionDoneForNavigation(question, drafts[question.id], displayPolicy)).length;
 	const allQuestionsDone = quiz.questions.length > 0 && completeQuestionCount === quiz.questions.length;
@@ -12359,6 +12368,24 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 						quizChoiceBehavior: quiz.choiceBehavior,
 						onChange: (draft) => updateDraft(current.id, draft)
 					}),
+					typeof isIncrementalQuizBuilding === "function" && isIncrementalQuizBuilding(quiz) && currentIndex === quiz.questions.length - 1 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+						className: "card question-card build-next-card",
+						"aria-live": "polite",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "build-spinner",
+							"aria-hidden": "true"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "eyebrow",
+								children: "Still generating"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "More questions are on the way…" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "muted",
+								children: "You can start the questions that are ready. BetterQuizzes will add the next question when ChatGPT finishes it."
+							})
+						] })]
+					}) : null,
 					error ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: "notice-box",
 						role: "status",
@@ -13752,12 +13779,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 				}) : null,
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "actions wrap",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						className: "primary",
-						type: "button",
-						onClick: () => setShowReview((value) => !value),
-						children: showReview ? "Hide review" : "Review answers"
-					}), !widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					children: ["null", !widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
 						onClick: onNewQuiz,
 						children: "Start another quiz"
@@ -13772,87 +13794,8 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 					]
 				}) : null
 			]
-		}), showReview ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubmissionReview, { submission }) : null]
+		}), "null"]
 	});
-}
-function SubmissionReview({ submission }) {
-	const answerMap = new Map(submission.answers.map((answer) => [answer.questionId, answer]));
-	const keyMap = new Map((submission.answerKey ?? []).map((entry) => [entry.questionId, entry]));
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-		className: "card stack review-panel",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "eyebrow",
-				children: "Review"
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Your submitted questions" }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "muted",
-				children: "Use this to review your work while or after ChatGPT grades in the chat."
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "review-list",
-				children: submission.questions.map((question, index) => {
-					const answer = answerMap.get(question.id);
-					const key = keyMap.get(question.id);
-					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
-						className: "review-item",
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-								className: "question-header",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-									className: "badge",
-									children: ["Question ", index + 1]
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "badge subtle-badge",
-									children: formatQuestionType(question.type)
-								})]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: question.prompt }),
-							question.multiTypingFields ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-								className: "muted compact-status",
-								children: ["Fields: ", question.multiTypingFields.map((field) => field.label).join(", ")]
-							}) : null,
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Your answer:" }),
-								" ",
-								formatAnswerForReview(answer?.response)
-							] }),
-							answer?.confidence ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-								className: "muted compact-status",
-								children: [
-									"Confidence: ",
-									answer.confidence,
-									" (",
-									confidenceLabel(answer.confidence),
-									")"
-								]
-							}) : null,
-							key ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("details", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("summary", { children: "Answer key / grading guide" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
-								className: "review-answer-key",
-								children: formatAnswerKeyForReview(key)
-							})] }) : null
-						]
-					}, question.id);
-				})
-			})
-		]
-	});
-}
-function formatAnswerForReview(value) {
-	if (value === null || value === void 0 || value === "") return "No response";
-	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-	if (Array.isArray(value)) return value.map((item) => typeof item === "object" ? JSON.stringify(item) : String(item)).join(" -> ");
-	if (typeof value === "object") {
-		const special = asSpecialResponse(value);
-		if (special?.kind === "other") return `${special.text || "Other"}${special.selections?.length ? `; selected: ${special.selections.join(", ")}` : ""}`;
-		if (special?.kind === "cancelled") return "Cancelled";
-		return Object.entries(value).map(([key, item]) => `${key}: ${String(item ?? "")}`).join("; ");
-	}
-	return String(value);
-}
-function formatAnswerKeyForReview(value) {
-	return JSON.stringify(value, null, 2);
 }
 function getFinishedGradeStatus(finished, widgetMode) {
 	if (finished.followUpStatus) return finished.followUpStatus;

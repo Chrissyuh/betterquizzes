@@ -527,6 +527,15 @@ function QuizRunner({
   const gradingPolicy = normalizeGradingPolicy(quiz.gradingPolicy);
   const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
   const current = quiz.questions[currentIndex];
+
+  // V17 scroll active question into view after navigation so short questions do not leave the user stranded lower in the message.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const card = document.querySelector(".question-card");
+      card?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 40);
+    return () => window.clearTimeout(id);
+  }, [currentIndex]);
   const requiredQuestions = quiz.questions.filter((question) => isQuestionRequired(question, activityPolicy));
   const completeQuestionCount = quiz.questions.filter((question) => isQuestionDoneForNavigation(question, drafts[question.id], displayPolicy)).length;
   const allQuestionsDone = quiz.questions.length > 0 && completeQuestionCount === quiz.questions.length;
@@ -752,6 +761,16 @@ function QuizRunner({
 
       <section className="main-column">
         <QuestionCard question={current} draft={drafts[current.id]} displayPolicy={displayPolicy} activityPolicy={activityPolicy} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
+        {typeof isIncrementalQuizBuilding === "function" && isIncrementalQuizBuilding(quiz) && currentIndex === quiz.questions.length - 1 ? (
+          <section className="card question-card build-next-card" aria-live="polite">
+            <div className="build-spinner" aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Still generating</p>
+              <h2>More questions are on the way…</h2>
+              <p className="muted">You can start the questions that are ready. BetterQuizzes will add the next question when ChatGPT finishes it.</p>
+            </div>
+          </section>
+        ) : null}
         {error ? <div className="notice-box" role="status">{error}</div> : null}
         <div className={`actions split compact-actions ${quiz.questions.length <= 1 ? "single-question-actions" : ""}`}>
           {quiz.questions.length > 1 ? (
@@ -1815,14 +1834,14 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
         ) : null}
 
         <div className="actions wrap">
-          <button className="primary" type="button" onClick={() => setShowReview((value) => !value)}>{showReview ? "Hide review" : "Review answers"}</button>
+          null
           {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
           
         </div>
         {copied ? <p className="copied">Copied {copied}.</p> : null}
       </section>
 
-      {showReview ? <SubmissionReview submission={submission} /> : null}
+      null
     </main>
   );
 }
