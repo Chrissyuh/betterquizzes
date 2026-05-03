@@ -118,6 +118,36 @@ function publicOriginFrom(url) {
   return cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL) || (url.protocol + "//" + url.host);
 }
 
+const GRADE_INPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    quizId: { type: "string", minLength: 1 },
+    sessionId: { type: "string" },
+    score: { anyOf: [{ type: "number" }, { type: "null" }] },
+    maxScore: { anyOf: [{ type: "number" }, { type: "null" }] },
+    percent: { anyOf: [{ type: "number" }, { type: "null" }] },
+    label: { type: "string" },
+    summary: { type: "string" },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          questionId: { type: "string" },
+          mark: { type: "string" },
+          points: { anyOf: [{ type: "number" }, { type: "null" }] },
+          maxPoints: { anyOf: [{ type: "number" }, { type: "null" }] },
+          feedback: { type: "string" }
+        },
+        additionalProperties: true
+      }
+    },
+    grade: { type: "object", additionalProperties: true }
+  },
+  required: ["quizId"],
+  additionalProperties: true
+};
+
 const tools = [
   { name: "create_quiz", title: "Open BetterQuizzes", description: CREATE_QUIZ_DESCRIPTION, inputSchema: CREATE_QUIZ_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] }, "openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Preparing quiz…", "openai/toolInvocation/invoked": "Quiz ready" } },
   { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers…", "openai/toolInvocation/invoked": "Answers submitted" } },
@@ -582,36 +612,8 @@ function buildCompletionSummary(quiz, answers, displayPolicy = normalizeDisplayP
 
 function questionRequiresConfidence(question, displayPolicy) {
   if (!displayPolicy?.requireConfidence) return false;
-const GRADE_INPUT_SCHEMA = {
-  type: "object",
-  properties: {
-    quizId: { type: "string", minLength: 1 },
-    sessionId: { type: "string" },
-    score: { anyOf: [{ type: "number" }, { type: "null" }] },
-    maxScore: { anyOf: [{ type: "number" }, { type: "null" }] },
-    percent: { anyOf: [{ type: "number" }, { type: "null" }] },
-    label: { type: "string" },
-    summary: { type: "string" },
-    items: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          questionId: { type: "string" },
-          mark: { type: "string" },
-          points: { anyOf: [{ type: "number" }, { type: "null" }] },
-          maxPoints: { anyOf: [{ type: "number" }, { type: "null" }] },
-          feedback: { type: "string" }
-        },
-        additionalProperties: true
-      }
-    },
-    grade: { type: "object", additionalProperties: true }
-  },
-  required: ["quizId"],
-  additionalProperties: true
-};
-  if (!question || typeof question !== "object") return Boolean(displayPolicy.requireConfidence);
+
+if (!question || typeof question !== "object") return Boolean(displayPolicy.requireConfidence);
   if (question.disableConfidence === true) return false;
   if (question.requireConfidence === false) return false;
   if (question.confidenceRequired === false) return false;
