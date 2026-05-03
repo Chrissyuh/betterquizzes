@@ -12098,7 +12098,8 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 	const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
 	const current = quiz.questions[currentIndex];
 	quiz.questions.filter((question) => isQuestionRequired(question, activityPolicy));
-	const completeQuestionCount = quiz.questions.filter((question) => isQuestionAnswerComplete(question, drafts[question.id])).length;
+	const completeQuestionCount = quiz.questions.filter((question) => isQuestionDoneForNavigation(question, drafts[question.id], displayPolicy)).length;
+	const allQuestionsDone = quiz.questions.length > 0 && completeQuestionCount === quiz.questions.length;
 	const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
 	const canSubmit = !activityPolicy.submitRequiresRequiredAnswers || !submitIssue;
 	const progressPercent = quiz.questions.length ? Math.round(completeQuestionCount / quiz.questions.length * 100) : 100;
@@ -12137,7 +12138,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 			return {
 				...previous,
 				[currentQuestion.id]: {
-					response: items.map((item) => item.id),
+					response: getInitialOrderingOrder(currentQuestion, items),
 					confidence: existing?.confidence,
 					firstSeenAt: existing?.firstSeenAt ?? now,
 					lastUpdatedAt: existing?.lastUpdatedAt ?? now
@@ -12373,6 +12374,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 								onClick: () => setCurrentIndex((index) => Math.max(0, index - 1)),
 								children: "Previous"
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								className: !allQuestionsDone && currentIndex < quiz.questions.length - 1 ? "primary next-primary" : void 0,
 								type: "button",
 								disabled: currentIndex === quiz.questions.length - 1,
 								onClick: () => setCurrentIndex((index) => Math.min(quiz.questions.length - 1, index + 1)),
@@ -12381,10 +12383,10 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 						}) : null, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 							className: "submit-column",
 							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								className: "primary",
+								className: allQuestionsDone ? "primary submit-ready" : "submit-not-ready",
 								type: "button",
 								disabled: submitting || !canSubmit,
-								title: submitIssue ?? void 0,
+								title: submitIssue ?? (!allQuestionsDone ? "You can submit, but unfinished questions remain." : void 0),
 								onClick: () => void finish(),
 								children: submitting ? "Submitting…" : widgetMode ? "Submit to ChatGPT" : "Create submission"
 							})
@@ -12698,6 +12700,12 @@ function getOrderingItems(question) {
 		id: String(item.id),
 		text: String(item.text)
 	})).filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
+}
+function getInitialOrderingOrder(question, items = getOrderingItems(question)) {
+	const itemIds = items.map((item) => item.id);
+	const answer = Array.isArray(question.answer) ? (question.answer ?? []).filter((id) => typeof id === "string") : [];
+	if (itemIds.length > 1 && answer.length === itemIds.length && answer.every((id, index) => id === itemIds[index])) return [...itemIds.slice(1), itemIds[0]];
+	return itemIds;
 }
 function normalizeOrderingResponse(response, items) {
 	const itemIds = items.map((item) => item.id);
@@ -13495,7 +13503,7 @@ function OrderingInput({ question, response, onChange }) {
 		orderRef.current = order;
 	}, [order.join("|")]);
 	(0, import_react.useEffect)(() => {
-		if (!response.length && itemIds.length) onChange(itemIds);
+		if (!response.length && itemIds.length) onChange(initialOrder);
 	}, [response.length, itemIdsKey]);
 	if (!items.length) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionRenderWarning, {
 		question,
@@ -13615,9 +13623,13 @@ function OrderingInput({ question, response, onChange }) {
 					}, id);
 				})
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "order-end-label bottom-label",
-				children: behavior.bottomLabel
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Bottom" }),
+					" = ",
+					behavior.bottomLabel
+				]
 			})
 		]
 	});
@@ -14227,14 +14239,14 @@ function isQuestionRequired(question, activityPolicy) {
 }
 function getQuestionStatus(question, draft, displayPolicy, activityPolicy) {
 	const required = isQuestionRequired(question, activityPolicy);
-	if (isReady(question, draft, displayPolicy, activityPolicy)) return "ready";
-	if (required) return hasResponse(draft) ? "incomplete" : "empty";
-	return hasResponse(draft) ? "draft" : "optional";
+	if (isQuestionDoneForNavigation(question, draft, displayPolicy)) return "ready";
+	if (hasResponse(draft)) return required ? "incomplete" : "draft";
+	return required ? "empty" : "optional";
 }
-function isReady(question, draft, displayPolicy, activityPolicy) {
-	const required = isQuestionRequired(question, activityPolicy);
-	if (!isQuestionAnswerComplete(question, draft)) return !required;
-	if (isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === void 0) return false;
+function isQuestionDoneForNavigation(question, draft, displayPolicy) {
+	if (asSpecialResponse(draft?.response)?.kind === "cancelled") return true;
+	if (!isQuestionAnswerComplete(question, draft)) return false;
+	if (displayPolicy.requireConfidence && normalizeConfidence(draft?.confidence) === void 0) return false;
 	return true;
 }
 function hasMeaningfulText(value) {

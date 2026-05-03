@@ -528,7 +528,8 @@ function QuizRunner({
   const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
   const current = quiz.questions[currentIndex];
   const requiredQuestions = quiz.questions.filter((question) => isQuestionRequired(question, activityPolicy));
-  const completeQuestionCount = quiz.questions.filter((question) => isQuestionAnswerComplete(question, drafts[question.id])).length;
+  const completeQuestionCount = quiz.questions.filter((question) => isQuestionDoneForNavigation(question, drafts[question.id], displayPolicy)).length;
+  const allQuestionsDone = quiz.questions.length > 0 && completeQuestionCount === quiz.questions.length;
   const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
   const canSubmit = !activityPolicy.submitRequiresRequiredAnswers || !submitIssue;
   const progressPercent = quiz.questions.length ? Math.round((completeQuestionCount / quiz.questions.length) * 100) : 100;
@@ -564,7 +565,7 @@ function QuizRunner({
       return {
         ...previous,
         [currentQuestion.id]: {
-          response: items.map((item) => item.id),
+          response: getInitialOrderingOrder(currentQuestion, items),
           confidence: existing?.confidence,
           firstSeenAt: existing?.firstSeenAt ?? now,
           lastUpdatedAt: existing?.lastUpdatedAt ?? now,
@@ -756,11 +757,11 @@ function QuizRunner({
           {quiz.questions.length > 1 ? (
             <div className="actions">
               <button type="button" disabled={currentIndex === 0} onClick={() => setCurrentIndex((index) => Math.max(0, index - 1))}>Previous</button>
-              <button type="button" disabled={currentIndex === quiz.questions.length - 1} onClick={() => setCurrentIndex((index) => Math.min(quiz.questions.length - 1, index + 1))}>Next</button>
+              <button className={!allQuestionsDone && currentIndex < quiz.questions.length - 1 ? "primary next-primary" : undefined} type="button" disabled={currentIndex === quiz.questions.length - 1} onClick={() => setCurrentIndex((index) => Math.min(quiz.questions.length - 1, index + 1))}>Next</button>
             </div>
           ) : null}
           <div className="submit-column">
-            <button className="primary" type="button" disabled={submitting || !canSubmit} title={submitIssue ?? undefined} onClick={() => void finish()}>{submitting ? "Submitting…" : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
+            <button className={allQuestionsDone ? "primary submit-ready" : "submit-not-ready"} type="button" disabled={submitting || !canSubmit} title={submitIssue ?? (!allQuestionsDone ? "You can submit, but unfinished questions remain." : undefined)} onClick={() => void finish()}>{submitting ? "Submitting…" : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
           </div>
         </div>
       </section>
@@ -997,6 +998,17 @@ function getOrderingItems(question: OrderingLike): { id: string; text: string }[
     .filter((item): item is { id: unknown; text: unknown } => Boolean(item) && typeof item === "object" && "id" in item && "text" in item)
     .map((item) => ({ id: String(item.id), text: String(item.text) }))
     .filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
+}
+
+function getInitialOrderingOrder(question: OrderingLike, items = getOrderingItems(question)): string[] {
+  const itemIds = items.map((item) => item.id);
+  const answer = Array.isArray((question as OrderingLike & { answer?: unknown }).answer)
+    ? ((question as OrderingLike & { answer?: unknown[] }).answer ?? []).filter((id): id is string => typeof id === "string")
+    : [];
+  if (itemIds.length > 1 && answer.length === itemIds.length && answer.every((id, index) => id === itemIds[index])) {
+    return [...itemIds.slice(1), itemIds[0]];
+  }
+  return itemIds;
 }
 
 function normalizeOrderingResponse(response: string[], items: { id: string; text: string }[]): string[] {
@@ -1594,7 +1606,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   }, [order.join("|")]);
 
   useEffect(() => {
-    if (!response.length && itemIds.length) onChange(itemIds);
+    if (!response.length && itemIds.length) onChange(initialOrder);
   }, [response.length, itemIdsKey]);
 
   if (!items.length) return <QuestionRenderWarning question={question} detail="This ordering question did not include any valid items." />;
@@ -1711,7 +1723,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
           );
         })}
       </div>
-      <div className="order-end-label bottom-label">{behavior.bottomLabel}</div>
+      <div className="order-end-label bottom-label"><strong>Bottom</strong> = {behavior.bottomLabel}</div>
     </div>
   );
 }
@@ -2289,15 +2301,22 @@ function isQuestionRequired(question: Question, activityPolicy: ActivityPolicy):
 
 function getQuestionStatus(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): "ready" | "draft" | "empty" | "incomplete" | "optional" {
   const required = isQuestionRequired(question, activityPolicy);
-  if (isReady(question, draft, displayPolicy, activityPolicy)) return "ready";
-  if (required) return hasResponse(draft) ? "incomplete" : "empty";
-  return hasResponse(draft) ? "draft" : "optional";
+  if (isQuestionDoneForNavigation(question, draft, displayPolicy)) return "ready";
+  if (hasResponse(draft)) return required ? "incomplete" : "draft";
+  return required ? "empty" : "optional";
 }
 
 function isReady(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): boolean {
-  const required = isQuestionRequired(question, activityPolicy);
-  if (!isQuestionAnswerComplete(question, draft)) return !required;
-  if (isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === undefined) return false;
+  if (!isQuestionAnswerComplete(question, draft)) return false;
+  if (displayPolicy.requireConfidence && normalizeConfidence(draft?.confidence) === undefined) return false;
+  return true;
+}
+
+function isQuestionDoneForNavigation(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy): boolean {
+  const special = asSpecialResponse(draft?.response);
+  if (special?.kind === "cancelled") return true;
+  if (!isQuestionAnswerComplete(question, draft)) return false;
+  if (displayPolicy.requireConfidence && normalizeConfidence(draft?.confidence) === undefined) return false;
   return true;
 }
 

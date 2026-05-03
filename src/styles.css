@@ -1499,3 +1499,74 @@ textarea,
   }
 }
 
+
+
+/* V16: first-time user UX polish */
+.submit-not-ready {
+  background: #eef1f5;
+  color: #667085;
+  border-color: #d6dbe4;
+  box-shadow: none;
+}
+.submit-not-ready:hover:not(:disabled) {
+  background: #e4e8ef;
+  color: #475467;
+}
+.next-primary {
+  font-weight: 800;
+}
+.order-instruction {
+  margin: 0 0 .7rem;
+  color: var(--bq-muted);
+  font-weight: 700;
+}
+.order-end-label {
+  font-size: .86rem;
+  letter-spacing: .01em;
+}
+.draggable-order-item {
+  cursor: grab;
+}
+.draggable-order-item.dragging {
+  cursor: grabbing;
+}
+.drag-handle {
+  min-width: 42px;
+  min-height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px dashed #b9c3d3;
+  border-radius: 12px;
+  background: #f7f9fc;
+  color: #475467;
+  font-weight: 900;
+  touch-action: none;
+}
+.drag-handle::after {
+  content: "Drag";
+  font-size: .62rem;
+  font-weight: 800;
+  margin-left: .25rem;
+  opacity: .72;
+}
+@media (max-width: 560px) {
+  .shell { padding: 10px; }
+  .card { padding: 14px; border-radius: 18px; }
+  .top-bar h1 { font-size: clamp(1.35rem, 7vw, 1.9rem); line-height: 1.12; }
+  .top-bar p,
+  .question-card p,
+  .choice,
+  .match-row,
+  textarea,
+  input,
+  select { font-size: .95rem; }
+  .question-card h2 { font-size: clamp(1.15rem, 5.8vw, 1.45rem); line-height: 1.22; }
+  .question-dots { gap: .35rem; }
+  .dot { min-width: 34px; min-height: 34px; font-size: .86rem; }
+  .actions.split,
+  .compact-actions { gap: .6rem; }
+  .actions button,
+  .submit-column button { min-height: 42px; }
+  .choice { padding: .72rem .78rem; gap: .6rem; }
+  .choice-letter { width: 1.65rem; height: 1.65rem; min-width: 1.65rem; }
+}
