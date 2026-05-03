@@ -11830,17 +11830,19 @@ function WidgetLoading({ progress } = {}) {
 			]
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("footer", {
 			className: "site-footer",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "BetterQuizzes is an interactive quiz app for ChatGPT." }),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "BetterQuizzes is an interactive quiz app for ChatGPT." }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "site-footer-actions",
+				"aria-label": "Legal links",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+					className: "footer-button",
 					href: "/privacy",
 					children: "Privacy"
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+					className: "footer-button",
 					href: "/terms",
 					children: "Terms"
-				})
-			]
+				})]
+			})]
 		})]
 	});
 }

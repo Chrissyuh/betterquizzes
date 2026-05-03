@@ -267,8 +267,10 @@ function WidgetLoading({ progress }: { progress?: HydrationProgress | null } = {
 
       <footer className="site-footer">
         <span>BetterQuizzes is an interactive quiz app for ChatGPT.</span>
-        <a href="/privacy">Privacy</a>
-        <a href="/terms">Terms</a>
+        <div className="site-footer-actions" aria-label="Legal links">
+          <a className="footer-button" href="/privacy">Privacy</a>
+          <a className="footer-button" href="/terms">Terms</a>
+        </div>
       </footer>
     </main>
   );
