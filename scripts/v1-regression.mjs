@@ -95,6 +95,13 @@ assert(styles.includes("bq-card-arrival"), "question cards must fade in");
 assert(!app.split("\n").some((line) => line.trim() === "null"), "App must not render raw null text nodes");
 assert(remote.includes("V18_SUBMIT_UX_INSTRUCTIONS"), "server instructions must include V18 submission UX guidance");
 
+assert(app.includes("const initialOrder = getInitialOrderingOrder(question, items);"), "ordering list must define initialOrder before use");
+assert(app.includes("response.length ? response : initialOrder"), "ordering list must use initialOrder for empty responses");
+assert(styles.includes("V19: ordering repair and stronger staged loading"), "V19 stronger staged loading CSS must be present");
+assert(styles.includes("bq-staged-dot-arrival-v19"), "question dots must have stronger staged arrival animation");
+assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronger arrival animation");
+assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
+
 console.log("V1 polish regression checks passed.");
 
 // V9 stale submit-pipeline guards

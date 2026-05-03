@@ -12379,7 +12379,10 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 								className: "eyebrow",
 								children: "Still generating"
 							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "More questions are on the way…" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", { children: ["More questions are on the way", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "ai-ellipsis",
+								"aria-hidden": "true"
+							})] }),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 								className: "muted",
 								children: "You can start the questions that are ready. BetterQuizzes will add the next question when ChatGPT finishes it."

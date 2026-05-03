@@ -766,7 +766,7 @@ function QuizRunner({
             <div className="build-spinner" aria-hidden="true" />
             <div>
               <p className="eyebrow">Still generating</p>
-              <h2>More questions are on the way…</h2>
+              <h2>More questions are on the way<span className="ai-ellipsis" aria-hidden="true"></span></h2>
               <p className="muted">You can start the questions that are ready. BetterQuizzes will add the next question when ChatGPT finishes it.</p>
             </div>
           </section>
