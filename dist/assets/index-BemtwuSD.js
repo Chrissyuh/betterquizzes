@@ -11677,6 +11677,150 @@ function bqV44ShouldUseEarlyMobileFollowUp() {
 	const userAgent = navigator.userAgent.toLowerCase();
 	return /iphone|ipad|ipod|android|mobile/.test(userAgent) || typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 }
+function bqV46bOrderingRows(list) {
+	return Array.from(list.querySelectorAll(".draggable-order-item, .order-item")).filter((item) => item instanceof HTMLElement);
+}
+function bqV46bClearOrderingDragClasses() {
+	document.querySelectorAll(".bq-ordering-drag-source, .bq-ordering-drag-over").forEach((item) => {
+		item.classList.remove("bq-ordering-drag-source", "bq-ordering-drag-over");
+	});
+	document.documentElement.classList.remove("bq-ordering-drag-active");
+}
+function bqV46bMoveButtonText(button) {
+	return [
+		button.textContent ?? "",
+		button.getAttribute("aria-label") ?? "",
+		button.getAttribute("title") ?? ""
+	].join(" ").toLowerCase();
+}
+function bqV46bFindMoveButton(row, direction) {
+	const buttons = Array.from(row.querySelectorAll("button")).filter((button) => button instanceof HTMLButtonElement);
+	const preferred = buttons.find((button) => {
+		const text = bqV46bMoveButtonText(button);
+		return direction === "up" ? text.includes("up") || text.includes("↑") : text.includes("down") || text.includes("↓");
+	});
+	if (preferred) return preferred;
+	if (direction === "up") return buttons[0] ?? null;
+	return buttons[1] ?? buttons[0] ?? null;
+}
+function bqV46bClickMoveButtons(snapshot) {
+	let completed = 0;
+	function currentRow() {
+		return snapshot.list.querySelector(`[data-bq-v46b-drag-token="${snapshot.token}"]`);
+	}
+	function finish() {
+		const row = currentRow();
+		if (row) delete row.dataset.bqV46bDragToken;
+	}
+	function step() {
+		if (completed >= snapshot.steps) {
+			finish();
+			return;
+		}
+		const row = currentRow();
+		if (!row) {
+			finish();
+			return;
+		}
+		const button = bqV46bFindMoveButton(row, snapshot.direction);
+		if (!button || button.disabled) {
+			finish();
+			return;
+		}
+		button.click();
+		completed += 1;
+		window.requestAnimationFrame(() => {
+			window.requestAnimationFrame(step);
+		});
+	}
+	step();
+}
+function bqV46bInstallOrderingDrag() {
+	if (typeof document === "undefined" || typeof window === "undefined") return () => {};
+	let active = null;
+	function onPointerDown(event) {
+		if (event.button !== 0) return;
+		if (!(event.target instanceof Element)) return;
+		const row = event.target.closest(".draggable-order-item, .order-item");
+		if (!(row instanceof HTMLElement)) return;
+		const target = event.target;
+		const isDragHandle = Boolean(target.closest(".drag-handle, [class*='drag-handle']"));
+		if (Boolean(target.closest("button, input, textarea, select, a")) && !isDragHandle) return;
+		const list = row.parentElement;
+		if (!(list instanceof HTMLElement)) return;
+		const startIndex = bqV46bOrderingRows(list).indexOf(row);
+		if (startIndex < 0) return;
+		const token = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
+		row.dataset.bqV46bDragToken = token;
+		row.classList.add("bq-ordering-drag-source");
+		active = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			startIndex,
+			targetIndex: startIndex,
+			row,
+			list,
+			token,
+			dragging: false
+		};
+		try {
+			row.setPointerCapture(event.pointerId);
+		} catch {}
+	}
+	function onPointerMove(event) {
+		if (!active || active.pointerId !== event.pointerId) return;
+		const moved = Math.hypot(event.clientX - active.startX, event.clientY - active.startY);
+		if (!active.dragging && moved < 8) return;
+		active.dragging = true;
+		event.preventDefault();
+		document.documentElement.classList.add("bq-ordering-drag-active");
+		const targetRow = document.elementFromPoint(event.clientX, event.clientY)?.closest(".draggable-order-item, .order-item");
+		bqV46bClearOrderingDragClasses();
+		active.row.classList.add("bq-ordering-drag-source");
+		if (!(targetRow instanceof HTMLElement)) return;
+		if (!active.list.contains(targetRow)) return;
+		const targetIndex = bqV46bOrderingRows(active.list).indexOf(targetRow);
+		if (targetIndex < 0) return;
+		active.targetIndex = targetIndex;
+		targetRow.classList.add("bq-ordering-drag-over");
+	}
+	function onPointerUp(event) {
+		if (!active || active.pointerId !== event.pointerId) return;
+		const snapshot = active;
+		active = null;
+		try {
+			snapshot.row.releasePointerCapture(event.pointerId);
+		} catch {}
+		bqV46bClearOrderingDragClasses();
+		if (!snapshot.dragging || snapshot.targetIndex === snapshot.startIndex) {
+			delete snapshot.row.dataset.bqV46bDragToken;
+			return;
+		}
+		bqV46bClickMoveButtons({
+			list: snapshot.list,
+			token: snapshot.token,
+			direction: snapshot.targetIndex > snapshot.startIndex ? "down" : "up",
+			steps: Math.abs(snapshot.targetIndex - snapshot.startIndex)
+		});
+	}
+	function onPointerCancel() {
+		if (active?.row) delete active.row.dataset.bqV46bDragToken;
+		active = null;
+		bqV46bClearOrderingDragClasses();
+	}
+	document.addEventListener("pointerdown", onPointerDown);
+	document.addEventListener("pointermove", onPointerMove, { passive: false });
+	document.addEventListener("pointerup", onPointerUp);
+	document.addEventListener("pointercancel", onPointerCancel);
+	return () => {
+		document.removeEventListener("pointerdown", onPointerDown);
+		document.removeEventListener("pointermove", onPointerMove);
+		document.removeEventListener("pointerup", onPointerUp);
+		document.removeEventListener("pointercancel", onPointerCancel);
+		onPointerCancel();
+	};
+}
 var SAMPLE_QUIZZES = [
 	tiny_demo_default,
 	aphg_demo_default,
@@ -12140,6 +12284,9 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 	normalizeGradingPolicy(quiz.gradingPolicy);
 	const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
 	const current = quiz.questions[currentIndex];
+	(0, import_react.useEffect)(() => {
+		return bqV46bInstallOrderingDrag();
+	}, []);
 	(0, import_react.useEffect)(() => {
 		const id = window.setTimeout(() => {
 			document.querySelector(".question-card")?.scrollIntoView({

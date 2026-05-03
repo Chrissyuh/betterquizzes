@@ -2417,3 +2417,108 @@ main,
   }
 }
 /* END V41 question nav overflow containment */
+
+
+/* V46b mobile drag ordering
+   Restore real drag-and-drop behavior on mobile with clean, touch-friendly handles. */
+.draggable-order-item,
+.order-item {
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.draggable-order-item:active,
+.order-item:active {
+  cursor: grabbing;
+}
+
+.drag-handle,
+[class*="drag-handle"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.75rem !important;
+  min-width: 2.75rem !important;
+  height: 2.75rem !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(37, 99, 235, .18) !important;
+  background: linear-gradient(180deg, #ffffff, #eef4ff) !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .07) !important;
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: grab !important;
+}
+
+.drag-handle::before,
+[class*="drag-handle"]::before {
+  content: "⋮⋮";
+  color: #64748b;
+  font-size: 1.25rem;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -.28rem;
+  transform: translateX(-.08rem);
+}
+
+.drag-handle:active,
+[class*="drag-handle"]:active {
+  cursor: grabbing !important;
+  background: #dbeafe !important;
+  border-color: rgba(37, 99, 235, .34) !important;
+}
+
+.drag-label,
+[class*="drag-label"] {
+  display: none !important;
+}
+
+.order-controls {
+  opacity: .86;
+}
+
+.bq-ordering-drag-active,
+.bq-ordering-drag-active body {
+  overscroll-behavior: contain;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.bq-ordering-drag-source {
+  opacity: .72 !important;
+  transform: scale(.985) !important;
+  box-shadow: 0 14px 34px rgba(37, 99, 235, .16) !important;
+}
+
+.bq-ordering-drag-over {
+  outline: 3px solid rgba(37, 99, 235, .32) !important;
+  background: linear-gradient(180deg, #eef4ff, #ffffff) !important;
+}
+
+@media (max-width: 720px), (pointer: coarse) {
+  .draggable-order-item,
+  .order-item {
+    touch-action: pan-y;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .drag-handle,
+  [class*="drag-handle"] {
+    width: 3rem !important;
+    min-width: 3rem !important;
+    height: 3rem !important;
+    border-radius: 17px !important;
+  }
+
+  .drag-handle::before,
+  [class*="drag-handle"]::before {
+    font-size: 1.35rem;
+  }
+
+  .order-controls {
+    display: none !important;
+  }
+}
+/* END V46b mobile drag ordering */
