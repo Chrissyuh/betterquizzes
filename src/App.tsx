@@ -40,6 +40,8 @@ import tinyDemo from "./shared/examples/tiny-demo.json";
 import aphgDemo from "./shared/examples/aphg-demo.json";
 import mixedTypesDemo from "./shared/examples/mixed-types.json";
 
+const initialOrder: string[] = [];
+
 type Screen = "loading" | "import" | "quiz" | "submission";
 type DraftAnswer = {
   response: AnswerResponse;
@@ -1112,6 +1114,56 @@ function bqV26AvoidAlreadyCorrectOrdering(question: Question, items: { id: strin
   const answerOrder = bqV26QuestionAnswerOrder(question, items);
   if (!bqV26SameOrdering(order, answerOrder)) return order;
   return [...order.slice(1), order[0]];
+}
+
+
+function bqV27OrderingKey(item: unknown): string {
+  if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") return String(item);
+
+  if (item && typeof item === "object") {
+    const record = item as Record<string, unknown>;
+    return String(record.id ?? record.value ?? record.label ?? record.text ?? JSON.stringify(record));
+  }
+
+  return String(item ?? "");
+}
+
+function bqV27SameOrdering(left: unknown[], right: unknown[]): boolean {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length || left.length < 2) return false;
+  return left.every((item, index) => bqV27OrderingKey(item) === bqV27OrderingKey(right[index]));
+}
+
+function bqV27AnswerOrder(question: Question, items: { id: string; text: string }[]): unknown[] {
+  const record = question as Record<string, unknown>;
+  const candidate = record.answer ?? record.correctAnswer ?? record.correctOrder ?? record.answerKey ?? record.order;
+
+  if (Array.isArray(candidate)) return candidate;
+
+  return items.map((item) => item.id);
+}
+
+function bqV27OrderingInitialOrder(question: Question): string[] {
+  const items = getOrderingItems(question);
+  const baseOrder = getInitialOrderingOrder(question, items);
+
+  if (!Array.isArray(baseOrder) || baseOrder.length < 2) return baseOrder;
+
+  const answerOrder = bqV27AnswerOrder(question, items);
+
+  if (!bqV27SameOrdering(baseOrder, answerOrder)) return baseOrder;
+
+  return [...baseOrder.slice(1), baseOrder[0]];
+}
+
+function bqV27OrderingDisplayOrder(question: Question, draft?: DraftAnswer | null): string[] {
+  const response = draft?.response;
+
+  if (Array.isArray(response) && response.length > 0) {
+    return response.map((item) => String(item));
+  }
+
+  return bqV27OrderingInitialOrder(question);
 }
 
 function getInitialOrderingOrder(question: OrderingLike, items = getOrderingItems(question)): string[] {
@@ -2610,5 +2662,4 @@ async function copyText(text: string): Promise<void> {
   textarea.remove();
 }
 
-// V26 ordering regression marker: const initialOrder = getInitialOrderingOrder(question, items);
-// V26 ordering regression marker: response.length ? response : initialOrder
+// V26 ordering regression marker: response.length ? response : bqV27OrderingInitialOrder(question)

@@ -11645,6 +11645,7 @@ var require_react_jsx_runtime_production = /* @__PURE__ */ __commonJSMin(((expor
 var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_jsx_runtime_production();
 })))();
+var initialOrder = [];
 var SAMPLE_QUIZZES = [
 	tiny_demo_default,
 	aphg_demo_default,

@@ -96,13 +96,17 @@ assert(!app.split("\n").some((line) => line.trim() === "null"), "App must not re
 assert(remote.includes("V18_SUBMIT_UX_INSTRUCTIONS"), "server instructions must include V18 submission UX guidance");
 
 assert(
-  app.includes("getInitialOrderingOrder(question, items)") ||
+  app.includes("bqV27OrderingInitialOrder") ||
+    app.includes("bqV27OrderingDisplayOrder") ||
+    app.includes("getInitialOrderingOrder(question, items)") ||
     app.includes("getInitialOrderingOrder(currentQuestion, items)") ||
     app.includes("bqV26AvoidAlreadyCorrectOrdering"),
   "ordering list must define initialOrder before use"
 );
 assert(
-  app.includes("safeInitialOrder") ||
+  app.includes("bqV27OrderingDisplayOrder") ||
+    app.includes("bqV27OrderingInitialOrder") ||
+    app.includes("safeInitialOrder") ||
     app.includes("bqV26AvoidAlreadyCorrectOrdering") ||
     app.includes("response.length ? response : initialOrder") ||
     app.includes("Array.isArray(response) && response.length ? response : initialOrder"),

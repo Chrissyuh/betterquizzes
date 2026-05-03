@@ -76,8 +76,10 @@ assert(
 );
 
 assert(
-  app.includes("safeInitialOrder") ||
-    app.includes("bqV26AvoidAlreadyCorrectOrdering") ||
+  app.includes("bqV27OrderingInitialOrder") ||
+    app.includes("bqV27OrderingDisplayOrder") ||
+    app.includes("bqV27OrderingInitialOrder") ||
+    app.includes("bqV27OrderingDisplayOrder") ||
     app.includes("response.length ? response : initialOrder"),
   "ordering initialOrder fallback is missing"
 );
