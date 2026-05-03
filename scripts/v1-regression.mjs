@@ -89,6 +89,12 @@ assert(styles.includes("build-next-card"), "incremental generation card styling 
 assert(app.includes("V17 scroll active question into view"), "question navigation must scroll active question into view");
 assert(remote.includes("V17_USER_OBSERVATION_UX_INSTRUCTIONS"), "model instructions must include V17 user observation guidance");
 
+assert(styles.includes("V18: submit cleanup and staged arrival"), "V18 submit cleanup and staged arrival CSS must be present");
+assert(styles.includes("bq-staged-dot-arrival"), "question dots must fake staged arrival");
+assert(styles.includes("bq-card-arrival"), "question cards must fade in");
+assert(!app.split("\n").some((line) => line.trim() === "null"), "App must not render raw null text nodes");
+assert(remote.includes("V18_SUBMIT_UX_INSTRUCTIONS"), "server instructions must include V18 submission UX guidance");
+
 console.log("V1 polish regression checks passed.");
 
 // V9 stale submit-pipeline guards

@@ -1721,3 +1721,52 @@ textarea,
     animation: none;
   }
 }
+
+
+/* V18: submit cleanup and staged arrival */
+.question-dots .dot,
+.nav-card .dot {
+  opacity: 0;
+  animation: bq-staged-dot-arrival 260ms ease-out both;
+  animation-delay: var(--bq-stagger, 0ms);
+}
+
+.question-card {
+  animation: bq-card-arrival 220ms ease-out both;
+}
+
+@keyframes bq-staged-dot-arrival {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bq-card-arrival {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.submission-screen,
+.submission-card {
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-dots .dot,
+  .nav-card .dot,
+  .question-card {
+    opacity: 1;
+    animation: none;
+  }
+}

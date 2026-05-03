@@ -13746,9 +13746,9 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 	encodeCompactSubmission(submission);
 	buildLlmReturnPrompt(submission);
 	const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
 		className: "shell narrow result-shell",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 			className: "card result-hero",
 			children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
@@ -13777,13 +13777,13 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 						finished.followUpMessage ?? "Still trying to ask ChatGPT to grade."
 					]
 				}) : null,
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					className: "actions wrap",
-					children: ["null", !widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					children: !widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
 						onClick: onNewQuiz,
 						children: "Start another quiz"
-					}) : null]
+					}) : null
 				}),
 				copied ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 					className: "copied",
@@ -13794,7 +13794,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 					]
 				}) : null
 			]
-		}), "null"]
+		})
 	});
 }
 function getFinishedGradeStatus(finished, widgetMode) {
@@ -14118,7 +14118,7 @@ function buildAutoGradePrompt(submission) {
 	return [
 		"Grade this BetterQuizzes submission now. Do not call tools, do not wait for more data, and do not recreate the quiz.",
 		"Use only the compact JSON packet below. Reply quickly and concisely.",
-		"Format: Score: x/y or case-dependent result; Mistakes/needs review; Targeted review. Keep the first grading reply under 180 words unless the user asks for details.",
+		"Format: Score: x/y or case-dependent result; Mistakes/needs review; Targeted review. Keep the first grading reply under 120 words.",
 		"Grade fill-blank and short text leniently for capitalization, spacing, and harmless punctuation.",
 		"Grade skipped optional answers case-by-case: count them wrong or Needs review in strict knowledge checks when appropriate, omit them in casual practice/check-ins when more useful, and prioritize UX/debug findings over score in developer smoke tests. Treat confidence as a weak signal only.",
 		JSON.stringify(packet)
