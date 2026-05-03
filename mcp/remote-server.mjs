@@ -15,7 +15,7 @@ const BQ_V43_ORDERING_DIRECTION_NOTE = [
 ].join("\n");
 
 function bqV43OrderingAliasLabels(rawDirection, existing = {}) {
-  const raw = String(rawDirection || "").trim().toLowerCase();
+  const raw = String(rawDirection || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 
   if (existing.topLabel || existing.bottomLabel) {
     return {
@@ -31,6 +31,9 @@ function bqV43OrderingAliasLabels(rawDirection, existing = {}) {
     "earliest_to_latest",
     "chronological",
     "chronological_order",
+    "earliest_first",
+    "oldest_to_newest",
+    "oldest_first",
     "sequence",
     "sequential",
     "steps",
@@ -43,17 +46,19 @@ function bqV43OrderingAliasLabels(rawDirection, existing = {}) {
     "last_to_first",
     "finish_to_start",
     "latest_to_earliest",
+    "newest_to_oldest",
+    "newest_first",
     "reverse_chronological",
     "reverse"
   ].includes(raw)) {
     return { topLabel: "Last", bottomLabel: "First" };
   }
 
-  if (["most_to_least", "highest_to_lowest", "greatest_to_least"].includes(raw)) {
+  if (["most_to_least", "highest_to_lowest", "greatest_to_least", "largest_to_smallest", "descending"].includes(raw)) {
     return { topLabel: "Most", bottomLabel: "Least" };
   }
 
-  if (["least_to_most", "lowest_to_highest", "least_to_greatest"].includes(raw)) {
+  if (["least_to_most", "lowest_to_highest", "least_to_greatest", "smallest_to_largest", "ascending"].includes(raw)) {
     return { topLabel: "Least", bottomLabel: "Most" };
   }
 
@@ -123,7 +128,11 @@ function bqV43NormalizeOrderingAliasesDeep(payload) {
 // END BETTERQUIZZES V43 ORDERING DIRECTION GUARDRAILS
 
 const V2_BUILDER_INSTRUCTIONS = [
-  "Use start_quiz, add_question, repair_question, and finalize_quiz for incremental BetterQuizzes quiz building.",
+  
+  "V45 ORDERING CHECKLIST BEFORE add_question: if type is ordering, use items, answer item ids, and orderingBehavior.direction exactly top_to_bottom.",
+  "V45 ORDERING WARNING: orderingBehavior.direction is never conceptual. Never use first_to_last, chronological, sequence, most_to_least, least_to_most, closest_to_farthest, left_to_right, or horizontal.",
+  "V45 ORDERING LABELS: write conceptual meaning only in orderingBehavior.topLabel and orderingBehavior.bottomLabel, such as First/Last or Most/Least.",
+"Use start_quiz, add_question, repair_question, and finalize_quiz for incremental BetterQuizzes quiz building.",
   "Keep the public product name BetterQuizzes.",
   "Keep the internal compatibility schema exactly betterquizzer.quiz version 2.",
   "Required questions should be rare; practice quizzes should not make every question required by default.",
@@ -182,22 +191,22 @@ const FINALIZE_QUIZ_INPUT_SCHEMA = {
 const V23_BUILDER_TOOL_DEFS = [
   {
     name: "start_quiz",
-    description: "Start an incremental BetterQuizzes draft. " + V2_BUILDER_INSTRUCTIONS,
+    description: "V45 ordering reminder: tell yourself and future add_question calls that orderingBehavior.direction must always be top_to_bottom and conceptual order belongs in topLabel/bottomLabel. Start an incremental BetterQuizzes draft." + V2_BUILDER_INSTRUCTIONS,
     inputSchema: START_QUIZ_INPUT_SCHEMA
   },
   {
     name: "add_question",
-    description: "Add one validated question to an incremental BetterQuizzes draft. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for conceptual meaning. Add one validated question to an incremental BetterQuizzes draft.",
+    description: "V45 ordering checklist: for type=ordering, use items, answer as item ids, and orderingBehavior { direction: top_to_bottom, topLabel, bottomLabel }. Never use first_to_last/chronological/most_to_least/etc. as direction. Add one validated question to an incremental BetterQuizzes draft. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for conceptual meaning. Add one validated question to an incremental BetterQuizzes draft.",
     inputSchema: ADD_QUESTION_INPUT_SCHEMA
   },
   {
     name: "repair_question",
-    description: "Replace or repair one invalid or incomplete question in an incremental BetterQuizzes draft.",
+    description: "V45 ordering repair: if repairing an ordering question, normalize direction to top_to_bottom, move conceptual meaning into topLabel/bottomLabel, use items not choices, and use answer item ids. Replace or repair one invalid or incomplete question in an incremental BetterQuizzes draft.",
     inputSchema: ADD_QUESTION_INPUT_SCHEMA
   },
   {
     name: "finalize_quiz",
-    description: "Finalize an incremental BetterQuizzes draft into a betterquizzer.quiz v2 quiz object.",
+    description: "V45 final ordering check: before finalizing, every ordering question must have orderingBehavior.direction exactly top_to_bottom and answer must be item ids. Finalize an incremental BetterQuizzes draft into a betterquizzer.quiz v2 quiz object.",
     inputSchema: FINALIZE_QUIZ_INPUT_SCHEMA
   }
 ];
@@ -835,7 +844,72 @@ function bqV37ServeLegalRoute(req, res) {
 }
 // END BETTERQUIZZES V37 LEGAL ROUTES
 
-const MODEL_INSTRUCTIONS = `BetterQuizzes V43 ordering schema guidance:
+
+// BEGIN BETTERQUIZZES V45 LOUD ORDERING AUTHORING GUIDE
+const BQ_V45_ORDERING_AUTHORING_GUIDE = [
+  "ORDERING QUESTIONS ARE THE MOST COMMON SCHEMA FAILURE. Follow this exactly.",
+  "",
+  "A BetterQuizzes ordering question is NOT a conceptual direction enum.",
+  "It is a vertical drag list in the renderer.",
+  "",
+  "REQUIRED SHAPE:",
+  "{",
+  "  id: string,",
+  "  type: \"ordering\",",
+  "  prompt: string,",
+  "  items: [{ id: \"i1\", text: string }, ...],",
+  "  answer: [\"i1\", \"i2\", ...],",
+  "  orderingBehavior: {",
+  "    direction: \"top_to_bottom\",",
+  "    topLabel: string,",
+  "    bottomLabel: string",
+  "  }",
+  "}",
+  "",
+  "ABSOLUTE RULES:",
+  "1. orderingBehavior.direction MUST ALWAYS be exactly \"top_to_bottom\".",
+  "2. NEVER put meaning in direction.",
+  "3. NEVER use first_to_last, first-to-last, chronological, sequence, earliest_to_latest, most_to_least, least_to_most, closest_to_farthest, left_to_right, horizontal, or any domain phrase as direction.",
+  "4. Put conceptual meaning in topLabel and bottomLabel.",
+  "5. The answer array must contain item ids, not item text.",
+  "6. Every id in answer must exist in items.",
+  "7. Do not use choices for ordering. Use items.",
+  "8. Do not use correctOrder, correct_order, orderedItems, or order. Use answer.",
+  "",
+  "CANONICAL EXAMPLES:",
+  "Mitosis phases first to last:",
+  "{ orderingBehavior: { direction: \"top_to_bottom\", topLabel: \"First\", bottomLabel: \"Last\" } }",
+  "",
+  "Rank largest to smallest:",
+  "{ orderingBehavior: { direction: \"top_to_bottom\", topLabel: \"Largest\", bottomLabel: \"Smallest\" } }",
+  "",
+  "Closest to farthest:",
+  "{ orderingBehavior: { direction: \"top_to_bottom\", topLabel: \"Closest\", bottomLabel: \"Farthest\" } }",
+  "",
+  "BEFORE CALLING add_question OR create_quiz FOR AN ORDERING QUESTION, CHECK:",
+  "- type is exactly \"ordering\"",
+  "- items exists and is an array of { id, text }",
+  "- answer exists and is an array of item ids",
+  "- orderingBehavior.direction is exactly \"top_to_bottom\"",
+  "- topLabel/bottomLabel explain the conceptual order"
+].join("\n");
+// END BETTERQUIZZES V45 LOUD ORDERING AUTHORING GUIDE
+
+const MODEL_INSTRUCTIONS = `BetterQuizzes V45 ordering authoring rules:
+ORDERING QUESTIONS ARE THE MOST COMMON SCHEMA FAILURE. Do not improvise ordering fields.
+For every ordering question:
+- type must be exactly "ordering".
+- Use items: [{ "id": "i1", "text": "..." }], not choices.
+- Use answer: ["i1", "i2", ...], not correctOrder/order/orderedItems.
+- orderingBehavior.direction must be exactly "top_to_bottom" every single time.
+- The direction field is a renderer layout axis only. It is not the conceptual order.
+- Never use first_to_last, first-to-last, chronological, sequence, earliest_to_latest, most_to_least, least_to_most, closest_to_farthest, left_to_right, horizontal, or any other conceptual phrase for direction.
+- Put conceptual meaning in orderingBehavior.topLabel and orderingBehavior.bottomLabel.
+- Correct: { "orderingBehavior": { "direction": "top_to_bottom", "topLabel": "First", "bottomLabel": "Last" } }
+- Correct: { "orderingBehavior": { "direction": "top_to_bottom", "topLabel": "Most", "bottomLabel": "Least" } }
+- Correct: { "orderingBehavior": { "direction": "top_to_bottom", "topLabel": "Closest", "bottomLabel": "Farthest" } }
+
+BetterQuizzes V43 ordering schema guidance:
 - For every ordering question, orderingBehavior.direction must be exactly "top_to_bottom".
 - Do not use "first_to_last", "last_to_first", "chronological", "sequence", "left_to_right", "most_to_least", "least_to_most", "closest_to_farthest", or other conceptual values as orderingBehavior.direction.
 - orderingBehavior.direction is only the renderer layout axis. The conceptual meaning belongs in orderingBehavior.topLabel and orderingBehavior.bottomLabel.
@@ -891,7 +965,7 @@ const CANONICAL_QUIZ_EXAMPLE = {
   }
 };
 const CHOICE_ITEM_SCHEMA = { anyOf: [{ type: "string", minLength: 1 }, { type: "object", properties: { id: { type: "string", minLength: 1 }, text: { type: "string", minLength: 1 }, label: { type: "string" }, value: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }] } }, required: ["id", "text"], additionalProperties: true }] };
-const ORDERING_BEHAVIOR_SCHEMA = { type: "object", properties: { direction: { const: "top_to_bottom", description: "Renderer layout axis only. Must always be top_to_bottom. Never use conceptual values like first_to_last, chronological, left_to_right, most_to_least, least_to_most, closest_to_farthest, or sequence. Express conceptual meaning with topLabel and bottomLabel." }, topLabel: { type: "string", description: "Conceptual label for the top of the ordered list, such as First, Most, Closest, or Earliest." }, bottomLabel: { type: "string", description: "Conceptual label for the bottom of the ordered list, such as Last, Least, Farthest, or Latest." } }, additionalProperties: false };
+const ORDERING_BEHAVIOR_SCHEMA = { type: "object", required: ["direction"], properties: { direction: { const: "top_to_bottom", description: "REQUIRED CONSTANT. Must always be exactly top_to_bottom. This is only the vertical renderer layout axis. Never use first_to_last, first-to-last, chronological, sequence, earliest_to_latest, most_to_least, least_to_most, closest_to_farthest, left_to_right, horizontal, or any conceptual ordering phrase here. Put conceptual meaning in topLabel and bottomLabel." }, topLabel: { type: "string", description: "Required for meaningful ordering. Label for the top of the vertical list, such as First, Earliest, Largest, Most, Closest, or Start." }, bottomLabel: { type: "string", description: "Required for meaningful ordering. Label for the bottom of the vertical list, such as Last, Latest, Smallest, Least, Farthest, or End." } }, additionalProperties: false, description: "Ordering behavior is renderer layout metadata. direction must be top_to_bottom; conceptual order goes in topLabel/bottomLabel." };
 const RESPONSE_LIMIT_SCHEMA = { type: "object", properties: { maxChars: { anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }] }, minChars: { type: "integer", minimum: 0 }, showCounter: { type: "boolean" } }, additionalProperties: false };
 const MULTI_TYPING_FIELD_SCHEMA = { type: "object", properties: { id: { type: "string", minLength: 1 }, label: { type: "string", minLength: 1 }, placeholder: { type: "string" }, responseLimit: RESPONSE_LIMIT_SCHEMA, answer: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] }, acceptableAnswers: { type: "array", items: { type: "string" } }, expectedKeywords: { type: "array", items: { type: "string" } } }, required: ["id", "label"], additionalProperties: true };
 const TEXT_SELECT_SEGMENT_SCHEMA = { type: "object", properties: { id: { type: "string", minLength: 1 }, text: { type: "string", minLength: 1 }, selectable: { type: "boolean" } }, required: ["id", "text"], additionalProperties: true };
@@ -914,7 +988,7 @@ const QUESTION_SCHEMA = { oneOf: [
 const QUIZ_SPEC_SCHEMA = { type: "object", title: "BetterQuizzesQuizSpecV2", description: "Exact renderable BetterQuizzes QuizSpec v2. Canonical renderer fields are id/type/prompt/choices/answer/answerRequired.", properties: { schema: { const: "betterquizzer.quiz" }, version: { const: 2 }, quizId: { type: "string" }, title: { type: "string", minLength: 1 }, description: { type: "string" }, subject: { type: "string" }, mode: { enum: ["practice", "test", "survey"] }, displayPolicy: { type: "object", properties: { showCorrectAnswers: { enum: ["instant", "after_submit", "never"] }, showExplanations: { enum: ["llm_after_submit", "never"] }, requireConfidence: { type: "boolean" } }, additionalProperties: false }, gradingPolicy: { type: "object", properties: { preferredGrader: { enum: ["llm", "local", "hybrid"] }, includeAnswerKeyInSubmission: { type: "boolean" }, requestCorrectnessMarks: { type: "boolean" } }, additionalProperties: false }, activityPolicy: { type: "object", description: "Canonical fields: allowSkipQuiz, allowSkipQuestions, defaultAnswerRequired, submitRequiresRequiredAnswers. Legacy aliases are accepted but not preferred.", properties: { allowSkipQuiz: { type: "boolean", description: "Canonical. Show a top-right Skip quiz control." }, allowSkipQuestions: { type: "boolean" }, defaultAnswerRequired: { type: "boolean", description: "Canonical. Default for question.answerRequired." }, submitRequiresRequiredAnswers: { type: "boolean", description: "Canonical. Disable final submit until required questions are answered." }, allowCancel: { type: "boolean", deprecated: true, description: "Deprecated alias for allowSkipQuiz." }, defaultQuestionRequired: { type: "boolean", deprecated: true, description: "Deprecated alias for defaultAnswerRequired." }, submitRequiresAllRequired: { type: "boolean", deprecated: true, description: "Deprecated alias for submitRequiresRequiredAnswers." } }, additionalProperties: false }, choiceBehavior: { type: "object", properties: { allowOther: { type: "boolean" }, otherLabel: { type: "string" } }, additionalProperties: false }, questions: { type: "array", minItems: 1, items: QUESTION_SCHEMA }, metadata: { type: "object", additionalProperties: true } }, required: ["schema", "version", "title", "mode", "questions"], additionalProperties: false };
 const CREATE_QUIZ_INPUT_SCHEMA = { type: "object", properties: { quiz: QUIZ_SPEC_SCHEMA }, required: ["quiz"], additionalProperties: false };
 const SUBMIT_ANSWERS_INPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" }, submission: { type: "object" }, answers: { type: "array", items: { type: "object", properties: { questionId: { type: "string" }, response: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "object" }] } }, { type: "object", additionalProperties: true }, { type: "null" }] }, confidence: { type: "integer", enum: [1, 2, 3], description: "Confidence must be an integer: 1=low, 2=medium, 3=high. Do not use decimals or percentages." }, timeMs: { type: "number", minimum: 0 } }, required: ["questionId", "response"], additionalProperties: true } } }, required: ["quizId", "answers"], additionalProperties: false };
-const QUESTION_TYPE_GUIDE = "Use variety unless the user asks for one format. Supported types: multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, numeric. Answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes and can have any number of correct answers; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; multi_typing uses fields:[{id,label}] and answer/response objects keyed by field id; multi_write_vertical uses 1+ fields for stacked written responses and may have any number of answers; text_select uses segments:[{id,text,selectable?}], selectionPolicy, and answer:string[] selected segment ids; ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when direction matters; matching answer=[{leftId,rightId}]. Light formatting is allowed in title, description, prompts, choices, labels, and item text: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, and line breaks.";
+const QUESTION_TYPE_GUIDE = "Use variety unless the user asks for one format. Supported types: multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, numeric. Answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes and can have any number of correct answers; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; multi_typing uses fields:[{id,label}] and answer/response objects keyed by field id; multi_write_vertical uses 1+ fields for stacked written responses and may have any number of answers; text_select uses segments:[{id,text,selectable?}], selectionPolicy, and answer:string[] selected segment ids; ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when conceptual order matters; direction itself must still be top_to_bottom; matching answer=[{leftId,rightId}]. Light formatting is allowed in title, description, prompts, choices, labels, and item text: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, and line breaks.";
 const CREATE_QUIZ_DESCRIPTION = "Create and open a BetterQuizzes activity. Input MUST be {\"quiz\": BetterQuizzesQuizSpecV2}. Use canonical policy names allowSkipQuiz/defaultAnswerRequired/submitRequiresRequiredAnswers. Quiz design guidance: do not default to all multiple-choice; mix appropriate question types and use any number of choices, fields, segments, matches, or correct answers when useful. Required questions should be rare in practice activities; defaultAnswerRequired=false is preferred unless the user asks for a strict test. Avoid leaking earlier answers in later questions. Shuffle matching answer options. Formatting is opt-in per question and should be used mainly for math/chemistry notation. " + QUESTION_TYPE_GUIDE + " " + V13_UX_INSTRUCTIONS + " Canonical minimal example: " + JSON.stringify(CANONICAL_QUIZ_EXAMPLE) + ". The server returns renderDiagnostics, including componentByQuestion, normalizedFields, and rendererCertified.";
 
 
@@ -967,7 +1041,7 @@ const tools = [
   
   ...V23_BUILDER_TOOL_DEFS,
 { name: "create_quiz", title: "Open BetterQuizzes", description: CREATE_QUIZ_DESCRIPTION, inputSchema: CREATE_QUIZ_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] }, "openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Preparing quiz…", "openai/toolInvocation/invoked": "Quiz ready" } },
-  { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "Create and launch a BetterQuizzes widget from a complete validated quiz object. Prefer start_quiz → add_question → finalize_quiz for assistant-authored quizzes. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for First/Last, Most/Least, Closest/Farthest, etc. Create and launch a BetterQuizzes widget from a complete validated quiz object. Prefer start_quiz → add_question → finalize_quiz for assistant-authored quizzes; use create_quiz only when you already have the final top-level { quiz: ... } packet. Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers…", "openai/toolInvocation/invoked": "Answers submitted" } },
+  { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "V45 ordering checklist: if the quiz contains ordering questions, every orderingBehavior.direction must be top_to_bottom; conceptual order belongs in topLabel/bottomLabel; answers are item ids. Create and launch a BetterQuizzes widget from a complete validated quiz object. Prefer start_quiz → add_question → finalize_quiz for assistant-authored quizzes. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for First/Last, Most/Least, Closest/Farthest, etc. Create and launch a BetterQuizzes widget from a complete validated quiz object. Prefer start_quiz → add_question → finalize_quiz for assistant-authored quizzes; use create_quiz only when you already have the final top-level { quiz: ... } packet. Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers…", "openai/toolInvocation/invoked": "Answers submitted" } },
   { name: "record_grade", title: "Record BetterQuizzes Grade", description: "Record ChatGPT's structured grade so the BetterQuizzes widget can display a score ring or qualitative feedback. Call this after grading a submitted quiz.", inputSchema: GRADE_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Recording grade…", "openai/toolInvocation/invoked": "Grade recorded" } },
   { name: "get_grade", title: "Get BetterQuizzes Grade", description: "Return a recorded BetterQuizzes grade for a quiz/session.", inputSchema: { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } },
   { name: "inspect_quiz", title: "Inspect BetterQuizzes Quiz", description: "Return a short summary and render diagnostics for a stored quiz.", inputSchema: { type: "object", properties: { quizId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } }
