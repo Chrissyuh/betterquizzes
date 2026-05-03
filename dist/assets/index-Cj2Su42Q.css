@@ -1448,3 +1448,54 @@ textarea,
   display: none;
 }
 
+
+
+
+/* V15: fade in newly-added questions and question nav items */
+.question-card {
+  animation: bq-question-fade-in 180ms ease-out both;
+}
+
+.nav-card .dot {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.nav-card .dot {
+  animation: bq-question-dot-fade-in 180ms ease-out both;
+}
+
+@keyframes bq-question-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bq-question-dot-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-card,
+  .nav-card .dot {
+    animation: none;
+    transition: none;
+  }
+}
+

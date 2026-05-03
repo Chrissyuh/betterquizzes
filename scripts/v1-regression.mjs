@@ -77,6 +77,10 @@ assert(styles.includes("V13 UX: radio/circle"), "choice marker shape CSS must be
 assert(types.includes("disableConfidence?: boolean"), "question type must support disabling confidence");
 assert(submission.includes("questionRequiresConfidence"), "submission completion must respect question-level confidence disabling");
 
+assert(styles.includes("V15: fade in newly-added questions"), "newly-added questions must fade in");
+assert(styles.includes("bq-question-fade-in"), "question card fade animation must exist");
+assert(styles.includes("bq-question-dot-fade-in"), "question nav dot fade animation must exist");
+
 console.log("V1 polish regression checks passed.");
 
 // V9 stale submit-pipeline guards
