@@ -2275,3 +2275,52 @@ body {
     max-width: 140px;
   }
 }
+
+
+/* V40 calmer incomplete state and ChatGPT legal-link hiding */
+:root {
+  --bq-v40-needed-bg: #fff7ed;
+  --bq-v40-needed-border: #fed7aa;
+  --bq-v40-needed-ink: #9a3412;
+  --bq-v40-needed-soft: rgba(251, 146, 60, .13);
+}
+
+.question-card.empty,
+.question-card.incomplete {
+  border-color: var(--bq-v40-needed-border) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 245, .98), rgba(255, 255, 255, .96)) !important;
+  box-shadow:
+    0 12px 30px rgba(23, 32, 51, 0.07),
+    inset 0 0 0 1px var(--bq-v40-needed-soft) !important;
+}
+
+.dot.empty,
+.dot.incomplete {
+  background: var(--bq-v40-needed-bg) !important;
+  color: var(--bq-v40-needed-ink) !important;
+  border-color: var(--bq-v40-needed-border) !important;
+}
+
+.dot.empty.active,
+.dot.incomplete.active,
+.dot.draft.active {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: #334155 !important;
+  box-shadow:
+    0 0 0 4px rgba(51, 65, 85, .11),
+    0 10px 22px rgba(16, 24, 40, .13) !important;
+}
+
+.submit-hint,
+.required-note {
+  color: var(--bq-v40-needed-ink) !important;
+}
+
+.bq-chatgpt-host .home-legal-links,
+.bq-chatgpt-host .site-footer,
+.bq-chatgpt-host .site-footer-actions,
+.bq-chatgpt-host .footer-button {
+  display: none !important;
+}

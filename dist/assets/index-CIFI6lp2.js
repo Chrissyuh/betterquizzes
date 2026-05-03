@@ -11646,6 +11646,21 @@ var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_jsx_runtime_production();
 })))();
 var initialOrder = [];
+function bqV40IsChatGptHost() {
+	if (typeof window === "undefined") return false;
+	const hasOpenAiBridge = "openai" in window;
+	const isEmbedded = window.parent !== window;
+	const search = window.location.search.toLowerCase();
+	const hash = window.location.hash.toLowerCase();
+	const host = window.location.hostname.toLowerCase();
+	return hasOpenAiBridge || isEmbedded || search.includes("openai") || search.includes("mcp") || hash.includes("openai") || host.includes("chatgpt") || host.includes("openai");
+}
+function bqV40ApplyHostClass() {
+	if (typeof document === "undefined") return;
+	if (bqV40IsChatGptHost()) document.documentElement.classList.add("bq-chatgpt-host");
+	else document.documentElement.classList.remove("bq-chatgpt-host");
+}
+bqV40ApplyHostClass();
 var SAMPLE_QUIZZES = [
 	tiny_demo_default,
 	aphg_demo_default,
@@ -12018,7 +12033,7 @@ function quizFingerprint(quiz) {
 	});
 }
 function BetterQuizzesHomeLegalLinks() {
-	if (typeof window !== "undefined" && ("openai" in window || window.parent !== window || window.location.search.includes("mcp") || window.location.search.includes("openai"))) return null;
+	if (bqV40IsChatGptHost()) return null;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", {
 		className: "home-legal-links",
 		"aria-label": "Legal links",
