@@ -473,6 +473,17 @@ function quizFingerprint(quiz: QuizSpec): string {
 
 
 function BetterQuizzesHomeLegalLinks() {
+  const isChatGptHost =
+    typeof window !== "undefined" &&
+    (
+      "openai" in window ||
+      window.parent !== window ||
+      window.location.search.includes("mcp") ||
+      window.location.search.includes("openai")
+    );
+
+  if (isChatGptHost) return null;
+
   return (
     <nav className="home-legal-links" aria-label="Legal links">
       <a href="/privacy">Privacy</a>

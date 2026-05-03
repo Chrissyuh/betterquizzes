@@ -12018,6 +12018,7 @@ function quizFingerprint(quiz) {
 	});
 }
 function BetterQuizzesHomeLegalLinks() {
+	if (typeof window !== "undefined" && ("openai" in window || window.parent !== window || window.location.search.includes("mcp") || window.location.search.includes("openai"))) return null;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", {
 		className: "home-legal-links",
 		"aria-label": "Legal links",
