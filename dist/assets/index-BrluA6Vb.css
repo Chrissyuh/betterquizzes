@@ -2419,55 +2419,69 @@ main,
 /* END V41 question nav overflow containment */
 
 
-/* V46b mobile drag ordering
-   Restore real drag-and-drop behavior on mobile with clean, touch-friendly handles. */
+
+
+
+
+/* V47 real mobile ordering drag */
+.bq-v47-order-row,
 .draggable-order-item,
 .order-item {
   touch-action: pan-y;
   cursor: grab;
 }
 
-.draggable-order-item:active,
-.order-item:active {
-  cursor: grabbing;
-}
-
+.bq-v47-drag-handle,
 .drag-handle,
 [class*="drag-handle"] {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 2.75rem !important;
-  min-width: 2.75rem !important;
-  height: 2.75rem !important;
-  border-radius: 16px !important;
-  border: 1px solid rgba(37, 99, 235, .18) !important;
-  background: linear-gradient(180deg, #ffffff, #eef4ff) !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  height: 2.55rem !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(148, 163, 184, .42) !important;
+  background: rgba(248, 250, 252, .92) !important;
   color: transparent !important;
   font-size: 0 !important;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, .07) !important;
+  line-height: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
   touch-action: none !important;
   user-select: none !important;
   -webkit-user-select: none !important;
   cursor: grab !important;
 }
 
-.drag-handle::before,
-[class*="drag-handle"]::before {
-  content: "⋮⋮";
-  color: #64748b;
-  font-size: 1.25rem;
-  line-height: 1;
-  font-weight: 900;
-  letter-spacing: -.28rem;
-  transform: translateX(-.08rem);
+.bq-v47-drag-handle *,
+.drag-handle *,
+[class*="drag-handle"] * {
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
 }
 
+.bq-v47-drag-handle::before,
+.drag-handle::before,
+[class*="drag-handle"]::before {
+  content: "";
+  width: 1rem;
+  height: 1.18rem;
+  display: block;
+  background:
+    radial-gradient(circle, #64748b 2px, transparent 2.5px) 0 0 / .5rem .5rem,
+    radial-gradient(circle, #64748b 2px, transparent 2.5px) .5rem 0 / .5rem .5rem;
+  opacity: .88;
+}
+
+.bq-v47-drag-handle:active,
 .drag-handle:active,
 [class*="drag-handle"]:active {
   cursor: grabbing !important;
-  background: #dbeafe !important;
-  border-color: rgba(37, 99, 235, .34) !important;
+  background: #e0edff !important;
+  border-color: rgba(37, 99, 235, .35) !important;
 }
 
 .drag-label,
@@ -2475,50 +2489,36 @@ main,
   display: none !important;
 }
 
-.order-controls {
-  opacity: .86;
-}
-
-.bq-ordering-drag-active,
-.bq-ordering-drag-active body {
+.bq-v47-drag-active,
+.bq-v47-drag-active body {
   overscroll-behavior: contain;
   user-select: none !important;
   -webkit-user-select: none !important;
 }
 
-.bq-ordering-drag-source {
-  opacity: .72 !important;
-  transform: scale(.985) !important;
-  box-shadow: 0 14px 34px rgba(37, 99, 235, .16) !important;
+.bq-v47-drag-source {
+  opacity: .76 !important;
+  z-index: 10 !important;
+  box-shadow: 0 18px 36px rgba(37, 99, 235, .18) !important;
+  transition: none !important;
 }
 
-.bq-ordering-drag-over {
-  outline: 3px solid rgba(37, 99, 235, .32) !important;
+.bq-v47-drag-over {
+  outline: 3px solid rgba(37, 99, 235, .3) !important;
   background: linear-gradient(180deg, #eef4ff, #ffffff) !important;
 }
 
 @media (max-width: 720px), (pointer: coarse) {
-  .draggable-order-item,
-  .order-item {
-    touch-action: pan-y;
-    -webkit-tap-highlight-color: transparent;
-  }
-
+  .bq-v47-drag-handle,
   .drag-handle,
   [class*="drag-handle"] {
-    width: 3rem !important;
-    min-width: 3rem !important;
-    height: 3rem !important;
-    border-radius: 17px !important;
-  }
-
-  .drag-handle::before,
-  [class*="drag-handle"]::before {
-    font-size: 1.35rem;
+    width: 2.85rem !important;
+    min-width: 2.85rem !important;
+    height: 2.85rem !important;
   }
 
   .order-controls {
     display: none !important;
   }
 }
-/* END V46b mobile drag ordering */
+/* END V47 real mobile ordering drag */
