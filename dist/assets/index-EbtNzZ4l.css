@@ -2425,27 +2425,31 @@ main,
 
 
 
-/* V47 real mobile ordering drag */
-.bq-v47-order-row,
+
+
+/* V48 pointer ordering reorder */
+.bq-v48-order-list {
+  position: relative;
+}
+
+.bq-v48-order-row,
 .draggable-order-item,
 .order-item {
   touch-action: pan-y;
   cursor: grab;
 }
 
-.bq-v47-drag-handle,
-.drag-handle,
-[class*="drag-handle"] {
+.bq-v48-order-handle {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 2.55rem !important;
-  min-width: 2.55rem !important;
-  height: 2.55rem !important;
+  width: 2.45rem !important;
+  min-width: 2.45rem !important;
+  height: 2.45rem !important;
   padding: 0 !important;
   border-radius: 999px !important;
-  border: 1px solid rgba(148, 163, 184, .42) !important;
-  background: rgba(248, 250, 252, .92) !important;
+  border: 1px solid rgba(148, 163, 184, .36) !important;
+  background: rgba(248, 250, 252, .96) !important;
   color: transparent !important;
   font-size: 0 !important;
   line-height: 0 !important;
@@ -2457,70 +2461,51 @@ main,
   cursor: grab !important;
 }
 
-.bq-v47-drag-handle *,
-.drag-handle *,
-[class*="drag-handle"] * {
-  color: transparent !important;
-  font-size: 0 !important;
-  line-height: 0 !important;
-}
-
-.bq-v47-drag-handle::before,
-.drag-handle::before,
-[class*="drag-handle"]::before {
-  content: "";
-  width: 1rem;
-  height: 1.18rem;
-  display: block;
-  background:
-    radial-gradient(circle, #64748b 2px, transparent 2.5px) 0 0 / .5rem .5rem,
-    radial-gradient(circle, #64748b 2px, transparent 2.5px) .5rem 0 / .5rem .5rem;
-  opacity: .88;
-}
-
-.bq-v47-drag-handle:active,
-.drag-handle:active,
-[class*="drag-handle"]:active {
-  cursor: grabbing !important;
-  background: #e0edff !important;
-  border-color: rgba(37, 99, 235, .35) !important;
-}
-
-.drag-label,
-[class*="drag-label"] {
+.bq-v48-order-handle * {
   display: none !important;
 }
 
-.bq-v47-drag-active,
-.bq-v47-drag-active body {
+.bq-v48-order-handle::before {
+  content: "";
+  width: 1rem;
+  height: 1.15rem;
+  display: block;
+  background:
+    radial-gradient(circle, #64748b 1.8px, transparent 2.3px) 0 0 / .5rem .5rem,
+    radial-gradient(circle, #64748b 1.8px, transparent 2.3px) .5rem 0 / .5rem .5rem;
+  opacity: .9;
+}
+
+.bq-v48-order-handle:active {
+  cursor: grabbing !important;
+  background: #e0edff !important;
+  border-color: rgba(37, 99, 235, .36) !important;
+}
+
+.bq-v48-dragging,
+.bq-v48-dragging body {
   overscroll-behavior: contain;
   user-select: none !important;
   -webkit-user-select: none !important;
 }
 
-.bq-v47-drag-source {
-  opacity: .76 !important;
+.bq-v48-drag-source {
+  opacity: .72 !important;
   z-index: 10 !important;
-  box-shadow: 0 18px 36px rgba(37, 99, 235, .18) !important;
+  box-shadow: 0 16px 34px rgba(37, 99, 235, .18) !important;
   transition: none !important;
 }
 
-.bq-v47-drag-over {
-  outline: 3px solid rgba(37, 99, 235, .3) !important;
+.bq-v48-drag-target {
+  outline: 3px solid rgba(37, 99, 235, .28) !important;
   background: linear-gradient(180deg, #eef4ff, #ffffff) !important;
 }
 
 @media (max-width: 720px), (pointer: coarse) {
-  .bq-v47-drag-handle,
-  .drag-handle,
-  [class*="drag-handle"] {
+  .bq-v48-order-handle {
     width: 2.85rem !important;
     min-width: 2.85rem !important;
     height: 2.85rem !important;
   }
-
-  .order-controls {
-    display: none !important;
-  }
 }
-/* END V47 real mobile ordering drag */
+/* END V48 pointer ordering reorder */
