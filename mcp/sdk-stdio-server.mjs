@@ -24,7 +24,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 const VERSION = "V1";
-const RESOURCE_URI = "ui://widget/betterquizzes-v1-build-bqv1p1.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v58-clean.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.

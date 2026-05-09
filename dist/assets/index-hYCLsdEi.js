@@ -11655,7 +11655,6 @@ var require_react_jsx_runtime_production = /* @__PURE__ */ __commonJSMin(((expor
 var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_jsx_runtime_production();
 })))();
-var initialOrder = [];
 function bqV40IsChatGptHost() {
 	if (typeof window === "undefined") return false;
 	const hasOpenAiBridge = "openai" in window;
@@ -11677,308 +11676,6 @@ function bqV44ShouldUseEarlyMobileFollowUp() {
 	const userAgent = navigator.userAgent.toLowerCase();
 	return /iphone|ipad|ipod|android|mobile/.test(userAgent) || typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 }
-function bqV53NoNativeDrag(element) {
-	element.draggable = false;
-	element.setAttribute("draggable", "false");
-	element.style.userSelect = "none";
-	element.style.webkitUserSelect = "none";
-	element.style.webkitUserDrag = "none";
-}
-function bqV53Rows(list) {
-	return Array.from(list.children).filter((item) => item instanceof HTMLElement).filter((item) => item.classList.contains("order-item") || item.classList.contains("draggable-order-item") || item.classList.contains("bq-v53-sort-row") || Boolean(item.querySelector(".order-index")));
-}
-function bqV53RowFromHandle(handle) {
-	const row = handle.closest(".order-item, .draggable-order-item, .bq-v53-sort-row");
-	return row instanceof HTMLElement ? row : null;
-}
-function bqV53ListFromRow(row) {
-	const list = row.closest(".order-list, .drag-order-list, .bq-v53-sort-list");
-	if (list instanceof HTMLElement) return list;
-	return row.parentElement instanceof HTMLElement ? row.parentElement : null;
-}
-function bqV53FindMoveButton(row, direction) {
-	const buttons = Array.from(row.querySelectorAll("button")).filter((button) => button instanceof HTMLButtonElement).filter((button) => !button.classList.contains("drag-handle") && !button.classList.contains("bq-v53-sort-handle"));
-	const exact = buttons.find((button) => {
-		const text = [
-			button.textContent ?? "",
-			button.getAttribute("aria-label") ?? "",
-			button.getAttribute("title") ?? ""
-		].join(" ").toLowerCase();
-		return direction === "up" ? text.includes("up") || text.includes("↑") || text.includes("move earlier") : text.includes("down") || text.includes("↓") || text.includes("move later");
-	});
-	if (exact) return exact;
-	return direction === "up" ? buttons[0] ?? null : buttons[1] ?? buttons[0] ?? null;
-}
-function bqV53EnhanceSortDom(root = document) {
-	const lists = Array.from(root.querySelectorAll(".order-list, .drag-order-list, .bq-v53-sort-list")).filter((item) => item instanceof HTMLElement);
-	for (const list of lists) {
-		const rows = bqV53Rows(list);
-		if (!rows.length) continue;
-		list.classList.add("bq-v53-sort-list");
-		bqV53NoNativeDrag(list);
-		for (const row of rows) {
-			row.classList.add("bq-v53-sort-row");
-			bqV53NoNativeDrag(row);
-			for (const child of Array.from(row.querySelectorAll("*"))) if (child instanceof HTMLElement) bqV53NoNativeDrag(child);
-			let handle = row.querySelector(".drag-handle") ?? row.querySelector("[class*='drag-handle']") ?? row.querySelector(".bq-v53-sort-handle");
-			if (!(handle instanceof HTMLElement)) {
-				handle = document.createElement("button");
-				handle.className = "drag-handle bq-v53-sort-handle";
-				handle.setAttribute("type", "button");
-				row.appendChild(handle);
-			}
-			handle.classList.add("bq-v53-sort-handle");
-			handle.setAttribute("aria-label", "Drag to reorder");
-			handle.setAttribute("title", "Drag to reorder");
-			handle.setAttribute("tabindex", "0");
-			handle.setAttribute("draggable", "false");
-			handle.innerHTML = "<span aria-hidden=\"true\"></span>";
-			bqV53NoNativeDrag(handle);
-		}
-	}
-}
-function bqV53ClearSortVisuals() {
-	document.querySelectorAll(".bq-v53-sort-source, .bq-v53-slot-before, .bq-v53-slot-after").forEach((element) => {
-		element.classList.remove("bq-v53-sort-source", "bq-v53-slot-before", "bq-v53-slot-after");
-	});
-	for (const row of Array.from(document.querySelectorAll(".bq-v53-sort-row"))) if (row instanceof HTMLElement) row.style.transform = "";
-	document.documentElement.classList.remove("bq-v53-sorting-active");
-}
-function bqV53TargetIndex(list, y, fallback) {
-	const rows = bqV53Rows(list);
-	let target = fallback;
-	for (let index = 0; index < rows.length; index += 1) {
-		const rect = rows[index].getBoundingClientRect();
-		if (y >= rect.top + rect.height / 2) target = index;
-	}
-	return Math.max(0, Math.min(rows.length - 1, target));
-}
-function bqV53PaintSort(state) {
-	bqV53ClearSortVisuals();
-	document.documentElement.classList.add("bq-v53-sorting-active");
-	const target = bqV53Rows(state.list)[state.toIndex];
-	const delta = Math.max(-160, Math.min(160, state.y - state.startY));
-	state.row.classList.add("bq-v53-sort-source");
-	state.row.style.transform = `translateY(${delta}px) scale(.985)`;
-	if (target && target !== state.row) if (state.toIndex > state.fromIndex) target.classList.add("bq-v53-slot-after");
-	else target.classList.add("bq-v53-slot-before");
-}
-function bqV53Start(handle, x, y, pointerId, touchId) {
-	const row = bqV53RowFromHandle(handle);
-	if (!row) return null;
-	const list = bqV53ListFromRow(row);
-	if (!list) return null;
-	const fromIndex = bqV53Rows(list).indexOf(row);
-	if (fromIndex < 0) return null;
-	const token = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
-	row.dataset.bqV53Token = token;
-	row.classList.add("bq-v53-sort-source");
-	document.documentElement.classList.add("bq-v53-sorting-active");
-	return {
-		pointerId,
-		touchId,
-		startX: x,
-		startY: y,
-		y,
-		fromIndex,
-		toIndex: fromIndex,
-		row,
-		list,
-		token,
-		dragging: false
-	};
-}
-function bqV53ClickMoveSequence(snapshot) {
-	let completed = 0;
-	function currentRow() {
-		return snapshot.list.querySelector(`[data-bq-v53-token="${snapshot.token}"]`);
-	}
-	function cleanup() {
-		const row = currentRow();
-		if (row) delete row.dataset.bqV53Token;
-	}
-	function step() {
-		if (completed >= snapshot.steps) {
-			cleanup();
-			return;
-		}
-		const row = currentRow();
-		if (!row) {
-			cleanup();
-			return;
-		}
-		const button = bqV53FindMoveButton(row, snapshot.direction);
-		if (!button || button.disabled) {
-			cleanup();
-			return;
-		}
-		button.dispatchEvent(new MouseEvent("click", {
-			bubbles: true,
-			cancelable: true
-		}));
-		completed += 1;
-		window.requestAnimationFrame(() => window.requestAnimationFrame(step));
-	}
-	step();
-}
-function bqV53Move(x, y) {
-	if (!bqV53ActiveSort) return;
-	const state = bqV53ActiveSort;
-	state.y = y;
-	const moved = Math.hypot(x - state.startX, y - state.startY);
-	if (!state.dragging && moved < 2) return;
-	state.dragging = true;
-	state.toIndex = bqV53TargetIndex(state.list, y, state.fromIndex);
-	bqV53PaintSort(state);
-	const margin = 82;
-	if (y < margin) window.scrollBy({
-		top: -12,
-		behavior: "auto"
-	});
-	if (y > window.innerHeight - margin) window.scrollBy({
-		top: 12,
-		behavior: "auto"
-	});
-}
-function bqV53Finish(y) {
-	if (!bqV53ActiveSort) return;
-	const snapshot = bqV53ActiveSort;
-	bqV53ActiveSort = null;
-	snapshot.toIndex = bqV53TargetIndex(snapshot.list, y, snapshot.toIndex);
-	bqV53ClearSortVisuals();
-	if (!snapshot.dragging || snapshot.fromIndex === snapshot.toIndex) {
-		delete snapshot.row.dataset.bqV53Token;
-		return;
-	}
-	bqV53ClickMoveSequence({
-		list: snapshot.list,
-		token: snapshot.token,
-		direction: snapshot.toIndex > snapshot.fromIndex ? "down" : "up",
-		steps: Math.abs(snapshot.toIndex - snapshot.fromIndex)
-	});
-}
-var bqV53ActiveSort = null;
-function bqV53InstallSortInteraction() {
-	if (typeof document === "undefined" || typeof window === "undefined") return () => {};
-	function cancel() {
-		if (bqV53ActiveSort?.row) delete bqV53ActiveSort.row.dataset.bqV53Token;
-		bqV53ActiveSort = null;
-		bqV53ClearSortVisuals();
-	}
-	function onDragStart(event) {
-		if (event.target instanceof Element && event.target.closest(".order-list, .drag-order-list, .bq-v53-sort-list")) {
-			event.preventDefault();
-			event.stopPropagation();
-		}
-	}
-	function onPointerDown(event) {
-		if (event.button !== 0) return;
-		if (!(event.target instanceof Element)) return;
-		const handle = event.target.closest(".bq-v53-sort-handle, .drag-handle, [class*='drag-handle']");
-		if (!(handle instanceof HTMLElement)) return;
-		bqV53EnhanceSortDom();
-		const upgraded = handle.closest(".bq-v53-sort-handle, .drag-handle, [class*='drag-handle']");
-		if (!(upgraded instanceof HTMLElement)) return;
-		event.preventDefault();
-		event.stopPropagation();
-		bqV53ActiveSort = bqV53Start(upgraded, event.clientX, event.clientY, event.pointerId, void 0);
-		if (bqV53ActiveSort) try {
-			bqV53ActiveSort.row.setPointerCapture(event.pointerId);
-		} catch {}
-	}
-	function onPointerMove(event) {
-		if (!bqV53ActiveSort || bqV53ActiveSort.pointerId !== event.pointerId) return;
-		event.preventDefault();
-		event.stopPropagation();
-		bqV53Move(event.clientX, event.clientY);
-	}
-	function onPointerUp(event) {
-		if (!bqV53ActiveSort || bqV53ActiveSort.pointerId !== event.pointerId) return;
-		event.preventDefault();
-		event.stopPropagation();
-		try {
-			bqV53ActiveSort.row.releasePointerCapture(event.pointerId);
-		} catch {}
-		bqV53Finish(event.clientY);
-	}
-	function onTouchStart(event) {
-		if (!(event.target instanceof Element)) return;
-		const handle = event.target.closest(".bq-v53-sort-handle, .drag-handle, [class*='drag-handle']");
-		if (!(handle instanceof HTMLElement)) return;
-		const touch = event.changedTouches[0];
-		if (!touch) return;
-		bqV53EnhanceSortDom();
-		event.preventDefault();
-		event.stopPropagation();
-		bqV53ActiveSort = bqV53Start(handle, touch.clientX, touch.clientY, void 0, touch.identifier);
-	}
-	function matchingTouch(event) {
-		if (!bqV53ActiveSort || bqV53ActiveSort.touchId === void 0) return null;
-		for (const touch of Array.from(event.changedTouches)) if (touch.identifier === bqV53ActiveSort.touchId) return touch;
-		for (const touch of Array.from(event.touches)) if (touch.identifier === bqV53ActiveSort.touchId) return touch;
-		return null;
-	}
-	function onTouchMove(event) {
-		const touch = matchingTouch(event);
-		if (!touch) return;
-		event.preventDefault();
-		event.stopPropagation();
-		bqV53Move(touch.clientX, touch.clientY);
-	}
-	function onTouchEnd(event) {
-		const touch = matchingTouch(event);
-		if (!touch) return;
-		event.preventDefault();
-		event.stopPropagation();
-		bqV53Finish(touch.clientY);
-	}
-	const observer = new MutationObserver(() => bqV53EnhanceSortDom());
-	observer.observe(document.documentElement, {
-		childList: true,
-		subtree: true
-	});
-	bqV53EnhanceSortDom();
-	window.addEventListener("dragstart", onDragStart, true);
-	window.addEventListener("pointerdown", onPointerDown, {
-		capture: true,
-		passive: false
-	});
-	window.addEventListener("pointermove", onPointerMove, {
-		capture: true,
-		passive: false
-	});
-	window.addEventListener("pointerup", onPointerUp, {
-		capture: true,
-		passive: false
-	});
-	window.addEventListener("pointercancel", cancel, true);
-	window.addEventListener("touchstart", onTouchStart, {
-		capture: true,
-		passive: false
-	});
-	window.addEventListener("touchmove", onTouchMove, {
-		capture: true,
-		passive: false
-	});
-	window.addEventListener("touchend", onTouchEnd, {
-		capture: true,
-		passive: false
-	});
-	window.addEventListener("touchcancel", cancel, true);
-	return () => {
-		observer.disconnect();
-		window.removeEventListener("dragstart", onDragStart, true);
-		window.removeEventListener("pointerdown", onPointerDown, true);
-		window.removeEventListener("pointermove", onPointerMove, true);
-		window.removeEventListener("pointerup", onPointerUp, true);
-		window.removeEventListener("pointercancel", cancel, true);
-		window.removeEventListener("touchstart", onTouchStart, true);
-		window.removeEventListener("touchmove", onTouchMove, true);
-		window.removeEventListener("touchend", onTouchEnd, true);
-		window.removeEventListener("touchcancel", cancel, true);
-		cancel();
-	};
-}
 var SAMPLE_QUIZZES = [
 	tiny_demo_default,
 	aphg_demo_default,
@@ -11994,9 +11691,6 @@ function App() {
 	const routeWidgetMode = (0, import_react.useMemo)(() => isWidgetRoute(), []);
 	const bootstrapWidgetMode = (0, import_react.useMemo)(() => hasBetterQuizzesBootstrap(), []);
 	const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode);
-	(0, import_react.useEffect)(() => {
-		return bqV53InstallSortInteraction();
-	}, []);
 	const [screen, setScreen] = (0, import_react.useState)(widgetMode ? "loading" : "import");
 	const [quiz, setQuiz] = (0, import_react.useState)(null);
 	const [launchId, setLaunchId] = (0, import_react.useState)(void 0);
@@ -12434,6 +12128,12 @@ function ImportScreen({ error, onLoadQuiz }) {
 		]
 	});
 }
+function isIncrementalQuizBuilding(quiz) {
+	const record = quiz;
+	const metadata = record.metadata && typeof record.metadata === "object" ? record.metadata : {};
+	const expected = Number(record.expectedQuestionCount ?? metadata.expectedQuestionCount ?? metadata.declaredQuestionCount ?? quiz.questions.length);
+	return Number.isFinite(expected) && expected > quiz.questions.length;
+}
 function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }) {
 	const restoredDraftState = (0, import_react.useMemo)(() => widgetMode ? getPersistedDraftState(getQuizId(quiz)) : null, [widgetMode, quiz]);
 	const [currentIndex, setCurrentIndex] = (0, import_react.useState)(() => clampIndex(restoredDraftState?.currentIndex ?? 0, quiz.questions.length));
@@ -12829,11 +12529,6 @@ function SkipQuizScreen({ mode, widgetMode, title, answeredCount, totalCount, su
 						" questions had draft answers"
 					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Grading not requested" })]
 				}),
-				recordedGrade ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GradeSummaryCard, { grade: recordedGrade }) : widgetMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "grade-waiting-card",
-					"aria-live": "polite",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "grade-waiting-dot" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: gradePollingDone ? "ChatGPT feedback will appear in chat." : "Waiting for ChatGPT grade…" })]
-				}) : null,
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "actions wrap",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
@@ -13104,8 +12799,9 @@ function appendTextWithBreaks(nodes, text, keyPrefix) {
 	});
 }
 function getOrderingItems(question) {
-	if (!Array.isArray(question.items)) return [];
-	return question.items.filter((item) => Boolean(item) && typeof item === "object" && "id" in item && "text" in item).map((item) => ({
+	const record = question && typeof question === "object" ? question : {};
+	if (!Array.isArray(record.items)) return [];
+	return record.items.filter((item) => Boolean(item) && typeof item === "object" && "id" in item && "text" in item).map((item) => ({
 		id: String(item.id),
 		text: String(item.text)
 	})).filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
@@ -13136,7 +12832,8 @@ function bqV26AvoidAlreadyCorrectOrdering(question, items, order) {
 }
 function getInitialOrderingOrder(question, items = getOrderingItems(question)) {
 	const itemIds = items.map((item) => item.id);
-	const answer = Array.isArray(question.answer) ? (question.answer ?? []).filter((id) => typeof id === "string") : [];
+	const record = question && typeof question === "object" ? question : {};
+	const answer = Array.isArray(record.answer) ? record.answer.filter((id) => typeof id === "string") : [];
 	if (itemIds.length > 1 && answer.length === itemIds.length && answer.every((id, index) => id === itemIds[index])) return [...itemIds.slice(1), itemIds[0]];
 	return itemIds;
 }
@@ -13923,74 +13620,175 @@ function parseNumericResponse(value) {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 function OrderingInput({ question, response, onChange }) {
-	const [draggedId, setDraggedId] = (0, import_react.useState)(null);
-	const [overId, setOverId] = (0, import_react.useState)(null);
-	const draggingRef = (0, import_react.useRef)(null);
-	const orderRef = (0, import_react.useRef)([]);
 	const items = getOrderingItems(question);
 	const itemIds = items.map((item) => item.id);
 	const itemIdsKey = itemIds.join("|");
 	const behavior = getOrderingBehavior(question);
 	const order = normalizeOrderingResponse(response, items);
+	const listRef = (0, import_react.useRef)(null);
+	const activeDragRef = (0, import_react.useRef)(null);
+	const orderRef = (0, import_react.useRef)(order);
+	const [dragState, setDragState] = (0, import_react.useState)(null);
 	(0, import_react.useEffect)(() => {
 		orderRef.current = order;
 	}, [order.join("|")]);
 	(0, import_react.useEffect)(() => {
-		if (!response.length && itemIds.length) onChange(initialOrder);
-	}, [response.length, itemIdsKey]);
+		if (!response.length && itemIds.length) onChange(getInitialOrderingOrder(question, items));
+	}, [
+		response.length,
+		itemIdsKey,
+		question.id
+	]);
+	(0, import_react.useEffect)(() => {
+		function handleWindowPointerMove(event) {
+			const drag = activeDragRef.current;
+			if (!drag || drag.pointerId !== event.pointerId) return;
+			event.preventDefault();
+			updateDragTarget(event.clientY);
+		}
+		function handleWindowPointerUp(event) {
+			const drag = activeDragRef.current;
+			if (!drag || drag.pointerId !== event.pointerId) return;
+			event.preventDefault();
+			finishDrag(event.clientY);
+		}
+		function handleWindowTouchMove(event) {
+			const drag = activeDragRef.current;
+			if (!drag || drag.touchId === void 0) return;
+			const touch = findTouch(event, drag.touchId);
+			if (!touch) return;
+			event.preventDefault();
+			updateDragTarget(touch.clientY);
+		}
+		function handleWindowTouchEnd(event) {
+			const drag = activeDragRef.current;
+			if (!drag || drag.touchId === void 0) return;
+			const touch = findTouch(event, drag.touchId);
+			if (!touch) return;
+			event.preventDefault();
+			finishDrag(touch.clientY);
+		}
+		function handleWindowCancel() {
+			cancelDrag();
+		}
+		window.addEventListener("pointermove", handleWindowPointerMove, { passive: false });
+		window.addEventListener("pointerup", handleWindowPointerUp, { passive: false });
+		window.addEventListener("pointercancel", handleWindowCancel);
+		window.addEventListener("touchmove", handleWindowTouchMove, { passive: false });
+		window.addEventListener("touchend", handleWindowTouchEnd, { passive: false });
+		window.addEventListener("touchcancel", handleWindowCancel);
+		return () => {
+			window.removeEventListener("pointermove", handleWindowPointerMove);
+			window.removeEventListener("pointerup", handleWindowPointerUp);
+			window.removeEventListener("pointercancel", handleWindowCancel);
+			window.removeEventListener("touchmove", handleWindowTouchMove);
+			window.removeEventListener("touchend", handleWindowTouchEnd);
+			window.removeEventListener("touchcancel", handleWindowCancel);
+		};
+	}, [items, order.join("|")]);
 	if (!items.length) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionRenderWarning, {
 		question,
 		detail: "This ordering question did not include any valid items."
 	});
-	function commit(nextOrder) {
-		const normalized = normalizeOrderingResponse(nextOrder, items);
-		orderRef.current = normalized;
-		onChange(normalized);
+	function findTouch(event, id) {
+		for (const touch of Array.from(event.changedTouches)) if (touch.identifier === id) return touch;
+		for (const touch of Array.from(event.touches)) if (touch.identifier === id) return touch;
+		return null;
 	}
-	function reorder(sourceId, targetId) {
-		if (!sourceId || sourceId === targetId) return;
-		const currentOrder = orderRef.current.length ? orderRef.current : order;
-		const fromIndex = currentOrder.indexOf(sourceId);
-		const toIndex = currentOrder.indexOf(targetId);
-		if (fromIndex < 0 || toIndex < 0) return;
-		const next = [...currentOrder];
-		next.splice(fromIndex, 1);
-		next.splice(toIndex, 0, sourceId);
-		commit(next);
+	function rows() {
+		return Array.from(listRef.current?.querySelectorAll("[data-order-id]") ?? []);
 	}
-	function reorderNativeDrag(targetId) {
-		if (!draggedId || draggedId === targetId) return;
-		reorder(draggedId, targetId);
+	function indexFromY(clientY, fallback) {
+		const rowEls = rows();
+		if (!rowEls.length) return fallback;
+		let target = fallback;
+		for (let index = 0; index < rowEls.length; index += 1) {
+			const rect = rowEls[index].getBoundingClientRect();
+			if (clientY >= rect.top + rect.height / 2) target = index;
+		}
+		return Math.max(0, Math.min(rowEls.length - 1, target));
 	}
-	function targetIdFromPoint(clientX, clientY) {
-		return (document.elementFromPoint(clientX, clientY)?.closest?.("[data-order-id]"))?.dataset.orderId ?? null;
+	function moveByIndex(fromIndex, toIndex) {
+		const current = orderRef.current.length ? orderRef.current : order;
+		if (fromIndex < 0 || fromIndex >= current.length || toIndex < 0 || toIndex >= current.length || fromIndex === toIndex) return;
+		const next = [...current];
+		const [item] = next.splice(fromIndex, 1);
+		next.splice(toIndex, 0, item);
+		orderRef.current = next;
+		onChange(normalizeOrderingResponse(next, items));
 	}
-	function beginPointerDrag(event, id) {
-		draggingRef.current = id;
-		setDraggedId(id);
-		setOverId(id);
+	function beginDrag(id, clientY, pointerId, touchId) {
+		const fromIndex = (orderRef.current.length ? orderRef.current : order).indexOf(id);
+		if (fromIndex < 0) return;
+		activeDragRef.current = {
+			id,
+			pointerId,
+			touchId,
+			startY: clientY,
+			currentY: clientY,
+			fromIndex,
+			toIndex: fromIndex,
+			moved: false
+		};
+		setDragState({
+			id,
+			toIndex: fromIndex,
+			y: clientY
+		});
+	}
+	function updateDragTarget(clientY) {
+		const drag = activeDragRef.current;
+		if (!drag) return;
+		drag.currentY = clientY;
+		if (Math.abs(clientY - drag.startY) > 2) drag.moved = true;
+		drag.toIndex = indexFromY(clientY, drag.toIndex);
+		setDragState({
+			id: drag.id,
+			toIndex: drag.toIndex,
+			y: clientY
+		});
+	}
+	function finishDrag(clientY) {
+		const drag = activeDragRef.current;
+		if (!drag) return;
+		drag.toIndex = indexFromY(clientY, drag.toIndex);
+		activeDragRef.current = null;
+		setDragState(null);
+		if (drag.moved) moveByIndex(drag.fromIndex, drag.toIndex);
+	}
+	function cancelDrag() {
+		activeDragRef.current = null;
+		setDragState(null);
+	}
+	function handlePointerDown(event, id) {
 		event.preventDefault();
+		event.stopPropagation();
+		beginDrag(id, event.clientY, event.pointerId, void 0);
 		try {
 			event.currentTarget.setPointerCapture(event.pointerId);
 		} catch {}
 	}
-	function movePointerDrag(event) {
-		const sourceId = draggingRef.current;
-		if (!sourceId) return;
+	function handleTouchStart(event, id) {
+		const touch = event.changedTouches[0];
+		if (!touch) return;
 		event.preventDefault();
-		const targetId = targetIdFromPoint(event.clientX, event.clientY);
-		if (!targetId) return;
-		setOverId(targetId);
-		reorder(sourceId, targetId);
+		event.stopPropagation();
+		beginDrag(id, touch.clientY, void 0, touch.identifier);
 	}
-	function endPointerDrag(event) {
-		if (!draggingRef.current) return;
-		try {
-			event.currentTarget.releasePointerCapture(event.pointerId);
-		} catch {}
-		draggingRef.current = null;
-		setDraggedId(null);
-		setOverId(null);
+	function handleKeyDown(event, index) {
+		if (event.key === "ArrowUp") {
+			event.preventDefault();
+			moveByIndex(index, Math.max(0, index - 1));
+		} else if (event.key === "ArrowDown") {
+			event.preventDefault();
+			moveByIndex(index, Math.min(order.length - 1, index + 1));
+		} else if (event.key === "Home") {
+			event.preventDefault();
+			moveByIndex(index, 0);
+		} else if (event.key === "End") {
+			event.preventDefault();
+			moveByIndex(index, order.length - 1);
+		}
 	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "order-shell drag-order-shell",
@@ -14003,55 +13801,36 @@ function OrderingInput({ question, response, onChange }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "order-list drag-order-list",
 				"aria-live": "polite",
+				ref: listRef,
 				children: order.map((id, index) => {
 					const item = items.find((entry) => entry.id === id);
+					const isDragging = dragState?.id === id;
+					const isBeforeSlot = Boolean(dragState && !isDragging && dragState.toIndex === index && dragState.toIndex < activeDragRef.current.fromIndex);
+					const isAfterSlot = Boolean(dragState && !isDragging && dragState.toIndex === index && dragState.toIndex > activeDragRef.current.fromIndex);
+					const dragOffset = isDragging && activeDragRef.current ? Math.max(-170, Math.min(170, dragState.y - activeDragRef.current.startY)) : 0;
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: (draggedId === id ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (overId === id ? " drag-over" : ""),
+						className: "order-item draggable-order-item" + (isDragging ? " dragging" : "") + (isBeforeSlot ? " drop-before" : "") + (isAfterSlot ? " drop-after" : ""),
 						"data-order-id": id,
 						draggable: false,
-						onDragStart: (event) => {
-							setDraggedId(id);
-							draggingRef.current = id;
-							event.dataTransfer.effectAllowed = "move";
-							event.dataTransfer.setData("text/plain", id);
-						},
-						onDragEnter: (event) => {
-							event.preventDefault();
-							setOverId(id);
-							reorderNativeDrag(id);
-						},
-						onDragOver: (event) => {
-							event.preventDefault();
-							event.dataTransfer.dropEffect = "move";
-						},
-						onDrop: (event) => {
-							event.preventDefault();
-							reorderNativeDrag(id);
-							draggingRef.current = null;
-							setDraggedId(null);
-							setOverId(null);
-						},
-						onDragEnd: () => {
-							draggingRef.current = null;
-							setDraggedId(null);
-							setOverId(null);
-						},
+						style: isDragging ? { transform: `translateY(${dragOffset}px) scale(.985)` } : void 0,
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 							className: "order-item-text",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "order-index",
 								children: index + 1
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RichInline, { text: item?.text ?? id })]
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
 							className: "drag-handle",
-							role: "button",
-							tabIndex: 0,
-							"aria-label": `Drag ${item?.text ?? id}`,
-							onPointerDown: (event) => beginPointerDrag(event, id),
-							onPointerMove: movePointerDrag,
-							onPointerUp: endPointerDrag,
-							onPointerCancel: endPointerDrag,
-							children: "⋮⋮"
+							"aria-label": `Drag ${item?.text ?? id} to reorder`,
+							draggable: false,
+							onPointerDown: (event) => handlePointerDown(event, id),
+							onTouchStart: (event) => handleTouchStart(event, id),
+							onKeyDown: (event) => handleKeyDown(event, index),
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								"aria-hidden": "true",
+								children: "⋮⋮"
+							})
 						})]
 					}, id);
 				})
@@ -14236,42 +14015,6 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 			]
 		})
 	});
-}
-function GradeSummaryCard({ grade }) {
-	const percent = getGradePercent(grade);
-	const hasNumeric = percent !== null;
-	const scoreText = grade.score !== null && grade.score !== void 0 && grade.maxScore !== null && grade.maxScore !== void 0 ? String(grade.score) + "/" + String(grade.maxScore) : hasNumeric ? String(percent) + "%" : "";
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-		className: hasNumeric ? "grade-card grade-card-numeric" : "grade-card grade-card-qualitative",
-		"aria-live": "polite",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-			className: hasNumeric ? "grade-ring" : "grade-ring qualitative",
-			style: hasNumeric ? { "--grade-percent": String(percent) } : void 0,
-			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: hasNumeric ? String(percent) + "%" : "✓" })
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "eyebrow",
-				children: "Grade ready"
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: grade.label || (hasNumeric ? "Graded" : "Feedback ready") }),
-			scoreText ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "grade-score-text",
-				children: scoreText
-			}) : null,
-			grade.summary ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "muted",
-				children: grade.summary
-			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "muted",
-				children: "ChatGPT recorded feedback for this submission."
-			})
-		] })]
-	});
-}
-function getGradePercent(grade) {
-	if (typeof grade.percent === "number" && Number.isFinite(grade.percent)) return Math.max(0, Math.min(100, Math.round(grade.percent)));
-	if (typeof grade.score === "number" && typeof grade.maxScore === "number" && Number.isFinite(grade.score) && Number.isFinite(grade.maxScore) && grade.maxScore > 0) return Math.max(0, Math.min(100, Math.round(grade.score / grade.maxScore * 100)));
-	return null;
 }
 function getFinishedGradeStatus(finished, widgetMode) {
 	if (finished.followUpStatus) return finished.followUpStatus;

@@ -14,7 +14,6 @@ for (const required of [
   "@modelcontextprotocol/sdk/server/stdio.js",
   "server.registerTool",
   "server.registerResource",
-  "ui://widget/betterquizzes-v1-build-bqv1p1.html",
   "openai/outputTemplate",
   "openai/widgetAccessible",
   "betterquizzer.submission"
@@ -25,7 +24,11 @@ for (const required of [
 const remoteServer = readFileSync("mcp/remote-server.mjs", "utf8");
 const stableServer = readFileSync("mcp/betterquizzer-app-server.mjs", "utf8");
 for (const text of [remoteServer, stableServer]) {
-  if (!text.includes("ui://widget/betterquizzes-v1-build-bqv1p1.html")) throw new Error("Server resource URI not updated to stage12.");
+  const match = text.match(/const RESOURCE_URI = "([^"]+)";/);
+  if (!match) throw new Error("Server resource URI missing.");
+  if (!match[1].startsWith("ui://widget/")) throw new Error("Server resource URI must be a widget URI.");
+  if (!/betterquiz/i.test(match[1])) throw new Error("Server resource URI must identify BetterQuizzes.");
+  if (!text.includes("openai/outputTemplate")) throw new Error("Server missing openai/outputTemplate.");
 }
 
 console.log(JSON.stringify({

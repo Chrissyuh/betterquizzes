@@ -495,19 +495,18 @@ function handleV23BuilderTool(name, input = {}) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v1-build-bqv1p1.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v58-clean.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v1-build-bqv1p1.html",
+  "ui://widget/betterquizzes-v54.html",
   "ui://widget/betterquizzer-stage12-7-0-build-bq1270.html",
   "ui://widget/betterquizzer-stage12-6-4-build-bq1264.html",
   "ui://widget/betterquizzer-stage12-6-2-build-bq1262.html",
   "ui://widget/betterquizzer-stage12-6-1-build-bq1261.html",
   "ui://widget/betterquizzer-stage12-6-0-build-bq1260.html",
-  "ui://widget/betterquizzer-stage12-5-1-build-a7c9.html",
-  "ui://widget/betterquizzer-stage12-5-0.html",
-  "ui://widget/betterquizzer-stage12.html",
-  "ui://widget/betterquizzer-stage12-1.html"
+  "ui://widget/betterquizzer-stage12.html"
 ];
 function isKnownWidgetResourceUri(uri) {
   return typeof uri === "string" && (RESOURCE_URI_ALIASES.includes(uri) || /^ui:\/\/widget\/(betterquizzes|betterquizzer)-stage12[-\w]*\.html$/.test(uri));

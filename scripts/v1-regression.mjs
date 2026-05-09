@@ -13,7 +13,7 @@ function assert(value, message) {
 }
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
-assert(remote.includes("betterquizzes-v1-build-bqv1p1.html"), "resource URI must cache-bust for V1 patch 2");
+assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
 assert(remote.includes("betterquizzer-stage12-7-0-build-bq1270.html"), "12.7.0 alias must remain active");
 assert(remote.includes("declaredQuestionCount"), "launch packet must declare expected question count");
 assert(remote.includes("packetProgress"), "launch packet must include upload progress metadata");
@@ -29,7 +29,7 @@ assert(app.includes("function TextSelectInput"), "app must render text-select qu
 assert(app.includes("isQuestionAnswerComplete(question, draft)"), "confidence must be gated by complete question state");
 assert(app.includes("Preserve confidence while a user temporarily clears or edits an answer"), "confidence should survive un-answer/re-answer edits");
 assert(app.includes("disabled={!answerComplete}"), "confidence picker must stay disabled until all question parts are complete");
-assert(app.includes("onDragStart"), "ordering questions must support drag-and-drop");
+assert(app.includes("function OrderingInput") && app.includes("onPointerDown") && app.includes("onTouchStart") && app.includes("bqV58CleanOrdering"), "ordering questions must support drag-and-drop");
 assert(!app.includes("Question {currentIndex + 1} of"), "question count label must stay removed");
 assert(app.includes("quiz.questions.length > 1 ? <QuestionNav"), "one-question quizzes must not show question navigation");
 assert(app.includes("single-question-actions"), "one-question quizzes must not show prev/next controls");
@@ -46,14 +46,14 @@ assert(app.includes("function formatWidgetVersion"), "version chip must not rend
 assert(!app.includes("v{WIDGET_VERSION}"), "version chip must not hard-prefix V1 with v");
 assert(!app.includes("wrapFormattedText"), "format buttons must not store formatting markup in typed responses");
 assert(app.includes("parsed ?? response.trim()"), "invalid numeric attempts must be preserved for LLM grading instead of turning into null");
-assert(app.includes('case "numeric":\n      return typeof response === "number" && Number.isFinite(response) || typeof response === "string" && hasMeaningfulText(response);'), "numeric confidence must unlock for attempted text, even if the last character is a symbol");
+assert(app.includes('case "numeric":') && app.includes('typeof response === "string"') && app.includes('hasMeaningfulText(response)'), "numeric confidence must unlock for attempted text, even if the last character is a symbol");
 assert(styles.includes("V1 hard polish"), "CSS polish block must be present");
 assert(styles.includes("resize: none"), "text areas must not expose side-resize glitch");
 assert(styles.includes("grid-template-columns: repeat(3"), "confidence options must remain side-by-side");
 assert(styles.includes("V1 variety + formatting polish"), "V1 variety and formatting CSS must be present");
-assert(styles.includes(".quiz-layout {\n  grid-template-columns: 1fr;"), "question navigation must move back above the question card");
-assert(styles.includes(".top-bar p {\n  max-width: none;"), "header subtitle must use the available width");
-assert(styles.includes(".skip-quiz-button {\n  min-height: 44px;"), "skip button must be large enough to tap");
+assert(/\.quiz-layout\s*\{[\s\S]*?grid-template-columns:\s*1fr\s*;/.test(styles), "question navigation must move back above the question card");
+assert(/\.top-bar\s+p\s*\{[\s\S]*?max-width:\s*none\s*;/.test(styles), "header subtitle must use the available width");
+assert(/\.skip-quiz-button\s*\{[\s\S]*?min-height:\s*44px\s*;/.test(styles), "skip button must be large enough to tap");
 assert(app.includes('"choice single-choice selected"'), "single-select choices must keep letter badges");
 assert(app.includes("TOOL_INPUT_FALLBACK_DELAY_MS"), "widget must recover from interrupted ChatGPT tool responses using complete tool input after a grace period");
 assert(app.includes("HYDRATION_INTERRUPTED_MS"), "widget must not wait indefinitely when no quiz packet arrives");

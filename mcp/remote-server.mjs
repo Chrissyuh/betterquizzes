@@ -723,27 +723,21 @@ function bqV40PracticeRequiredWarning(quiz) {
 }
 // END BETTERQUIZZES V40 CREATE_QUIZ WORKFLOW POLISH
 
-// V54 widget cache bust: ChatGPT can cache app resources by ui:// URI, so this version uses ui://widget/betterquizzes-v54.html
-const BQ_V54_WIDGET_RESOURCE_URI = "ui://widget/betterquizzes-v54.html";
-const BQ_V54_WIDGET_VERSION = "v54-cache-bust";
-
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v54.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v58-clean.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v1-build-bqv1p1.html",
   "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html",
-  "ui://widget/betterquizzes-v54.html"
+  "ui://widget/betterquizzer-stage12-7-0-build-bq1270.html",
+  "ui://widget/betterquizzer-stage12-6-4-build-bq1264.html",
+  "ui://widget/betterquizzer-stage12-6-2-build-bq1262.html",
+  "ui://widget/betterquizzer-stage12-6-1-build-bq1261.html",
+  "ui://widget/betterquizzer-stage12-6-0-build-bq1260.html",
+  "ui://widget/betterquizzer-stage12.html"
 ];
 function isKnownWidgetResourceUri(uri) {
   return typeof uri === "string" && (RESOURCE_URI_ALIASES.includes(uri) || /^ui:\/\/widget\/(betterquizzes|betterquizzer)-stage12[-\w]*\.html$/.test(uri));
