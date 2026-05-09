@@ -191,12 +191,12 @@ const FINALIZE_QUIZ_INPUT_SCHEMA = {
 const V23_BUILDER_TOOL_DEFS = [
   {
     name: "start_quiz",
-    description: "V45 ordering reminder: tell yourself and future add_question calls that orderingBehavior.direction must always be top_to_bottom and conceptual order belongs in topLabel/bottomLabel. Start an incremental BetterQuizzes draft." + V2_BUILDER_INSTRUCTIONS,
+    description: "Start a BetterQuizzes draft and return a draftId. For short quizzes, call add_question once per question. For large mobile smoke tests, pass a questions array here and then call finalize_quiz." + V2_BUILDER_INSTRUCTIONS,
     inputSchema: START_QUIZ_INPUT_SCHEMA
   },
   {
     name: "add_question",
-    description: "V49 ordering semantics: separate sort meaning from visual layout. For ordering questions, you may use sortRule/orderRule like alphabetical_az, numeric_ascending, chronological, or custom_sequence; BetterQuizzes will compute answer ids when possible and normalize visual direction to top_to_bottom. V45 ordering checklist: for type=ordering, use items, answer as item ids, and orderingBehavior { direction: top_to_bottom, topLabel, bottomLabel }. Never use first_to_last/chronological/most_to_least/etc. as direction. Add one validated question to an incremental BetterQuizzes draft. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for conceptual meaning. Add one validated question to an incremental BetterQuizzes draft.",
+    description: "Add exactly one question to a BetterQuizzes draft. Required input: { draftId, question }. For ordering: type=ordering, use items, answer item ids, orderingBehavior.direction=top_to_bottom. For sort meaning, use sortRule/orderRule such as numeric_ascending, numeric_descending, alphabetical_az, chronological, or custom_sequence. This tool modifies only the current draft; it is not destructive and does not access the open web.",
     inputSchema: ADD_QUESTION_INPUT_SCHEMA
   },
   {
@@ -1188,13 +1188,19 @@ const BQ_V52_ORDERING_DIRECTION_INPUT_ALIASES = [
 ];
 // END BETTERQUIZZES V52 ORDERING DIRECTION INPUT ALIASES
 
-const MODEL_INSTRUCTIONS = `BetterQuizzes V52 ordering schema repair:
+const MODEL_INSTRUCTIONS = `BetterQuizzes V55 tool metadata cleanup:
+- add_question writes only to the current in-memory BetterQuizzes draft. It is not destructive.
+- BetterQuizzes draft tools do not need open-world/web access.
+- Ordering questions: use sortRule/orderRule for meaning and keep final orderingBehavior.direction as "top_to_bottom".
+- Sorting UI is pointer-based and updates React state directly.
+
+BetterQuizzes V52 ordering schema repair:
 - Best output is still orderingBehavior.direction = "top_to_bottom".
 - If a model accidentally uses ascending, descending, earliest_to_latest, chronological, etc., BetterQuizzes accepts the input and normalizes final renderer direction to "top_to_bottom".
 - Prefer sortRule/orderRule for meaning, not direction.
 - Final rendered ordering questions always use items, answer item ids, and orderingBehavior.direction = "top_to_bottom".
 
-BetterQuizzes V49 ordering semantics:
+BetterQuizzes V55 ordering semantics:
 - Separate sort meaning from visual layout.
 - Use authoring-only ordering sort rules when useful: sortRule/orderRule/orderingRule = alphabetical_az, alphabetical_za, numeric_ascending, numeric_descending, chronological, reverse_chronological, custom_sequence, geometry_small_to_large, geometry_large_to_small.
 - Visual layout is separate. The renderer currently outputs vertical lists, so final orderingBehavior.direction is normalized to "top_to_bottom".
@@ -1348,7 +1354,7 @@ const tools = [
   
   ...V23_BUILDER_TOOL_DEFS,
 { name: "create_quiz", title: "Open BetterQuizzes", description: CREATE_QUIZ_DESCRIPTION, inputSchema: CREATE_QUIZ_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] }, "openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Preparing quiz…", "openai/toolInvocation/invoked": "Quiz ready" } },
-  { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "V45 ordering checklist: if the quiz contains ordering questions, every orderingBehavior.direction must be top_to_bottom; conceptual order belongs in topLabel/bottomLabel; answers are item ids. Create and launch a BetterQuizzes widget from a complete validated quiz object. Prefer start_quiz → add_question → finalize_quiz for assistant-authored quizzes. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for First/Last, Most/Least, Closest/Farthest, etc. Create and launch a BetterQuizzes widget from a complete validated quiz object. Prefer start_quiz → add_question → finalize_quiz for assistant-authored quizzes; use create_quiz only when you already have the final top-level { quiz: ... } packet. Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers…", "openai/toolInvocation/invoked": "Answers submitted" } },
+  { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "V55 ordering checklist: if the quiz contains ordering questions, every orderingBehavior.direction must be top_to_bottom; conceptual order belongs in topLabel/bottomLabel; answers are item ids. Create and launch a BetterQuizzes widget from a complete validated quiz object. Prefer start_quiz → add_question → finalize_quiz for assistant-authored quizzes. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for First/Last, Most/Least, Closest/Farthest, etc. Create and launch a BetterQuizzes widget from a complete validated quiz object. Prefer start_quiz → add_question → finalize_quiz for assistant-authored quizzes; use create_quiz only when you already have the final top-level { quiz: ... } packet. Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers…", "openai/toolInvocation/invoked": "Answers submitted" } },
   { name: "record_grade", title: "Record BetterQuizzes Grade", description: "Record ChatGPT's structured grade so the BetterQuizzes widget can display a score ring or qualitative feedback. Call this after grading a submitted quiz.", inputSchema: GRADE_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Recording grade…", "openai/toolInvocation/invoked": "Grade recorded" } },
   { name: "get_grade", title: "Get BetterQuizzes Grade", description: "Return a recorded BetterQuizzes grade for a quiz/session.", inputSchema: { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } },
   { name: "inspect_quiz", title: "Inspect BetterQuizzes Quiz", description: "Return a short summary and render diagnostics for a stored quiz.", inputSchema: { type: "object", properties: { quizId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } }

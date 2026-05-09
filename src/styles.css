@@ -2443,15 +2443,20 @@ main,
 
 
 
-/* V53 kill native drag sorter */
-.bq-v53-sort-list,
+
+
+/* V54 cache-bust marker: v54-cache-bust */
+
+
+/* V55 React ordering sort fix */
+.bq-v55-sort-list,
 .order-list,
 .drag-order-list {
   position: relative;
   isolation: isolate;
 }
 
-.bq-v53-sort-row,
+.bq-v55-sort-row,
 .order-item,
 .draggable-order-item {
   grid-template-columns: minmax(0, 1fr) auto !important;
@@ -2462,7 +2467,7 @@ main,
   -webkit-user-select: none !important;
 }
 
-.bq-v53-sort-row *,
+.bq-v55-sort-row *,
 .order-item *,
 .draggable-order-item * {
   -webkit-user-drag: none !important;
@@ -2470,7 +2475,7 @@ main,
 
 .drag-handle,
 [class*="drag-handle"],
-.bq-v53-sort-handle {
+.bq-v55-sort-handle {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -2498,7 +2503,7 @@ main,
 
 .drag-handle *,
 [class*="drag-handle"] *,
-.bq-v53-sort-handle * {
+.bq-v55-sort-handle * {
   color: transparent !important;
   font-size: 0 !important;
   line-height: 0 !important;
@@ -2507,7 +2512,7 @@ main,
 
 .drag-handle::before,
 [class*="drag-handle"]::before,
-.bq-v53-sort-handle::before {
+.bq-v55-sort-handle::before {
   content: "";
   width: 1.08rem;
   height: 1.22rem;
@@ -2523,27 +2528,27 @@ main,
   display: none !important;
 }
 
-.bq-v53-sorting-active,
-.bq-v53-sorting-active body {
+.bq-v55-sorting-active,
+.bq-v55-sorting-active body {
   overscroll-behavior: contain !important;
   user-select: none !important;
   -webkit-user-select: none !important;
 }
 
-.bq-v53-sort-source {
+.bq-v55-sort-source {
   opacity: .74 !important;
   z-index: 20 !important;
   box-shadow: 0 18px 38px rgba(37, 99, 235, .18) !important;
   transition: none !important;
 }
 
-.bq-v53-slot-before,
-.bq-v53-slot-after {
+.bq-v55-slot-before,
+.bq-v55-slot-after {
   position: relative;
 }
 
-.bq-v53-slot-before::before,
-.bq-v53-slot-after::after {
+.bq-v55-slot-before::before,
+.bq-v55-slot-after::after {
   content: "";
   position: absolute;
   left: 1rem;
@@ -2555,11 +2560,11 @@ main,
   z-index: 25;
 }
 
-.bq-v53-slot-before::before {
+.bq-v55-slot-before::before {
   top: -7px;
 }
 
-.bq-v53-slot-after::after {
+.bq-v55-slot-after::after {
   bottom: -7px;
 }
 
@@ -2568,7 +2573,4 @@ main,
     display: none !important;
   }
 }
-/* END V53 kill native drag sorter */
-
-
-/* V54 cache-bust marker: v54-cache-bust */
+/* END V55 React ordering sort fix */
