@@ -723,7 +723,7 @@ function bqV40PracticeRequiredWarning(quiz) {
 }
 // END BETTERQUIZZES V40 CREATE_QUIZ WORKFLOW POLISH
 
-// V54 widget cache bust: ChatGPT can cache app resources by ui:// URI, so this version uses ui://widget/betterquizzes-v54.html.
+// V54 widget cache bust: ChatGPT can cache app resources by ui:// URI, so this version uses ui://widget/betterquizzes-v54.html
 const BQ_V54_WIDGET_RESOURCE_URI = "ui://widget/betterquizzes-v54.html";
 const BQ_V54_WIDGET_VERSION = "v54-cache-bust";
 
