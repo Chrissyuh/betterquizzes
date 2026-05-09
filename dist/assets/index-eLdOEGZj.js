@@ -13619,6 +13619,11 @@ function parseNumericResponse(value) {
 	const parsed = Number(trimmed);
 	return Number.isFinite(parsed) ? parsed : null;
 }
+function setOrderingDragScrollLock(enabled) {
+	if (typeof document === "undefined") return;
+	document.documentElement.classList.toggle("bq-ordering-drag-lock", enabled);
+	document.body?.classList.toggle("bq-ordering-drag-lock", enabled);
+}
 function OrderingInput({ question, response, onChange }) {
 	const items = getOrderingItems(question);
 	const itemIds = items.map((item) => item.id);
@@ -13644,12 +13649,14 @@ function OrderingInput({ question, response, onChange }) {
 			const drag = activeDragRef.current;
 			if (!drag || drag.pointerId !== event.pointerId) return;
 			event.preventDefault();
+			event.stopPropagation();
 			updateDragTarget(event.clientY);
 		}
 		function handleWindowPointerUp(event) {
 			const drag = activeDragRef.current;
 			if (!drag || drag.pointerId !== event.pointerId) return;
 			event.preventDefault();
+			event.stopPropagation();
 			finishDrag(event.clientY);
 		}
 		function handleWindowTouchMove(event) {
@@ -13658,6 +13665,7 @@ function OrderingInput({ question, response, onChange }) {
 			const touch = findTouch(event, drag.touchId);
 			if (!touch) return;
 			event.preventDefault();
+			event.stopPropagation();
 			updateDragTarget(touch.clientY);
 		}
 		function handleWindowTouchEnd(event) {
@@ -13666,6 +13674,7 @@ function OrderingInput({ question, response, onChange }) {
 			const touch = findTouch(event, drag.touchId);
 			if (!touch) return;
 			event.preventDefault();
+			event.stopPropagation();
 			finishDrag(touch.clientY);
 		}
 		function handleWindowCancel() {
@@ -13684,6 +13693,7 @@ function OrderingInput({ question, response, onChange }) {
 			window.removeEventListener("touchmove", handleWindowTouchMove);
 			window.removeEventListener("touchend", handleWindowTouchEnd);
 			window.removeEventListener("touchcancel", handleWindowCancel);
+			setOrderingDragScrollLock(false);
 		};
 	}, [items, order.join("|")]);
 	if (!items.length) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionRenderWarning, {
@@ -13720,6 +13730,7 @@ function OrderingInput({ question, response, onChange }) {
 	function beginDrag(id, clientY, pointerId, touchId) {
 		const fromIndex = (orderRef.current.length ? orderRef.current : order).indexOf(id);
 		if (fromIndex < 0) return;
+		setOrderingDragScrollLock(true);
 		activeDragRef.current = {
 			id,
 			pointerId,
@@ -13753,11 +13764,13 @@ function OrderingInput({ question, response, onChange }) {
 		if (!drag) return;
 		drag.toIndex = indexFromY(clientY, drag.toIndex);
 		activeDragRef.current = null;
+		setOrderingDragScrollLock(false);
 		setDragState(null);
 		if (drag.moved) moveByIndex(drag.fromIndex, drag.toIndex);
 	}
 	function cancelDrag() {
 		activeDragRef.current = null;
+		setOrderingDragScrollLock(false);
 		setDragState(null);
 	}
 	function handlePointerDown(event, id) {

@@ -2547,3 +2547,25 @@ button.drag-handle:focus-visible {
     min-height: 3rem !important;
   }
 }
+
+
+/* V59 ordering drag scroll lock */
+html.bq-ordering-drag-lock,
+body.bq-ordering-drag-lock {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+html.bq-ordering-drag-lock .app-shell,
+html.bq-ordering-drag-lock .quiz-shell,
+html.bq-ordering-drag-lock .question-card,
+html.bq-ordering-drag-lock .order-shell,
+html.bq-ordering-drag-lock .order-list,
+html.bq-ordering-drag-lock .order-item,
+html.bq-ordering-drag-lock .drag-handle {
+  touch-action: none !important;
+  overscroll-behavior: none !important;
+}
