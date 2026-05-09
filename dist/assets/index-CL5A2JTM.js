@@ -11677,148 +11677,290 @@ function bqV44ShouldUseEarlyMobileFollowUp() {
 	const userAgent = navigator.userAgent.toLowerCase();
 	return /iphone|ipad|ipod|android|mobile/.test(userAgent) || typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 }
-function bqV46bOrderingRows(list) {
-	return Array.from(list.querySelectorAll(".draggable-order-item, .order-item")).filter((item) => item instanceof HTMLElement);
+function bqV52SetNoNativeDrag(element) {
+	element.setAttribute("draggable", "false");
+	element.draggable = false;
+	element.style.userSelect = "none";
+	element.style.webkitUserSelect = "none";
+	element.style.webkitUserDrag = "none";
 }
-function bqV46bClearOrderingDragClasses() {
-	document.querySelectorAll(".bq-ordering-drag-source, .bq-ordering-drag-over").forEach((item) => {
-		item.classList.remove("bq-ordering-drag-source", "bq-ordering-drag-over");
-	});
-	document.documentElement.classList.remove("bq-ordering-drag-active");
+function bqV52Rows(list) {
+	const directRows = Array.from(list.children).filter((item) => item instanceof HTMLElement).filter((item) => item.classList.contains("order-item") || item.classList.contains("draggable-order-item") || item.classList.contains("bq-v52-order-row") || Boolean(item.querySelector(".order-index")));
+	if (directRows.length) return directRows;
+	return Array.from(list.querySelectorAll(".order-item, .draggable-order-item, .bq-v52-order-row")).filter((item) => item instanceof HTMLElement);
 }
-function bqV46bMoveButtonText(button) {
-	return [
-		button.textContent ?? "",
-		button.getAttribute("aria-label") ?? "",
-		button.getAttribute("title") ?? ""
-	].join(" ").toLowerCase();
+function bqV52FindListFromRow(row) {
+	const list = row.closest(".order-list, .drag-order-list, .bq-v52-order-list");
+	return list instanceof HTMLElement ? list : row.parentElement instanceof HTMLElement ? row.parentElement : null;
 }
-function bqV46bFindMoveButton(row, direction) {
-	const buttons = Array.from(row.querySelectorAll("button")).filter((button) => button instanceof HTMLButtonElement);
+function bqV52FindMoveButton(row, direction) {
+	const buttons = Array.from(row.querySelectorAll("button")).filter((button) => button instanceof HTMLButtonElement).filter((button) => !button.classList.contains("bq-v52-order-handle"));
 	const preferred = buttons.find((button) => {
-		const text = bqV46bMoveButtonText(button);
+		const text = [
+			button.textContent ?? "",
+			button.getAttribute("aria-label") ?? "",
+			button.getAttribute("title") ?? ""
+		].join(" ").toLowerCase();
 		return direction === "up" ? text.includes("up") || text.includes("↑") : text.includes("down") || text.includes("↓");
 	});
 	if (preferred) return preferred;
 	if (direction === "up") return buttons[0] ?? null;
 	return buttons[1] ?? buttons[0] ?? null;
 }
-function bqV46bClickMoveButtons(snapshot) {
+function bqV52EnsureHandle(row) {
+	const oldHandle = row.querySelector(".bq-v52-order-handle") ?? row.querySelector(".drag-handle") ?? row.querySelector("[class*='drag-handle']");
+	if (oldHandle instanceof HTMLElement) {
+		oldHandle.classList.add("bq-v52-order-handle");
+		oldHandle.setAttribute("aria-label", "Drag to reorder");
+		oldHandle.setAttribute("title", "Drag to reorder");
+		oldHandle.setAttribute("role", oldHandle.tagName.toLowerCase() === "button" ? "button" : "button");
+		oldHandle.setAttribute("tabindex", "0");
+		oldHandle.setAttribute("draggable", "false");
+		oldHandle.dataset.bqV52Ready = "1";
+		oldHandle.innerHTML = "<span aria-hidden=\"true\"></span>";
+		bqV52SetNoNativeDrag(oldHandle);
+		return oldHandle;
+	}
+	const handle = document.createElement("button");
+	handle.type = "button";
+	handle.className = "bq-v52-order-handle";
+	handle.setAttribute("aria-label", "Drag to reorder");
+	handle.setAttribute("title", "Drag to reorder");
+	handle.setAttribute("draggable", "false");
+	handle.dataset.bqV52Ready = "1";
+	handle.innerHTML = "<span aria-hidden=\"true\"></span>";
+	row.appendChild(handle);
+	bqV52SetNoNativeDrag(handle);
+	return handle;
+}
+function bqV52EnhanceOrderingDom(root = document) {
+	const lists = Array.from(root.querySelectorAll(".order-list, .drag-order-list, .bq-v52-order-list")).filter((item) => item instanceof HTMLElement);
+	for (const list of lists) {
+		const rows = bqV52Rows(list);
+		if (!rows.length) continue;
+		list.classList.add("bq-v52-order-list");
+		bqV52SetNoNativeDrag(list);
+		for (const row of rows) {
+			row.classList.add("bq-v52-order-row");
+			bqV52SetNoNativeDrag(row);
+			for (const child of Array.from(row.querySelectorAll("*"))) if (child instanceof HTMLElement) bqV52SetNoNativeDrag(child);
+			bqV52EnsureHandle(row);
+		}
+	}
+}
+function bqV52ClearVisuals() {
+	document.querySelectorAll(".bq-v52-drag-source, .bq-v52-slot-before, .bq-v52-slot-after").forEach((item) => {
+		item.classList.remove("bq-v52-drag-source", "bq-v52-slot-before", "bq-v52-slot-after");
+	});
+	for (const row of Array.from(document.querySelectorAll(".bq-v52-order-row"))) if (row instanceof HTMLElement) row.style.transform = "";
+	document.documentElement.classList.remove("bq-v52-ordering-dragging");
+}
+function bqV52ComputeTargetIndex(list, pointerY, fallbackIndex) {
+	const rows = bqV52Rows(list);
+	let targetIndex = fallbackIndex;
+	for (let index = 0; index < rows.length; index += 1) {
+		const rect = rows[index].getBoundingClientRect();
+		if (pointerY >= rect.top + rect.height / 2) targetIndex = index;
+	}
+	return Math.max(0, Math.min(rows.length - 1, targetIndex));
+}
+function bqV52PaintDrag(state) {
+	bqV52ClearVisuals();
+	document.documentElement.classList.add("bq-v52-ordering-dragging");
+	const target = bqV52Rows(state.list)[state.toIndex];
+	const deltaY = Math.max(-150, Math.min(150, state.currentY - state.startY));
+	state.row.classList.add("bq-v52-drag-source");
+	state.row.style.transform = `translateY(${deltaY}px) scale(.985)`;
+	if (target && target !== state.row) if (state.toIndex > state.fromIndex) target.classList.add("bq-v52-slot-after");
+	else target.classList.add("bq-v52-slot-before");
+}
+function bqV52ClickMoveSequence(snapshot) {
 	let completed = 0;
 	function currentRow() {
-		return snapshot.list.querySelector(`[data-bq-v46b-drag-token="${snapshot.token}"]`);
+		return snapshot.list.querySelector(`[data-bq-v52-token="${snapshot.token}"]`);
 	}
-	function finish() {
+	function cleanup() {
 		const row = currentRow();
-		if (row) delete row.dataset.bqV46bDragToken;
+		if (row) delete row.dataset.bqV52Token;
 	}
 	function step() {
 		if (completed >= snapshot.steps) {
-			finish();
+			cleanup();
 			return;
 		}
 		const row = currentRow();
 		if (!row) {
-			finish();
+			cleanup();
 			return;
 		}
-		const button = bqV46bFindMoveButton(row, snapshot.direction);
+		const button = bqV52FindMoveButton(row, snapshot.direction);
 		if (!button || button.disabled) {
-			finish();
+			cleanup();
 			return;
 		}
 		button.click();
 		completed += 1;
-		window.requestAnimationFrame(() => {
-			window.requestAnimationFrame(step);
-		});
+		window.requestAnimationFrame(() => window.requestAnimationFrame(step));
 	}
 	step();
 }
-function bqV46bInstallOrderingDrag() {
+function bqV52StartDrag(row, clientX, clientY, pointerId, touchId) {
+	const list = bqV52FindListFromRow(row);
+	if (!list) return null;
+	const fromIndex = bqV52Rows(list).indexOf(row);
+	if (fromIndex < 0) return null;
+	const token = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
+	row.dataset.bqV52Token = token;
+	row.classList.add("bq-v52-drag-source");
+	document.documentElement.classList.add("bq-v52-ordering-dragging");
+	return {
+		pointerId,
+		touchId,
+		startX: clientX,
+		startY: clientY,
+		currentY: clientY,
+		fromIndex,
+		toIndex: fromIndex,
+		row,
+		list,
+		token,
+		dragging: false
+	};
+}
+function bqV52InstallDomOrderingDrag() {
 	if (typeof document === "undefined" || typeof window === "undefined") return () => {};
 	let active = null;
+	function startFromTarget(target, clientX, clientY, pointerId, touchId) {
+		if (!(target instanceof Element)) return;
+		bqV52EnhanceOrderingDom();
+		const handle = target.closest(".bq-v52-order-handle, .drag-handle, [class*='drag-handle']");
+		if (!(handle instanceof HTMLElement)) return;
+		const row = handle.closest(".bq-v52-order-row, .order-item, .draggable-order-item");
+		if (!(row instanceof HTMLElement)) return;
+		active = bqV52StartDrag(row, clientX, clientY, pointerId, touchId);
+		if (active && pointerId !== void 0) try {
+			row.setPointerCapture(pointerId);
+		} catch {}
+	}
+	function moveTo(clientX, clientY) {
+		if (!active) return;
+		active.currentY = clientY;
+		const moved = Math.hypot(clientX - active.startX, clientY - active.startY);
+		if (!active.dragging && moved < 3) return;
+		active.dragging = true;
+		active.toIndex = bqV52ComputeTargetIndex(active.list, clientY, active.fromIndex);
+		bqV52PaintDrag(active);
+		const margin = 82;
+		if (clientY < margin) window.scrollBy({
+			top: -12,
+			behavior: "auto"
+		});
+		if (clientY > window.innerHeight - margin) window.scrollBy({
+			top: 12,
+			behavior: "auto"
+		});
+	}
+	function finish(clientY) {
+		if (!active) return;
+		const snapshot = active;
+		active = null;
+		snapshot.toIndex = bqV52ComputeTargetIndex(snapshot.list, clientY, snapshot.toIndex);
+		bqV52ClearVisuals();
+		if (!snapshot.dragging || snapshot.fromIndex === snapshot.toIndex) {
+			delete snapshot.row.dataset.bqV52Token;
+			return;
+		}
+		bqV52ClickMoveSequence({
+			list: snapshot.list,
+			token: snapshot.token,
+			direction: snapshot.toIndex > snapshot.fromIndex ? "down" : "up",
+			steps: Math.abs(snapshot.toIndex - snapshot.fromIndex)
+		});
+	}
+	function cancel() {
+		if (active?.row) delete active.row.dataset.bqV52Token;
+		active = null;
+		bqV52ClearVisuals();
+	}
+	function onDragStart(event) {
+		if (event.target instanceof Element && event.target.closest(".bq-v52-order-list, .order-list, .drag-order-list")) event.preventDefault();
+	}
 	function onPointerDown(event) {
 		if (event.button !== 0) return;
 		if (!(event.target instanceof Element)) return;
-		const row = event.target.closest(".draggable-order-item, .order-item");
-		if (!(row instanceof HTMLElement)) return;
-		const target = event.target;
-		const isDragHandle = Boolean(target.closest(".drag-handle, [class*='drag-handle']"));
-		if (Boolean(target.closest("button, input, textarea, select, a")) && !isDragHandle) return;
-		const list = row.parentElement;
-		if (!(list instanceof HTMLElement)) return;
-		const startIndex = bqV46bOrderingRows(list).indexOf(row);
-		if (startIndex < 0) return;
-		const token = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
-		row.dataset.bqV46bDragToken = token;
-		row.classList.add("bq-ordering-drag-source");
-		active = {
-			pointerId: event.pointerId,
-			startX: event.clientX,
-			startY: event.clientY,
-			startIndex,
-			targetIndex: startIndex,
-			row,
-			list,
-			token,
-			dragging: false
-		};
-		try {
-			row.setPointerCapture(event.pointerId);
-		} catch {}
+		if (!event.target.closest(".bq-v52-order-handle, .drag-handle, [class*='drag-handle']")) return;
+		event.preventDefault();
+		startFromTarget(event.target, event.clientX, event.clientY, event.pointerId, void 0);
 	}
 	function onPointerMove(event) {
 		if (!active || active.pointerId !== event.pointerId) return;
-		const moved = Math.hypot(event.clientX - active.startX, event.clientY - active.startY);
-		if (!active.dragging && moved < 8) return;
-		active.dragging = true;
 		event.preventDefault();
-		document.documentElement.classList.add("bq-ordering-drag-active");
-		const targetRow = document.elementFromPoint(event.clientX, event.clientY)?.closest(".draggable-order-item, .order-item");
-		bqV46bClearOrderingDragClasses();
-		active.row.classList.add("bq-ordering-drag-source");
-		if (!(targetRow instanceof HTMLElement)) return;
-		if (!active.list.contains(targetRow)) return;
-		const targetIndex = bqV46bOrderingRows(active.list).indexOf(targetRow);
-		if (targetIndex < 0) return;
-		active.targetIndex = targetIndex;
-		targetRow.classList.add("bq-ordering-drag-over");
+		moveTo(event.clientX, event.clientY);
 	}
 	function onPointerUp(event) {
 		if (!active || active.pointerId !== event.pointerId) return;
-		const snapshot = active;
-		active = null;
+		event.preventDefault();
 		try {
-			snapshot.row.releasePointerCapture(event.pointerId);
+			active.row.releasePointerCapture(event.pointerId);
 		} catch {}
-		bqV46bClearOrderingDragClasses();
-		if (!snapshot.dragging || snapshot.targetIndex === snapshot.startIndex) {
-			delete snapshot.row.dataset.bqV46bDragToken;
-			return;
-		}
-		bqV46bClickMoveButtons({
-			list: snapshot.list,
-			token: snapshot.token,
-			direction: snapshot.targetIndex > snapshot.startIndex ? "down" : "up",
-			steps: Math.abs(snapshot.targetIndex - snapshot.startIndex)
-		});
+		finish(event.clientY);
 	}
-	function onPointerCancel() {
-		if (active?.row) delete active.row.dataset.bqV46bDragToken;
-		active = null;
-		bqV46bClearOrderingDragClasses();
+	function onTouchStart(event) {
+		const touch = event.changedTouches[0];
+		if (!touch) return;
+		if (!(event.target instanceof Element)) return;
+		if (!event.target.closest(".bq-v52-order-handle, .drag-handle, [class*='drag-handle']")) return;
+		event.preventDefault();
+		startFromTarget(event.target, touch.clientX, touch.clientY, void 0, touch.identifier);
 	}
-	document.addEventListener("pointerdown", onPointerDown);
+	function touchForEvent(event) {
+		if (!active || active.touchId === void 0) return null;
+		for (const touch of Array.from(event.changedTouches)) if (touch.identifier === active.touchId) return touch;
+		for (const touch of Array.from(event.touches)) if (touch.identifier === active.touchId) return touch;
+		return null;
+	}
+	function onTouchMove(event) {
+		const touch = touchForEvent(event);
+		if (!touch) return;
+		event.preventDefault();
+		moveTo(touch.clientX, touch.clientY);
+	}
+	function onTouchEnd(event) {
+		const touch = touchForEvent(event);
+		if (!touch || !active) return;
+		event.preventDefault();
+		finish(touch.clientY);
+	}
+	function onTouchCancel() {
+		cancel();
+	}
+	const observer = new MutationObserver(() => bqV52EnhanceOrderingDom());
+	observer.observe(document.documentElement, {
+		childList: true,
+		subtree: true
+	});
+	bqV52EnhanceOrderingDom();
+	document.addEventListener("dragstart", onDragStart, true);
+	document.addEventListener("pointerdown", onPointerDown, { passive: false });
 	document.addEventListener("pointermove", onPointerMove, { passive: false });
-	document.addEventListener("pointerup", onPointerUp);
-	document.addEventListener("pointercancel", onPointerCancel);
+	document.addEventListener("pointerup", onPointerUp, { passive: false });
+	document.addEventListener("pointercancel", cancel);
+	document.addEventListener("touchstart", onTouchStart, { passive: false });
+	document.addEventListener("touchmove", onTouchMove, { passive: false });
+	document.addEventListener("touchend", onTouchEnd, { passive: false });
+	document.addEventListener("touchcancel", onTouchCancel, { passive: false });
 	return () => {
+		observer.disconnect();
+		document.removeEventListener("dragstart", onDragStart, true);
 		document.removeEventListener("pointerdown", onPointerDown);
 		document.removeEventListener("pointermove", onPointerMove);
 		document.removeEventListener("pointerup", onPointerUp);
-		document.removeEventListener("pointercancel", onPointerCancel);
-		onPointerCancel();
+		document.removeEventListener("pointercancel", cancel);
+		document.removeEventListener("touchstart", onTouchStart);
+		document.removeEventListener("touchmove", onTouchMove);
+		document.removeEventListener("touchend", onTouchEnd);
+		document.removeEventListener("touchcancel", onTouchCancel);
+		cancel();
 	};
 }
 var SAMPLE_QUIZZES = [
@@ -11836,6 +11978,9 @@ function App() {
 	const routeWidgetMode = (0, import_react.useMemo)(() => isWidgetRoute(), []);
 	const bootstrapWidgetMode = (0, import_react.useMemo)(() => hasBetterQuizzesBootstrap(), []);
 	const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode);
+	(0, import_react.useEffect)(() => {
+		return bqV52InstallDomOrderingDrag();
+	}, []);
 	const [screen, setScreen] = (0, import_react.useState)(widgetMode ? "loading" : "import");
 	const [quiz, setQuiz] = (0, import_react.useState)(null);
 	const [launchId, setLaunchId] = (0, import_react.useState)(void 0);
@@ -12284,9 +12429,6 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 	normalizeGradingPolicy(quiz.gradingPolicy);
 	const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
 	const current = quiz.questions[currentIndex];
-	(0, import_react.useEffect)(() => {
-		return bqV46bInstallOrderingDrag();
-	}, []);
 	(0, import_react.useEffect)(() => {
 		const id = window.setTimeout(() => {
 			document.querySelector(".question-card")?.scrollIntoView({

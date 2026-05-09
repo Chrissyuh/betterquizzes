@@ -1160,7 +1160,37 @@ function bqV49NormalizeOrderingAuthoringPayload(payload) {
 }
 // END BETTERQUIZZES V49 ORDERING SEMANTICS
 
-const MODEL_INSTRUCTIONS = `BetterQuizzes V49 ordering semantics:
+// BEGIN BETTERQUIZZES V52 ORDERING DIRECTION INPUT ALIASES
+const BQ_V52_ORDERING_DIRECTION_INPUT_ALIASES = [
+  "top_to_bottom",
+  "ascending",
+  "descending",
+  "first_to_last",
+  "last_to_first",
+  "earliest_to_latest",
+  "latest_to_earliest",
+  "chronological",
+  "reverse_chronological",
+  "least_to_greatest",
+  "greatest_to_least",
+  "smallest_to_largest",
+  "largest_to_smallest",
+  "numeric_ascending",
+  "numeric_descending",
+  "alphabetical_az",
+  "alphabetical_za",
+  "closest_to_farthest",
+  "farthest_to_closest"
+];
+// END BETTERQUIZZES V52 ORDERING DIRECTION INPUT ALIASES
+
+const MODEL_INSTRUCTIONS = `BetterQuizzes V52 ordering schema repair:
+- Best output is still orderingBehavior.direction = "top_to_bottom".
+- If a model accidentally uses ascending, descending, earliest_to_latest, chronological, etc., BetterQuizzes accepts the input and normalizes final renderer direction to "top_to_bottom".
+- Prefer sortRule/orderRule for meaning, not direction.
+- Final rendered ordering questions always use items, answer item ids, and orderingBehavior.direction = "top_to_bottom".
+
+BetterQuizzes V49 ordering semantics:
 - Separate sort meaning from visual layout.
 - Use authoring-only ordering sort rules when useful: sortRule/orderRule/orderingRule = alphabetical_az, alphabetical_za, numeric_ascending, numeric_descending, chronological, reverse_chronological, custom_sequence, geometry_small_to_large, geometry_large_to_small.
 - Visual layout is separate. The renderer currently outputs vertical lists, so final orderingBehavior.direction is normalized to "top_to_bottom".
@@ -1238,7 +1268,7 @@ const CANONICAL_QUIZ_EXAMPLE = {
   }
 };
 const CHOICE_ITEM_SCHEMA = { anyOf: [{ type: "string", minLength: 1 }, { type: "object", properties: { id: { type: "string", minLength: 1 }, text: { type: "string", minLength: 1 }, label: { type: "string" }, value: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }] } }, required: ["id", "text"], additionalProperties: true }] };
-const ORDERING_BEHAVIOR_SCHEMA = { type: "object", required: ["direction"], properties: { direction: { const: "top_to_bottom", description: "REQUIRED CONSTANT. Must always be exactly top_to_bottom. This is only the vertical renderer layout axis. Never use first_to_last, first-to-last, chronological, sequence, earliest_to_latest, most_to_least, least_to_most, closest_to_farthest, left_to_right, horizontal, or any conceptual ordering phrase here. Put conceptual meaning in topLabel and bottomLabel." }, topLabel: { type: "string", description: "Required for meaningful ordering. Label for the top of the vertical list, such as First, Earliest, Largest, Most, Closest, or Start." }, bottomLabel: { type: "string", description: "Required for meaningful ordering. Label for the bottom of the vertical list, such as Last, Latest, Smallest, Least, Farthest, or End." } }, additionalProperties: false, description: "Ordering behavior is renderer layout metadata. direction must be top_to_bottom; conceptual order goes in topLabel/bottomLabel." };
+const ORDERING_BEHAVIOR_SCHEMA = { type: "object", required: ["direction"], properties: { direction: { type: "string", enum: BQ_V52_ORDERING_DIRECTION_INPUT_ALIASES, description: "Input accepts top_to_bottom plus common semantic aliases so the server can normalize them. Best value is top_to_bottom. Final renderer output is always normalized to top_to_bottom; conceptual meaning belongs in topLabel/bottomLabel or sortRule/orderRule." }, topLabel: { type: "string", description: "Required for meaningful ordering. Label for the top of the vertical list, such as First, Earliest, Largest, Most, Closest, or Start." }, bottomLabel: { type: "string", description: "Required for meaningful ordering. Label for the bottom of the vertical list, such as Last, Latest, Smallest, Least, Farthest, or End." } }, additionalProperties: false, description: "Ordering behavior is renderer layout metadata. direction must be top_to_bottom; conceptual order goes in topLabel/bottomLabel." };
 const RESPONSE_LIMIT_SCHEMA = { type: "object", properties: { maxChars: { anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }] }, minChars: { type: "integer", minimum: 0 }, showCounter: { type: "boolean" } }, additionalProperties: false };
 const MULTI_TYPING_FIELD_SCHEMA = { type: "object", properties: { id: { type: "string", minLength: 1 }, label: { type: "string", minLength: 1 }, placeholder: { type: "string" }, responseLimit: RESPONSE_LIMIT_SCHEMA, answer: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] }, acceptableAnswers: { type: "array", items: { type: "string" } }, expectedKeywords: { type: "array", items: { type: "string" } } }, required: ["id", "label"], additionalProperties: true };
 const TEXT_SELECT_SEGMENT_SCHEMA = { type: "object", properties: { id: { type: "string", minLength: 1 }, text: { type: "string", minLength: 1 }, selectable: { type: "boolean" } }, required: ["id", "text"], additionalProperties: true };

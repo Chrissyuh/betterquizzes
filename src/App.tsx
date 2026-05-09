@@ -90,44 +90,66 @@ function bqV44ShouldUseEarlyMobileFollowUp() {
 }
 
 
-type BqV46bOrderingDragState = {
-  pointerId: number;
+
+type BqV52DragState = {
+  pointerId?: number;
+  touchId?: number;
   startX: number;
   startY: number;
-  startIndex: number;
-  targetIndex: number;
+  currentY: number;
+  fromIndex: number;
+  toIndex: number;
   row: HTMLElement;
   list: HTMLElement;
   token: string;
   dragging: boolean;
 };
 
-function bqV46bOrderingRows(list: HTMLElement): HTMLElement[] {
-  return Array.from(list.querySelectorAll(".draggable-order-item, .order-item"))
+function bqV52CleanText(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function bqV52SetNoNativeDrag(element: HTMLElement): void {
+  element.setAttribute("draggable", "false");
+  element.draggable = false;
+  element.style.userSelect = "none";
+  element.style.webkitUserSelect = "none";
+  (element.style as CSSStyleDeclaration & { webkitUserDrag?: string }).webkitUserDrag = "none";
+}
+
+function bqV52Rows(list: HTMLElement): HTMLElement[] {
+  const directRows = Array.from(list.children)
+    .filter((item): item is HTMLElement => item instanceof HTMLElement)
+    .filter((item) =>
+      item.classList.contains("order-item") ||
+      item.classList.contains("draggable-order-item") ||
+      item.classList.contains("bq-v52-order-row") ||
+      Boolean(item.querySelector(".order-index"))
+    );
+
+  if (directRows.length) return directRows;
+
+  return Array.from(list.querySelectorAll(".order-item, .draggable-order-item, .bq-v52-order-row"))
     .filter((item): item is HTMLElement => item instanceof HTMLElement);
 }
 
-function bqV46bClearOrderingDragClasses(): void {
-  document.querySelectorAll(".bq-ordering-drag-source, .bq-ordering-drag-over").forEach((item) => {
-    item.classList.remove("bq-ordering-drag-source", "bq-ordering-drag-over");
-  });
-  document.documentElement.classList.remove("bq-ordering-drag-active");
+function bqV52FindListFromRow(row: HTMLElement): HTMLElement | null {
+  const list = row.closest(".order-list, .drag-order-list, .bq-v52-order-list");
+  return list instanceof HTMLElement ? list : row.parentElement instanceof HTMLElement ? row.parentElement : null;
 }
 
-function bqV46bMoveButtonText(button: HTMLButtonElement): string {
-  return [
-    button.textContent ?? "",
-    button.getAttribute("aria-label") ?? "",
-    button.getAttribute("title") ?? "",
-  ].join(" ").toLowerCase();
-}
-
-function bqV46bFindMoveButton(row: HTMLElement, direction: "up" | "down"): HTMLButtonElement | null {
+function bqV52FindMoveButton(row: HTMLElement, direction: "up" | "down"): HTMLButtonElement | null {
   const buttons = Array.from(row.querySelectorAll("button"))
-    .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement);
+    .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement)
+    .filter((button) => !button.classList.contains("bq-v52-order-handle"));
 
   const preferred = buttons.find((button) => {
-    const text = bqV46bMoveButtonText(button);
+    const text = [
+      button.textContent ?? "",
+      button.getAttribute("aria-label") ?? "",
+      button.getAttribute("title") ?? "",
+    ].join(" ").toLowerCase();
+
     return direction === "up"
       ? text.includes("up") || text.includes("↑")
       : text.includes("down") || text.includes("↓");
@@ -139,7 +161,107 @@ function bqV46bFindMoveButton(row: HTMLElement, direction: "up" | "down"): HTMLB
   return buttons[1] ?? buttons[0] ?? null;
 }
 
-function bqV46bClickMoveButtons(snapshot: {
+function bqV52EnsureHandle(row: HTMLElement): HTMLElement {
+  const oldHandle =
+    row.querySelector(".bq-v52-order-handle") ??
+    row.querySelector(".drag-handle") ??
+    row.querySelector("[class*='drag-handle']");
+
+  if (oldHandle instanceof HTMLElement) {
+    oldHandle.classList.add("bq-v52-order-handle");
+    oldHandle.setAttribute("aria-label", "Drag to reorder");
+    oldHandle.setAttribute("title", "Drag to reorder");
+    oldHandle.setAttribute("role", oldHandle.tagName.toLowerCase() === "button" ? "button" : "button");
+    oldHandle.setAttribute("tabindex", "0");
+    oldHandle.setAttribute("draggable", "false");
+    oldHandle.dataset.bqV52Ready = "1";
+    oldHandle.innerHTML = "<span aria-hidden=\"true\"></span>";
+    bqV52SetNoNativeDrag(oldHandle);
+    return oldHandle;
+  }
+
+  const handle = document.createElement("button");
+  handle.type = "button";
+  handle.className = "bq-v52-order-handle";
+  handle.setAttribute("aria-label", "Drag to reorder");
+  handle.setAttribute("title", "Drag to reorder");
+  handle.setAttribute("draggable", "false");
+  handle.dataset.bqV52Ready = "1";
+  handle.innerHTML = "<span aria-hidden=\"true\"></span>";
+
+  row.appendChild(handle);
+  bqV52SetNoNativeDrag(handle);
+  return handle;
+}
+
+function bqV52EnhanceOrderingDom(root: ParentNode = document): void {
+  const lists = Array.from(root.querySelectorAll(".order-list, .drag-order-list, .bq-v52-order-list"))
+    .filter((item): item is HTMLElement => item instanceof HTMLElement);
+
+  for (const list of lists) {
+    const rows = bqV52Rows(list);
+    if (!rows.length) continue;
+
+    list.classList.add("bq-v52-order-list");
+    bqV52SetNoNativeDrag(list);
+
+    for (const row of rows) {
+      row.classList.add("bq-v52-order-row");
+      bqV52SetNoNativeDrag(row);
+
+      for (const child of Array.from(row.querySelectorAll("*"))) {
+        if (child instanceof HTMLElement) bqV52SetNoNativeDrag(child);
+      }
+
+      bqV52EnsureHandle(row);
+    }
+  }
+}
+
+function bqV52ClearVisuals(): void {
+  document.querySelectorAll(".bq-v52-drag-source, .bq-v52-slot-before, .bq-v52-slot-after").forEach((item) => {
+    item.classList.remove("bq-v52-drag-source", "bq-v52-slot-before", "bq-v52-slot-after");
+  });
+
+  for (const row of Array.from(document.querySelectorAll(".bq-v52-order-row"))) {
+    if (row instanceof HTMLElement) row.style.transform = "";
+  }
+
+  document.documentElement.classList.remove("bq-v52-ordering-dragging");
+}
+
+function bqV52ComputeTargetIndex(list: HTMLElement, pointerY: number, fallbackIndex: number): number {
+  const rows = bqV52Rows(list);
+  let targetIndex = fallbackIndex;
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const rect = rows[index].getBoundingClientRect();
+    const centerY = rect.top + rect.height / 2;
+
+    if (pointerY >= centerY) targetIndex = index;
+  }
+
+  return Math.max(0, Math.min(rows.length - 1, targetIndex));
+}
+
+function bqV52PaintDrag(state: BqV52DragState): void {
+  bqV52ClearVisuals();
+  document.documentElement.classList.add("bq-v52-ordering-dragging");
+
+  const rows = bqV52Rows(state.list);
+  const target = rows[state.toIndex];
+  const deltaY = Math.max(-150, Math.min(150, state.currentY - state.startY));
+
+  state.row.classList.add("bq-v52-drag-source");
+  state.row.style.transform = `translateY(${deltaY}px) scale(.985)`;
+
+  if (target && target !== state.row) {
+    if (state.toIndex > state.fromIndex) target.classList.add("bq-v52-slot-after");
+    else target.classList.add("bq-v52-slot-before");
+  }
+}
+
+function bqV52ClickMoveSequence(snapshot: {
   list: HTMLElement;
   token: string;
   direction: "up" | "down";
@@ -148,163 +270,246 @@ function bqV46bClickMoveButtons(snapshot: {
   let completed = 0;
 
   function currentRow(): HTMLElement | null {
-    return snapshot.list.querySelector(`[data-bq-v46b-drag-token="${snapshot.token}"]`) as HTMLElement | null;
+    return snapshot.list.querySelector(`[data-bq-v52-token="${snapshot.token}"]`) as HTMLElement | null;
   }
 
-  function finish(): void {
+  function cleanup(): void {
     const row = currentRow();
-    if (row) delete row.dataset.bqV46bDragToken;
+    if (row) delete row.dataset.bqV52Token;
   }
 
   function step(): void {
     if (completed >= snapshot.steps) {
-      finish();
+      cleanup();
       return;
     }
 
     const row = currentRow();
     if (!row) {
-      finish();
+      cleanup();
       return;
     }
 
-    const button = bqV46bFindMoveButton(row, snapshot.direction);
+    const button = bqV52FindMoveButton(row, snapshot.direction);
     if (!button || button.disabled) {
-      finish();
+      cleanup();
       return;
     }
 
     button.click();
     completed += 1;
 
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(step);
-    });
+    window.requestAnimationFrame(() => window.requestAnimationFrame(step));
   }
 
   step();
 }
 
-function bqV46bInstallOrderingDrag(): () => void {
+function bqV52StartDrag(row: HTMLElement, clientX: number, clientY: number, pointerId?: number, touchId?: number): BqV52DragState | null {
+  const list = bqV52FindListFromRow(row);
+  if (!list) return null;
+
+  const rows = bqV52Rows(list);
+  const fromIndex = rows.indexOf(row);
+  if (fromIndex < 0) return null;
+
+  const token = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
+  row.dataset.bqV52Token = token;
+
+  row.classList.add("bq-v52-drag-source");
+  document.documentElement.classList.add("bq-v52-ordering-dragging");
+
+  return {
+    pointerId,
+    touchId,
+    startX: clientX,
+    startY: clientY,
+    currentY: clientY,
+    fromIndex,
+    toIndex: fromIndex,
+    row,
+    list,
+    token,
+    dragging: false,
+  };
+}
+
+function bqV52InstallDomOrderingDrag(): () => void {
   if (typeof document === "undefined" || typeof window === "undefined") return () => {};
 
-  let active: BqV46bOrderingDragState | null = null;
+  let active: BqV52DragState | null = null;
 
-  function onPointerDown(event: PointerEvent): void {
-    if (event.button !== 0) return;
-    if (!(event.target instanceof Element)) return;
+  function startFromTarget(target: EventTarget | null, clientX: number, clientY: number, pointerId?: number, touchId?: number): void {
+    if (!(target instanceof Element)) return;
 
-    const row = event.target.closest(".draggable-order-item, .order-item");
+    bqV52EnhanceOrderingDom();
+
+    const handle = target.closest(".bq-v52-order-handle, .drag-handle, [class*='drag-handle']");
+    if (!(handle instanceof HTMLElement)) return;
+
+    const row = handle.closest(".bq-v52-order-row, .order-item, .draggable-order-item");
     if (!(row instanceof HTMLElement)) return;
 
-    const target = event.target;
-    const isDragHandle = Boolean(target.closest(".drag-handle, [class*='drag-handle']"));
-    const isInteractive = Boolean(target.closest("button, input, textarea, select, a"));
+    active = bqV52StartDrag(row, clientX, clientY, pointerId, touchId);
 
-    if (isInteractive && !isDragHandle) return;
-
-    const list = row.parentElement;
-    if (!(list instanceof HTMLElement)) return;
-
-    const rows = bqV46bOrderingRows(list);
-    const startIndex = rows.indexOf(row);
-    if (startIndex < 0) return;
-
-    const token = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
-    row.dataset.bqV46bDragToken = token;
-    row.classList.add("bq-ordering-drag-source");
-
-    active = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      startIndex,
-      targetIndex: startIndex,
-      row,
-      list,
-      token,
-      dragging: false,
-    };
-
-    try {
-      row.setPointerCapture(event.pointerId);
-    } catch {
-      // Some mobile webviews do not allow pointer capture here. Drag still works without it.
+    if (active && pointerId !== undefined) {
+      try {
+        row.setPointerCapture(pointerId);
+      } catch {
+        // ChatGPT mobile webviews sometimes reject pointer capture.
+      }
     }
   }
 
-  function onPointerMove(event: PointerEvent): void {
-    if (!active || active.pointerId !== event.pointerId) return;
+  function moveTo(clientX: number, clientY: number): void {
+    if (!active) return;
 
-    const moved = Math.hypot(event.clientX - active.startX, event.clientY - active.startY);
-    if (!active.dragging && moved < 8) return;
+    active.currentY = clientY;
+
+    const moved = Math.hypot(clientX - active.startX, clientY - active.startY);
+    if (!active.dragging && moved < 3) return;
 
     active.dragging = true;
-    event.preventDefault();
-    document.documentElement.classList.add("bq-ordering-drag-active");
+    active.toIndex = bqV52ComputeTargetIndex(active.list, clientY, active.fromIndex);
+    bqV52PaintDrag(active);
 
-    const target = document.elementFromPoint(event.clientX, event.clientY);
-    const targetRow = target?.closest(".draggable-order-item, .order-item");
-
-    bqV46bClearOrderingDragClasses();
-    active.row.classList.add("bq-ordering-drag-source");
-
-    if (!(targetRow instanceof HTMLElement)) return;
-    if (!active.list.contains(targetRow)) return;
-
-    const rows = bqV46bOrderingRows(active.list);
-    const targetIndex = rows.indexOf(targetRow);
-
-    if (targetIndex < 0) return;
-
-    active.targetIndex = targetIndex;
-    targetRow.classList.add("bq-ordering-drag-over");
+    const margin = 82;
+    if (clientY < margin) window.scrollBy({ top: -12, behavior: "auto" });
+    if (clientY > window.innerHeight - margin) window.scrollBy({ top: 12, behavior: "auto" });
   }
 
-  function onPointerUp(event: PointerEvent): void {
-    if (!active || active.pointerId !== event.pointerId) return;
+  function finish(clientY: number): void {
+    if (!active) return;
 
     const snapshot = active;
     active = null;
 
+    snapshot.toIndex = bqV52ComputeTargetIndex(snapshot.list, clientY, snapshot.toIndex);
+    bqV52ClearVisuals();
+
+    if (!snapshot.dragging || snapshot.fromIndex === snapshot.toIndex) {
+      delete snapshot.row.dataset.bqV52Token;
+      return;
+    }
+
+    bqV52ClickMoveSequence({
+      list: snapshot.list,
+      token: snapshot.token,
+      direction: snapshot.toIndex > snapshot.fromIndex ? "down" : "up",
+      steps: Math.abs(snapshot.toIndex - snapshot.fromIndex),
+    });
+  }
+
+  function cancel(): void {
+    if (active?.row) delete active.row.dataset.bqV52Token;
+    active = null;
+    bqV52ClearVisuals();
+  }
+
+  function onDragStart(event: DragEvent): void {
+    if (event.target instanceof Element && event.target.closest(".bq-v52-order-list, .order-list, .drag-order-list")) {
+      event.preventDefault();
+    }
+  }
+
+  function onPointerDown(event: globalThis.PointerEvent): void {
+    if (event.button !== 0) return;
+    if (!(event.target instanceof Element)) return;
+    if (!event.target.closest(".bq-v52-order-handle, .drag-handle, [class*='drag-handle']")) return;
+
+    event.preventDefault();
+    startFromTarget(event.target, event.clientX, event.clientY, event.pointerId, undefined);
+  }
+
+  function onPointerMove(event: globalThis.PointerEvent): void {
+    if (!active || active.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    moveTo(event.clientX, event.clientY);
+  }
+
+  function onPointerUp(event: globalThis.PointerEvent): void {
+    if (!active || active.pointerId !== event.pointerId) return;
+    event.preventDefault();
+
     try {
-      snapshot.row.releasePointerCapture(event.pointerId);
+      active.row.releasePointerCapture(event.pointerId);
     } catch {
       // ignore
     }
 
-    bqV46bClearOrderingDragClasses();
+    finish(event.clientY);
+  }
 
-    if (!snapshot.dragging || snapshot.targetIndex === snapshot.startIndex) {
-      delete snapshot.row.dataset.bqV46bDragToken;
-      return;
+  function onTouchStart(event: TouchEvent): void {
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    if (!(event.target instanceof Element)) return;
+    if (!event.target.closest(".bq-v52-order-handle, .drag-handle, [class*='drag-handle']")) return;
+
+    event.preventDefault();
+    startFromTarget(event.target, touch.clientX, touch.clientY, undefined, touch.identifier);
+  }
+
+  function touchForEvent(event: TouchEvent): Touch | null {
+    if (!active || active.touchId === undefined) return null;
+
+    for (const touch of Array.from(event.changedTouches)) {
+      if (touch.identifier === active.touchId) return touch;
     }
 
-    bqV46bClickMoveButtons({
-      list: snapshot.list,
-      token: snapshot.token,
-      direction: snapshot.targetIndex > snapshot.startIndex ? "down" : "up",
-      steps: Math.abs(snapshot.targetIndex - snapshot.startIndex),
-    });
+    for (const touch of Array.from(event.touches)) {
+      if (touch.identifier === active.touchId) return touch;
+    }
+
+    return null;
   }
 
-  function onPointerCancel(): void {
-    if (active?.row) delete active.row.dataset.bqV46bDragToken;
-    active = null;
-    bqV46bClearOrderingDragClasses();
+  function onTouchMove(event: TouchEvent): void {
+    const touch = touchForEvent(event);
+    if (!touch) return;
+
+    event.preventDefault();
+    moveTo(touch.clientX, touch.clientY);
   }
 
-  document.addEventListener("pointerdown", onPointerDown);
+  function onTouchEnd(event: TouchEvent): void {
+    const touch = touchForEvent(event);
+    if (!touch || !active) return;
+
+    event.preventDefault();
+    finish(touch.clientY);
+  }
+
+  function onTouchCancel(): void {
+    cancel();
+  }
+
+  const observer = new MutationObserver(() => bqV52EnhanceOrderingDom());
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  bqV52EnhanceOrderingDom();
+
+  document.addEventListener("dragstart", onDragStart, true);
+  document.addEventListener("pointerdown", onPointerDown, { passive: false });
   document.addEventListener("pointermove", onPointerMove, { passive: false });
-  document.addEventListener("pointerup", onPointerUp);
-  document.addEventListener("pointercancel", onPointerCancel);
+  document.addEventListener("pointerup", onPointerUp, { passive: false });
+  document.addEventListener("pointercancel", cancel);
+  document.addEventListener("touchstart", onTouchStart, { passive: false });
+  document.addEventListener("touchmove", onTouchMove, { passive: false });
+  document.addEventListener("touchend", onTouchEnd, { passive: false });
+  document.addEventListener("touchcancel", onTouchCancel, { passive: false });
 
   return () => {
+    observer.disconnect();
+    document.removeEventListener("dragstart", onDragStart, true);
     document.removeEventListener("pointerdown", onPointerDown);
     document.removeEventListener("pointermove", onPointerMove);
     document.removeEventListener("pointerup", onPointerUp);
-    document.removeEventListener("pointercancel", onPointerCancel);
-    onPointerCancel();
+    document.removeEventListener("pointercancel", cancel);
+    document.removeEventListener("touchstart", onTouchStart);
+    document.removeEventListener("touchmove", onTouchMove);
+    document.removeEventListener("touchend", onTouchEnd);
+    document.removeEventListener("touchcancel", onTouchCancel);
+    cancel();
   };
 }
 
@@ -371,6 +576,9 @@ export default function App(): ReactElement {
   const routeWidgetMode = useMemo(() => isWidgetRoute(), []);
   const bootstrapWidgetMode = useMemo(() => hasBetterQuizzesBootstrap(), []);
   const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode);
+  useEffect(() => {
+    return bqV52InstallDomOrderingDrag();
+  }, []);
   const [screen, setScreen] = useState<Screen>(widgetMode ? "loading" : "import");
   const [quiz, setQuiz] = useState<QuizSpec | null>(null);
   const [launchId, setLaunchId] = useState<string | undefined>(undefined);
@@ -836,12 +1044,7 @@ function QuizRunner({
   const gradingPolicy = normalizeGradingPolicy(quiz.gradingPolicy);
   const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
   const current = quiz.questions[currentIndex];
-
-  useEffect(() => {
-    return bqV46bInstallOrderingDrag();
-  }, []);
-
-  // V17 scroll active question into view after navigation so short questions do not leave the user stranded lower in the message.
+// V17 scroll active question into view after navigation so short questions do not leave the user stranded lower in the message.
   useEffect(() => {
     const id = window.setTimeout(() => {
       const card = document.querySelector(".question-card");

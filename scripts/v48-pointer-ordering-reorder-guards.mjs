@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-import "./v51-real-ordering-handles-guards.mjs";
+import "./v52-ordering-handle-and-schema-guards.mjs";
