@@ -507,6 +507,8 @@ function bqV53InstallSortInteraction(): () => void {
   };
 }
 
+const BQ_V54_CLIENT_BUILD_MARKER = "v54-cache-bust";
+
 type Screen = "loading" | "import" | "quiz" | "submission";
 type DraftAnswer = {
   response: AnswerResponse;
