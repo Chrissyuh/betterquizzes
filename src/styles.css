@@ -2429,85 +2429,133 @@ main,
 
 
 
-/* V48 pointer ordering reorder */
-.bq-v48-order-list {
-  position: relative;
+
+
+
+
+/* V49 ordering UX overhaul */
+.question-dots {
+  scroll-behavior: smooth;
 }
 
-.bq-v48-order-row,
+.bq-v49-order-list {
+  position: relative;
+  isolation: isolate;
+}
+
+.bq-v49-order-row,
 .draggable-order-item,
 .order-item {
   touch-action: pan-y;
-  cursor: grab;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
 }
 
-.bq-v48-order-handle {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 2.45rem !important;
-  min-width: 2.45rem !important;
-  height: 2.45rem !important;
-  padding: 0 !important;
-  border-radius: 999px !important;
-  border: 1px solid rgba(148, 163, 184, .36) !important;
-  background: rgba(248, 250, 252, .96) !important;
-  color: transparent !important;
-  font-size: 0 !important;
-  line-height: 0 !important;
-  box-shadow: none !important;
-  outline: none !important;
-  touch-action: none !important;
-  user-select: none !important;
-  -webkit-user-select: none !important;
-  cursor: grab !important;
+.bq-v49-order-row *,
+.draggable-order-item *,
+.order-item * {
+  -webkit-user-drag: none;
 }
 
-.bq-v48-order-handle * {
+.bq-v49-old-drag-handle,
+.drag-handle,
+[class*="drag-handle"] {
   display: none !important;
 }
 
-.bq-v48-order-handle::before {
+.bq-v49-order-handle {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.65rem !important;
+  min-width: 2.65rem !important;
+  height: 2.65rem !important;
+  padding: 0 !important;
+  margin-left: .55rem !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(148, 163, 184, .34) !important;
+  background: rgba(248, 250, 252, .96) !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .06) !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none !important;
+  cursor: grab !important;
+}
+
+.bq-v49-order-handle::before {
   content: "";
-  width: 1rem;
-  height: 1.15rem;
+  width: 1.05rem;
+  height: 1.2rem;
   display: block;
   background:
-    radial-gradient(circle, #64748b 1.8px, transparent 2.3px) 0 0 / .5rem .5rem,
-    radial-gradient(circle, #64748b 1.8px, transparent 2.3px) .5rem 0 / .5rem .5rem;
+    radial-gradient(circle, #64748b 1.9px, transparent 2.4px) 0 0 / .52rem .52rem,
+    radial-gradient(circle, #64748b 1.9px, transparent 2.4px) .52rem 0 / .52rem .52rem;
   opacity: .9;
 }
 
-.bq-v48-order-handle:active {
+.bq-v49-order-handle:active {
   cursor: grabbing !important;
-  background: #e0edff !important;
-  border-color: rgba(37, 99, 235, .36) !important;
+  background: #dbeafe !important;
+  border-color: rgba(37, 99, 235, .38) !important;
 }
 
-.bq-v48-dragging,
-.bq-v48-dragging body {
+.bq-v49-ordering-dragging,
+.bq-v49-ordering-dragging body {
   overscroll-behavior: contain;
   user-select: none !important;
   -webkit-user-select: none !important;
 }
 
-.bq-v48-drag-source {
-  opacity: .72 !important;
-  z-index: 10 !important;
-  box-shadow: 0 16px 34px rgba(37, 99, 235, .18) !important;
+.bq-v49-drag-source {
+  opacity: .74 !important;
+  z-index: 20 !important;
+  box-shadow: 0 18px 38px rgba(37, 99, 235, .18) !important;
   transition: none !important;
 }
 
-.bq-v48-drag-target {
-  outline: 3px solid rgba(37, 99, 235, .28) !important;
-  background: linear-gradient(180deg, #eef4ff, #ffffff) !important;
+.bq-v49-slot-before,
+.bq-v49-slot-after {
+  position: relative;
+}
+
+.bq-v49-slot-before::before,
+.bq-v49-slot-after::after {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  height: 4px;
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, .14);
+  z-index: 25;
+}
+
+.bq-v49-slot-before::before {
+  top: -7px;
+}
+
+.bq-v49-slot-after::after {
+  bottom: -7px;
 }
 
 @media (max-width: 720px), (pointer: coarse) {
-  .bq-v48-order-handle {
-    width: 2.85rem !important;
-    min-width: 2.85rem !important;
-    height: 2.85rem !important;
+  .bq-v49-order-handle {
+    width: 3rem !important;
+    min-width: 3rem !important;
+    height: 3rem !important;
+  }
+
+  .bq-v49-order-row,
+  .draggable-order-item,
+  .order-item {
+    touch-action: pan-y;
   }
 }
-/* END V48 pointer ordering reorder */
+/* END V49 ordering UX overhaul */

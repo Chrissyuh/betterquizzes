@@ -1,0 +1,652 @@
+{
+  "schema": "betterquizzer.quiz",
+  "version": 2,
+  "quizId": "v49-ordering-smoke-test",
+  "title": "V49 Ordering UX Smoke Test",
+  "description": "Ordering-heavy smoke test for question rail overflow and deterministic ordering keys.",
+  "mode": "practice",
+  "activityPolicy": {
+    "allowSkipQuiz": true,
+    "allowSkipQuestions": true,
+    "defaultAnswerRequired": false,
+    "submitRequiresRequiredAnswers": false
+  },
+  "displayPolicy": {
+    "showCorrectAnswers": "after_submit"
+  },
+  "questions": [
+    {
+      "id": "q1",
+      "type": "ordering",
+      "prompt": "Sort these words alphabetically A to Z.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "delta"
+        },
+        {
+          "id": "i2",
+          "text": "alpha"
+        },
+        {
+          "id": "i3",
+          "text": "charlie"
+        },
+        {
+          "id": "i4",
+          "text": "bravo"
+        }
+      ],
+      "answer": [
+        "i2",
+        "i4",
+        "i3",
+        "i1"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "A",
+        "bottomLabel": "Z"
+      },
+      "tags": [
+        "ordering",
+        "alphabetical_az"
+      ]
+    },
+    {
+      "id": "q2",
+      "type": "ordering",
+      "prompt": "Sort these words alphabetically Z to A.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "mars"
+        },
+        {
+          "id": "i2",
+          "text": "earth"
+        },
+        {
+          "id": "i3",
+          "text": "venus"
+        },
+        {
+          "id": "i4",
+          "text": "jupiter"
+        }
+      ],
+      "answer": [
+        "i3",
+        "i1",
+        "i4",
+        "i2"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Z",
+        "bottomLabel": "A"
+      },
+      "tags": [
+        "ordering",
+        "alphabetical_za"
+      ]
+    },
+    {
+      "id": "q3",
+      "type": "ordering",
+      "prompt": "Order the numbers from smallest to largest.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "42"
+        },
+        {
+          "id": "i2",
+          "text": "7"
+        },
+        {
+          "id": "i3",
+          "text": "19"
+        },
+        {
+          "id": "i4",
+          "text": "3"
+        }
+      ],
+      "answer": [
+        "i4",
+        "i2",
+        "i3",
+        "i1"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Smallest",
+        "bottomLabel": "Largest"
+      },
+      "tags": [
+        "ordering",
+        "numeric_ascending"
+      ]
+    },
+    {
+      "id": "q4",
+      "type": "ordering",
+      "prompt": "Order the numbers from largest to smallest.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "2.5"
+        },
+        {
+          "id": "i2",
+          "text": "12"
+        },
+        {
+          "id": "i3",
+          "text": "8"
+        },
+        {
+          "id": "i4",
+          "text": "30"
+        }
+      ],
+      "answer": [
+        "i4",
+        "i2",
+        "i3",
+        "i1"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Largest",
+        "bottomLabel": "Smallest"
+      },
+      "tags": [
+        "ordering",
+        "numeric_descending"
+      ]
+    },
+    {
+      "id": "q5",
+      "type": "ordering",
+      "prompt": "Order these shapes by number of sides from fewest to most.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "Hexagon",
+          "value": 6
+        },
+        {
+          "id": "i2",
+          "text": "Triangle",
+          "value": 3
+        },
+        {
+          "id": "i3",
+          "text": "Pentagon",
+          "value": 5
+        },
+        {
+          "id": "i4",
+          "text": "Square",
+          "value": 4
+        }
+      ],
+      "answer": [
+        "i2",
+        "i4",
+        "i3",
+        "i1"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Fewest sides",
+        "bottomLabel": "Most sides"
+      },
+      "tags": [
+        "ordering",
+        "geometry_small_to_large"
+      ]
+    },
+    {
+      "id": "q6",
+      "type": "ordering",
+      "prompt": "Order these shapes by number of sides from most to fewest.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "Octagon",
+          "value": 8
+        },
+        {
+          "id": "i2",
+          "text": "Triangle",
+          "value": 3
+        },
+        {
+          "id": "i3",
+          "text": "Heptagon",
+          "value": 7
+        },
+        {
+          "id": "i4",
+          "text": "Pentagon",
+          "value": 5
+        }
+      ],
+      "answer": [
+        "i1",
+        "i3",
+        "i4",
+        "i2"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Most sides",
+        "bottomLabel": "Fewest sides"
+      },
+      "tags": [
+        "ordering",
+        "geometry_large_to_small"
+      ]
+    },
+    {
+      "id": "q7",
+      "type": "ordering",
+      "prompt": "Order these historical events from earliest to latest.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "Moon landing — 1969",
+          "year": 1969
+        },
+        {
+          "id": "i2",
+          "text": "Declaration of Independence — 1776",
+          "year": 1776
+        },
+        {
+          "id": "i3",
+          "text": "World Wide Web proposed — 1989",
+          "year": 1989
+        },
+        {
+          "id": "i4",
+          "text": "US Constitution signed — 1787",
+          "year": 1787
+        }
+      ],
+      "answer": [
+        "i2",
+        "i4",
+        "i1",
+        "i3"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Earliest",
+        "bottomLabel": "Latest"
+      },
+      "tags": [
+        "ordering",
+        "chronological"
+      ]
+    },
+    {
+      "id": "q8",
+      "type": "ordering",
+      "prompt": "Order these events from latest to earliest.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "iPhone introduced — 2007",
+          "year": 2007
+        },
+        {
+          "id": "i2",
+          "text": "Apollo 11 — 1969",
+          "year": 1969
+        },
+        {
+          "id": "i3",
+          "text": "ChatGPT launched — 2022",
+          "year": 2022
+        },
+        {
+          "id": "i4",
+          "text": "Google founded — 1998",
+          "year": 1998
+        }
+      ],
+      "answer": [
+        "i3",
+        "i1",
+        "i4",
+        "i2"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Latest",
+        "bottomLabel": "Earliest"
+      },
+      "tags": [
+        "ordering",
+        "reverse_chronological"
+      ]
+    },
+    {
+      "id": "q9",
+      "type": "ordering",
+      "prompt": "Order the water cycle steps in a basic custom sequence.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "Condensation"
+        },
+        {
+          "id": "i2",
+          "text": "Evaporation"
+        },
+        {
+          "id": "i3",
+          "text": "Collection"
+        },
+        {
+          "id": "i4",
+          "text": "Precipitation"
+        }
+      ],
+      "answer": [
+        "i2",
+        "i1",
+        "i4",
+        "i3"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "First",
+        "bottomLabel": "Last"
+      },
+      "tags": [
+        "ordering",
+        "custom_sequence"
+      ]
+    },
+    {
+      "id": "q10",
+      "type": "ordering",
+      "prompt": "Order these decimals from least to greatest.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "0.8"
+        },
+        {
+          "id": "i2",
+          "text": "0.25"
+        },
+        {
+          "id": "i3",
+          "text": "0.5"
+        },
+        {
+          "id": "i4",
+          "text": "1.1"
+        }
+      ],
+      "answer": [
+        "i2",
+        "i3",
+        "i1",
+        "i4"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Least",
+        "bottomLabel": "Greatest"
+      },
+      "tags": [
+        "ordering",
+        "numeric_ascending"
+      ]
+    },
+    {
+      "id": "q11",
+      "type": "ordering",
+      "prompt": "Sort the strings A to Z.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "beta"
+        },
+        {
+          "id": "i2",
+          "text": "gamma"
+        },
+        {
+          "id": "i3",
+          "text": "alpha"
+        },
+        {
+          "id": "i4",
+          "text": "epsilon"
+        }
+      ],
+      "answer": [
+        "i3",
+        "i1",
+        "i4",
+        "i2"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "A",
+        "bottomLabel": "Z"
+      },
+      "tags": [
+        "ordering",
+        "alphabetical_az"
+      ]
+    },
+    {
+      "id": "q12",
+      "type": "ordering",
+      "prompt": "Order these mitosis phases from first to last.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "Anaphase"
+        },
+        {
+          "id": "i2",
+          "text": "Prophase"
+        },
+        {
+          "id": "i3",
+          "text": "Telophase"
+        },
+        {
+          "id": "i4",
+          "text": "Metaphase"
+        }
+      ],
+      "answer": [
+        "i2",
+        "i4",
+        "i1",
+        "i3"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "First",
+        "bottomLabel": "Last"
+      },
+      "tags": [
+        "ordering",
+        "custom_sequence",
+        "mitosis"
+      ]
+    },
+    {
+      "id": "q13",
+      "type": "ordering",
+      "prompt": "Order these negative and positive numbers from least to greatest.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "-2"
+        },
+        {
+          "id": "i2",
+          "text": "4"
+        },
+        {
+          "id": "i3",
+          "text": "-7"
+        },
+        {
+          "id": "i4",
+          "text": "0"
+        }
+      ],
+      "answer": [
+        "i3",
+        "i1",
+        "i4",
+        "i2"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Least",
+        "bottomLabel": "Greatest"
+      },
+      "tags": [
+        "ordering",
+        "numeric_ascending"
+      ]
+    },
+    {
+      "id": "q14",
+      "type": "ordering",
+      "prompt": "Order these polygons by side count from fewest to most.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "Decagon",
+          "value": 10
+        },
+        {
+          "id": "i2",
+          "text": "Quadrilateral",
+          "value": 4
+        },
+        {
+          "id": "i3",
+          "text": "Nonagon",
+          "value": 9
+        },
+        {
+          "id": "i4",
+          "text": "Triangle",
+          "value": 3
+        }
+      ],
+      "answer": [
+        "i4",
+        "i2",
+        "i3",
+        "i1"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Fewest sides",
+        "bottomLabel": "Most sides"
+      },
+      "tags": [
+        "ordering",
+        "geometry_small_to_large"
+      ]
+    },
+    {
+      "id": "q15",
+      "type": "ordering",
+      "prompt": "Order these technology events from earliest to latest.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "First iPad — 2010",
+          "year": 2010
+        },
+        {
+          "id": "i2",
+          "text": "YouTube founded — 2005",
+          "year": 2005
+        },
+        {
+          "id": "i3",
+          "text": "Wikipedia launched — 2001",
+          "year": 2001
+        },
+        {
+          "id": "i4",
+          "text": "Instagram launched — 2010",
+          "year": 2010
+        }
+      ],
+      "answer": [
+        "i3",
+        "i2",
+        "i1",
+        "i4"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Earliest",
+        "bottomLabel": "Latest"
+      },
+      "tags": [
+        "ordering",
+        "chronological"
+      ]
+    },
+    {
+      "id": "q16",
+      "type": "ordering",
+      "prompt": "Order these values from greatest to least.",
+      "items": [
+        {
+          "id": "i1",
+          "text": "15"
+        },
+        {
+          "id": "i2",
+          "text": "100"
+        },
+        {
+          "id": "i3",
+          "text": "38"
+        },
+        {
+          "id": "i4",
+          "text": "9"
+        }
+      ],
+      "answer": [
+        "i2",
+        "i3",
+        "i1",
+        "i4"
+      ],
+      "orderingBehavior": {
+        "direction": "top_to_bottom",
+        "topLabel": "Greatest",
+        "bottomLabel": "Least"
+      },
+      "tags": [
+        "ordering",
+        "numeric_descending"
+      ]
+    }
+  ]
+}

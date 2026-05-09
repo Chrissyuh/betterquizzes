@@ -196,7 +196,7 @@ const V23_BUILDER_TOOL_DEFS = [
   },
   {
     name: "add_question",
-    description: "V45 ordering checklist: for type=ordering, use items, answer as item ids, and orderingBehavior { direction: top_to_bottom, topLabel, bottomLabel }. Never use first_to_last/chronological/most_to_least/etc. as direction. Add one validated question to an incremental BetterQuizzes draft. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for conceptual meaning. Add one validated question to an incremental BetterQuizzes draft.",
+    description: "V49 ordering semantics: separate sort meaning from visual layout. For ordering questions, you may use sortRule/orderRule like alphabetical_az, numeric_ascending, chronological, or custom_sequence; BetterQuizzes will compute answer ids when possible and normalize visual direction to top_to_bottom. V45 ordering checklist: for type=ordering, use items, answer as item ids, and orderingBehavior { direction: top_to_bottom, topLabel, bottomLabel }. Never use first_to_last/chronological/most_to_least/etc. as direction. Add one validated question to an incremental BetterQuizzes draft. For ordering questions, orderingBehavior.direction must always be top_to_bottom; use topLabel/bottomLabel for conceptual meaning. Add one validated question to an incremental BetterQuizzes draft.",
     inputSchema: ADD_QUESTION_INPUT_SCHEMA
   },
   {
@@ -609,6 +609,7 @@ function finalizeQuiz(input = {}) {
 }
 
 function handleV23BuilderTool(name, input = {}) {
+  bqV49NormalizeOrderingAuthoringPayload(input);
   bqV43NormalizeOrderingAliasesDeep(input);
   if (name === "start_quiz") return startQuiz(input);
   if (name === "add_question") return addQuestion(input);
@@ -895,7 +896,277 @@ const BQ_V45_ORDERING_AUTHORING_GUIDE = [
 ].join("\n");
 // END BETTERQUIZZES V45 LOUD ORDERING AUTHORING GUIDE
 
-const MODEL_INSTRUCTIONS = `BetterQuizzes V45 ordering authoring rules:
+
+
+
+// BEGIN BETTERQUIZZES V49 ORDERING SEMANTICS
+const BQ_V49_ORDERING_SEMANTICS = [
+  "Ordering authoring is separated into two concepts:",
+  "1. sortRule/orderRule describes meaning: alphabetical_az, alphabetical_za, numeric_ascending, numeric_descending, chronological, reverse_chronological, custom_sequence, geometry_small_to_large, geometry_large_to_small.",
+  "2. visualLayout/layoutDirection describes renderer layout. Current renderer output is vertical top_to_bottom.",
+  "The model should not infer answer order from direction. BetterQuizzes normalizes ordering authoring fields and computes answer ids when possible."
+].join("\n");
+
+function bqV49Text(value) {
+  return String(value ?? "").trim();
+}
+
+function bqV49RuleKey(value) {
+  return bqV49Text(value)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+}
+
+function bqV49OrderingItemId(item, index) {
+  return typeof item?.id === "string" && item.id ? item.id : "i" + String(index + 1);
+}
+
+function bqV49OrderingItemText(item) {
+  return bqV49Text(item?.text ?? item?.label ?? item?.value ?? item?.name ?? "");
+}
+
+function bqV49NumericValue(item) {
+  for (const key of ["value", "number", "numericValue", "rank", "order", "sortIndex", "size", "area", "length", "count"]) {
+    const value = item?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const parsed = Number(value.replace(/[^0-9.+-]/g, ""));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+
+  const match = bqV49OrderingItemText(item).match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : Number.NaN;
+}
+
+function bqV49DateValue(item) {
+  for (const key of ["date", "year", "time", "timestamp", "value", "sortValue"]) {
+    const value = item?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) return numeric;
+      const parsed = Date.parse(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+
+  const text = bqV49OrderingItemText(item);
+  const year = text.match(/\b\d{3,4}\b/);
+  if (year) return Number(year[0]);
+
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function bqV49GetOrderingRule(question) {
+  const behavior = question?.orderingBehavior && typeof question.orderingBehavior === "object" ? question.orderingBehavior : {};
+
+  return bqV49RuleKey(
+    question?.sortRule ??
+      question?.orderRule ??
+      question?.orderingRule ??
+      question?.orderingSort ??
+      question?.sort?.rule ??
+      behavior.sortRule ??
+      behavior.orderRule ??
+      behavior.orderingRule ??
+      behavior.sort ??
+      behavior.sortMeaning
+  );
+}
+
+function bqV49GetCustomSequence(question) {
+  const candidates = [
+    question?.sequence,
+    question?.customSequence,
+    question?.correctSequence,
+    question?.sortSequence,
+    question?.orderingSequence,
+    question?.orderingRule?.sequence,
+    question?.sort?.sequence,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate.map((item) => bqV49Text(item)).filter(Boolean);
+  }
+
+  return [];
+}
+
+function bqV49ComputeOrderingAnswer(question) {
+  const items = Array.isArray(question?.items) ? question.items : [];
+  if (!items.length) return null;
+
+  const rule = bqV49GetOrderingRule(question);
+  if (!rule) return null;
+
+  const withIndex = items.map((item, index) => ({ item, index, id: bqV49OrderingItemId(item, index), text: bqV49OrderingItemText(item) }));
+
+  function stable(sorter) {
+    return [...withIndex].sort((a, b) => {
+      const result = sorter(a, b);
+      return result || a.index - b.index;
+    }).map((entry) => entry.id);
+  }
+
+  if (["alphabetical_az", "alpha_az", "a_to_z", "az", "alphabetical"].includes(rule)) {
+    return stable((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: "base", numeric: true }));
+  }
+
+  if (["alphabetical_za", "alpha_za", "z_to_a", "za", "reverse_alphabetical"].includes(rule)) {
+    return stable((a, b) => b.text.localeCompare(a.text, undefined, { sensitivity: "base", numeric: true }));
+  }
+
+  if (["numeric_ascending", "number_ascending", "ascending", "least_to_greatest", "smallest_to_largest", "low_to_high"].includes(rule)) {
+    return stable((a, b) => bqV49NumericValue(a.item) - bqV49NumericValue(b.item));
+  }
+
+  if (["numeric_descending", "number_descending", "descending", "greatest_to_least", "largest_to_smallest", "high_to_low"].includes(rule)) {
+    return stable((a, b) => bqV49NumericValue(b.item) - bqV49NumericValue(a.item));
+  }
+
+  if (["chronological", "earliest_to_latest", "oldest_to_newest", "date_ascending"].includes(rule)) {
+    return stable((a, b) => bqV49DateValue(a.item) - bqV49DateValue(b.item));
+  }
+
+  if (["reverse_chronological", "latest_to_earliest", "newest_to_oldest", "date_descending"].includes(rule)) {
+    return stable((a, b) => bqV49DateValue(b.item) - bqV49DateValue(a.item));
+  }
+
+  if (["geometry_small_to_large", "geometry_ascending", "area_ascending", "size_ascending"].includes(rule)) {
+    return stable((a, b) => bqV49NumericValue(a.item) - bqV49NumericValue(b.item));
+  }
+
+  if (["geometry_large_to_small", "geometry_descending", "area_descending", "size_descending"].includes(rule)) {
+    return stable((a, b) => bqV49NumericValue(b.item) - bqV49NumericValue(a.item));
+  }
+
+  if (["custom_sequence", "custom", "manual", "sequence"].includes(rule)) {
+    const sequence = bqV49GetCustomSequence(question).map((item) => bqV49RuleKey(item));
+    if (!sequence.length) return null;
+
+    return stable((a, b) => {
+      const aKeys = [a.id, a.text].map((item) => bqV49RuleKey(item));
+      const bKeys = [b.id, b.text].map((item) => bqV49RuleKey(item));
+      const aIndex = Math.min(...aKeys.map((key) => sequence.indexOf(key)).filter((index) => index >= 0));
+      const bIndex = Math.min(...bKeys.map((key) => sequence.indexOf(key)).filter((index) => index >= 0));
+
+      const safeA = Number.isFinite(aIndex) ? aIndex : Number.MAX_SAFE_INTEGER;
+      const safeB = Number.isFinite(bIndex) ? bIndex : Number.MAX_SAFE_INTEGER;
+
+      return safeA - safeB;
+    });
+  }
+
+  return null;
+}
+
+function bqV49LabelsForRule(rule, question) {
+  const behavior = question?.orderingBehavior && typeof question.orderingBehavior === "object" ? question.orderingBehavior : {};
+  const existing = {
+    topLabel: behavior.topLabel ?? question?.topLabel,
+    bottomLabel: behavior.bottomLabel ?? question?.bottomLabel,
+  };
+
+  if (existing.topLabel || existing.bottomLabel) return existing;
+
+  switch (rule) {
+    case "alphabetical_az":
+    case "alpha_az":
+    case "a_to_z":
+    case "az":
+    case "alphabetical":
+      return { topLabel: "A", bottomLabel: "Z" };
+    case "alphabetical_za":
+    case "alpha_za":
+    case "z_to_a":
+    case "za":
+    case "reverse_alphabetical":
+      return { topLabel: "Z", bottomLabel: "A" };
+    case "numeric_ascending":
+    case "ascending":
+    case "least_to_greatest":
+    case "smallest_to_largest":
+      return { topLabel: "Smallest", bottomLabel: "Largest" };
+    case "numeric_descending":
+    case "descending":
+    case "greatest_to_least":
+    case "largest_to_smallest":
+      return { topLabel: "Largest", bottomLabel: "Smallest" };
+    case "chronological":
+    case "earliest_to_latest":
+    case "oldest_to_newest":
+      return { topLabel: "Earliest", bottomLabel: "Latest" };
+    case "reverse_chronological":
+    case "latest_to_earliest":
+    case "newest_to_oldest":
+      return { topLabel: "Latest", bottomLabel: "Earliest" };
+    default:
+      return { topLabel: "Top", bottomLabel: "Bottom" };
+  }
+}
+
+function bqV49NormalizeOrderingAuthoringQuestion(question) {
+  if (!question || typeof question !== "object") return question;
+
+  const type = bqV49RuleKey(question.type ?? question.kind ?? question.questionType);
+  if (type !== "ordering" && type !== "order" && type !== "sequence") return question;
+
+  question.type = "ordering";
+
+  const rule = bqV49GetOrderingRule(question);
+  const computed = bqV49ComputeOrderingAnswer(question);
+  if (computed && computed.length) question.answer = computed;
+
+  const labels = bqV49LabelsForRule(rule, question);
+  question.orderingBehavior = {
+    ...(question.orderingBehavior && typeof question.orderingBehavior === "object" ? question.orderingBehavior : {}),
+    direction: "top_to_bottom",
+    topLabel: labels.topLabel ?? "Top",
+    bottomLabel: labels.bottomLabel ?? "Bottom",
+  };
+
+  for (const key of ["sortRule", "orderRule", "orderingRule", "orderingSort", "visualLayout", "layoutDirection", "topLabel", "bottomLabel", "sequence", "customSequence", "correctSequence", "sortSequence", "orderingSequence"]) {
+    delete question[key];
+  }
+
+  for (const key of ["sortRule", "orderRule", "orderingRule", "sort", "sortMeaning", "visualLayout", "layoutDirection", "layout"]) {
+    delete question.orderingBehavior[key];
+  }
+
+  return question;
+}
+
+function bqV49NormalizeOrderingAuthoringPayload(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) bqV49NormalizeOrderingAuthoringPayload(item);
+    return payload;
+  }
+
+  bqV49NormalizeOrderingAuthoringQuestion(payload);
+
+  if (payload.question) bqV49NormalizeOrderingAuthoringPayload(payload.question);
+  if (payload.repairedQuestion) bqV49NormalizeOrderingAuthoringPayload(payload.repairedQuestion);
+  if (payload.quiz) bqV49NormalizeOrderingAuthoringPayload(payload.quiz);
+  if (Array.isArray(payload.questions)) bqV49NormalizeOrderingAuthoringPayload(payload.questions);
+
+  return payload;
+}
+// END BETTERQUIZZES V49 ORDERING SEMANTICS
+
+const MODEL_INSTRUCTIONS = `BetterQuizzes V49 ordering semantics:
+- Separate sort meaning from visual layout.
+- Use authoring-only ordering sort rules when useful: sortRule/orderRule/orderingRule = alphabetical_az, alphabetical_za, numeric_ascending, numeric_descending, chronological, reverse_chronological, custom_sequence, geometry_small_to_large, geometry_large_to_small.
+- Visual layout is separate. The renderer currently outputs vertical lists, so final orderingBehavior.direction is normalized to "top_to_bottom".
+- Do not make the model infer answer ids from direction. If items can be sorted deterministically, BetterQuizzes computes the answer ids.
+- For custom_sequence, provide a sequence/customSequence list matching item ids or item text.
+- Final render shape still uses items, answer item ids, and orderingBehavior.direction = "top_to_bottom".
+
+BetterQuizzes V45 ordering authoring rules:
 ORDERING QUESTIONS ARE THE MOST COMMON SCHEMA FAILURE. Do not improvise ordering fields.
 For every ordering question:
 - type must be exactly "ordering".
