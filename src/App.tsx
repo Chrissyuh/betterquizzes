@@ -91,6 +91,7 @@ function bqV44ShouldUseEarlyMobileFollowUp() {
 
 
 
+
 type BqV52DragState = {
   pointerId?: number;
   touchId?: number;
@@ -579,7 +580,7 @@ export default function App(): ReactElement {
   useEffect(() => {
     return bqV52InstallDomOrderingDrag();
   }, []);
-  const [screen, setScreen] = useState<Screen>(widgetMode ? "loading" : "import");
+const [screen, setScreen] = useState<Screen>(widgetMode ? "loading" : "import");
   const [quiz, setQuiz] = useState<QuizSpec | null>(null);
   const [launchId, setLaunchId] = useState<string | undefined>(undefined);
   const [startedAt, setStartedAt] = useState(() => new Date().toISOString());
