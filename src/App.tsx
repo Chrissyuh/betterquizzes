@@ -1976,44 +1976,70 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     if (typeof document === "undefined") return;
     mobileDocumentCleanupRef.current?.();
 
-    const onPointerMove = (event: globalThis.PointerEvent) => {
-      const active = dragRef.current;
-      if (!active || active.mode !== "mobile" || active.pointerId === undefined || active.pointerId !== event.pointerId) return;
-      moveActiveDrag(event.clientX, event.clientY, event);
+    const listenerTargets: EventTarget[] = [document];
+    if (typeof window !== "undefined") listenerTargets.push(window);
+    const listenerOptions = { capture: true, passive: false } as const;
+    const handledEvents = new WeakSet<Event>();
+    const handleOnce = (event: Event, handler: () => void) => {
+      if (handledEvents.has(event)) return;
+      handledEvents.add(event);
+      handler();
     };
-    const onPointerEnd = (event: globalThis.PointerEvent) => {
-      const active = dragRef.current;
-      if (!active || active.mode !== "mobile" || active.pointerId === undefined || active.pointerId !== event.pointerId) return;
-      finishDrag();
-    };
-    const onTouchMove = (event: globalThis.TouchEvent) => {
-      const active = dragRef.current;
-      if (!active || active.mode !== "mobile" || active.touchIdentifier === undefined) return;
-      const touch = Array.from(event.touches).find((candidate) => candidate.identifier === active.touchIdentifier);
-      if (!touch) return;
-      moveActiveDrag(touch.clientX, touch.clientY, event);
-    };
-    const onTouchEnd = (event: globalThis.TouchEvent) => {
-      const active = dragRef.current;
-      if (!active || active.mode !== "mobile" || active.touchIdentifier === undefined) return;
-      const ended = Array.from(event.changedTouches).some((touch) => touch.identifier === active.touchIdentifier);
-      if (ended) finishDrag();
+    const findActiveTouch = (event: globalThis.TouchEvent, active: OrderingDragState): globalThis.Touch | undefined => {
+      const primaryTouch = event.touches[0];
+      if (active.touchIdentifier === undefined) return primaryTouch;
+      return Array.from(event.touches).find((candidate) => candidate.identifier === active.touchIdentifier) ?? primaryTouch;
     };
 
-    document.addEventListener("pointermove", onPointerMove, { passive: false });
-    document.addEventListener("pointerup", onPointerEnd);
-    document.addEventListener("pointercancel", onPointerEnd);
-    document.addEventListener("touchmove", onTouchMove, { passive: false });
-    document.addEventListener("touchend", onTouchEnd);
-    document.addEventListener("touchcancel", onTouchEnd);
+    const onPointerMove: EventListener = (event) => handleOnce(event, () => {
+      const pointerEvent = event as globalThis.PointerEvent;
+      const active = dragRef.current;
+      if (!active || active.mode !== "mobile" || active.pointerId === undefined || active.pointerId !== pointerEvent.pointerId) return;
+      moveActiveDrag(pointerEvent.clientX, pointerEvent.clientY, pointerEvent);
+    });
+    const onPointerEnd: EventListener = (event) => handleOnce(event, () => {
+      const pointerEvent = event as globalThis.PointerEvent;
+      const active = dragRef.current;
+      if (!active || active.mode !== "mobile" || active.pointerId === undefined || active.pointerId !== pointerEvent.pointerId) return;
+      pointerEvent.preventDefault();
+      finishDrag();
+    });
+    const onTouchMove: EventListener = (event) => handleOnce(event, () => {
+      const touchEvent = event as globalThis.TouchEvent;
+      const active = dragRef.current;
+      if (!active || active.mode !== "mobile") return;
+      const touch = findActiveTouch(touchEvent, active);
+      if (!touch) return;
+      moveActiveDrag(touch.clientX, touch.clientY, touchEvent);
+    });
+    const onTouchEnd: EventListener = (event) => handleOnce(event, () => {
+      const touchEvent = event as globalThis.TouchEvent;
+      const active = dragRef.current;
+      if (!active || active.mode !== "mobile") return;
+      const ended = active.touchIdentifier === undefined || Array.from(touchEvent.changedTouches).some((touch) => touch.identifier === active.touchIdentifier);
+      if (!ended) return;
+      touchEvent.preventDefault();
+      finishDrag();
+    });
+
+    for (const target of listenerTargets) {
+      target.addEventListener("pointermove", onPointerMove, listenerOptions);
+      target.addEventListener("pointerup", onPointerEnd, listenerOptions);
+      target.addEventListener("pointercancel", onPointerEnd, listenerOptions);
+      target.addEventListener("touchmove", onTouchMove, listenerOptions);
+      target.addEventListener("touchend", onTouchEnd, listenerOptions);
+      target.addEventListener("touchcancel", onTouchEnd, listenerOptions);
+    }
 
     mobileDocumentCleanupRef.current = () => {
-      document.removeEventListener("pointermove", onPointerMove);
-      document.removeEventListener("pointerup", onPointerEnd);
-      document.removeEventListener("pointercancel", onPointerEnd);
-      document.removeEventListener("touchmove", onTouchMove);
-      document.removeEventListener("touchend", onTouchEnd);
-      document.removeEventListener("touchcancel", onTouchEnd);
+      for (const target of listenerTargets) {
+        target.removeEventListener("pointermove", onPointerMove, listenerOptions);
+        target.removeEventListener("pointerup", onPointerEnd, listenerOptions);
+        target.removeEventListener("pointercancel", onPointerEnd, listenerOptions);
+        target.removeEventListener("touchmove", onTouchMove, listenerOptions);
+        target.removeEventListener("touchend", onTouchEnd, listenerOptions);
+        target.removeEventListener("touchcancel", onTouchEnd, listenerOptions);
+      }
     };
   }
 
@@ -2037,6 +2063,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
 
   function beginDrag(event: PointerEvent<HTMLElement>, id: string, mode: OrderingDragMode): void {
     if (event.button !== 0) return;
+    if (!event.isPrimary) return;
     if (mode === "desktop" && event.pointerType !== "mouse") return;
     if (mode === "mobile" && event.pointerType === "mouse") return;
     if (mode === "desktop" && (event.target as Element).closest("button, input, textarea, select, a")) return;
@@ -2076,8 +2103,10 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     const active = dragRef.current;
     if (!active) return;
 
-    const distance = Math.hypot(clientX - active.startX, clientY - active.startY);
-    if (!active.moved && distance < (active.mode === "desktop" ? 4 : 8)) return;
+    if (active.mode === "desktop") {
+      const distance = Math.hypot(clientX - active.startX, clientY - active.startY);
+      if (!active.moved && distance < 4) return;
+    }
 
     active.moved = true;
     event?.preventDefault();
