@@ -15,25 +15,27 @@ const app = read("src/App.tsx");
 const css = read("src/styles.css");
 const remote = fs.existsSync("mcp/remote-server.mjs") ? read("mcp/remote-server.mjs") : "";
 
-assert(app.includes("function bqV55InstallSortInteraction"), "V55 sort installer missing");
-assert(app.includes("betterquizzes:v55-ordering-reorder"), "V55 custom reorder event missing");
-assert(app.includes("updateDraft(current.id, { response: nextOrder })"), "V55 React state update missing");
-assert(app.includes("bqV55DispatchReactReorder"), "V55 dispatch-to-React path missing");
-assert(app.includes("window.addEventListener(\"touchstart\""), "V55 touch capture missing");
-assert(app.includes("window.addEventListener(\"pointerdown\""), "V55 pointer capture missing");
-assert(app.includes("capture: true, passive: false"), "V55 must use capture passive:false");
-assert(app.includes("draggable={false}"), "V55 native draggable JSX disable missing");
-assert(app.includes("return bqV55InstallSortInteraction();"), "V55 installer not mounted");
+assert(app.includes("const bqV61OrderingRebuild = true"), "V61 ordering rebuild marker missing");
+assert(app.includes("function useOrderingInputMode"), "ordering mode detector missing");
+assert(app.includes('"desktop" | "mobile"'), "ordering must model desktop and mobile separately");
+assert(app.includes('window.matchMedia("(hover: hover) and (pointer: fine)")'), "desktop detection should use fine pointer/hover media query");
+assert(app.includes("function insertionIndexFromPoint"), "pointer sorting insertion-index logic missing");
+assert(app.includes("function moveByStep"), "fallback up/down movement missing");
+assert(app.includes("function moveToIndex"), "direct index movement missing");
+assert(app.includes("draggable={false}"), "native HTML draggable should be disabled for rebuilt sorter");
+assert(app.includes("data-ordering-mode={inputMode}"), "ordering DOM must expose desktop/mobile mode");
+assert(app.includes("inputMode === \"desktop\" ? (event) => beginDrag(event, id, \"desktop\")"), "desktop drag should start from rows");
+assert(app.includes("inputMode === \"mobile\" ? (event) => beginDrag(event, id, \"mobile\")"), "mobile drag should start from handle");
+assert(app.includes("onKeyDown={(event) => onHandleKeyDown(event, id)}"), "keyboard sorting fallback missing");
+assert(app.includes("Move up/down buttons"), "mobile user guidance missing");
 
-assert(!app.includes("bqV53InstallSortInteraction"), "old V53 installer still present");
-assert(!app.includes("bqV52InstallDomOrderingDrag"), "old V52 installer still present");
-assert(!app.includes("bqV51InstallPointerOrderingReorder"), "old V51 installer still present");
-
-assert(css.includes("V55 React ordering sort fix"), "V55 CSS missing");
-assert(css.includes(".drag-handle,"), "V55 must style existing drag-handle");
-assert(css.includes("touch-action: none !important"), "V55 handle touch-action missing");
-assert(css.includes("-webkit-user-drag: none !important"), "V55 webkit native drag disabling missing");
-assert(css.includes(".bq-v55-slot-before") && css.includes(".bq-v55-slot-after"), "V55 insertion slot preview missing");
+assert(css.includes("V61 ordering rebuild"), "V61 ordering CSS block missing");
+assert(css.includes('data-ordering-mode="desktop"'), "desktop-specific ordering CSS missing");
+assert(css.includes("touch-action: pan-y"), "mobile row should preserve vertical panning");
+assert(css.includes("touch-action: none"), "drag handle should own touch drag gestures");
+assert(css.includes(".bq-ordering-rebuilt .order-controls"), "fallback controls CSS missing");
+assert(css.includes("@media (max-width: 720px), (hover: none), (pointer: coarse)"), "mobile-specific ordering CSS missing");
+assert(css.includes("bq-ordering-drag-lock"), "drag scroll lock CSS missing");
 
 if (remote) {
   assert(!remote.includes("destructiveHint: true"), "destructiveHint true still present");
@@ -43,9 +45,9 @@ if (remote) {
 }
 
 if (failures.length) {
-  console.error("V55 React ordering sort guards failed:");
+  console.error("V61 ordering rebuild guards failed:");
   for (const failure of failures) console.error(" - " + failure);
   process.exit(1);
 }
 
-console.log("V55 React ordering sort guards passed.");
+console.log("V61 ordering rebuild guards passed.");
