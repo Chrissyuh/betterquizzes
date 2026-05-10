@@ -2798,6 +2798,22 @@ button.drag-handle:focus-visible {
   overscroll-behavior: contain;
 }
 
+.bq-ordering-rebuilt[data-ordering-mode="mobile"] .draggable-order-item {
+  touch-action: pan-y;
+}
+
+.bq-ordering-rebuilt[data-ordering-mode="mobile"] .drag-handle {
+  touch-action: none;
+}
+
+.bq-ordering-rebuilt[data-ordering-mode="mobile"] .draggable-order-item.dragging {
+  opacity: .86;
+  transform: scale(.99);
+  border-color: #1f5eff;
+  background: #e4edff;
+  box-shadow: 0 14px 30px rgba(31, 94, 255, .2);
+}
+
 @media (max-width: 720px), (hover: none), (pointer: coarse) {
   .bq-ordering-rebuilt .ordering-mode-hint {
     font-size: .82rem;
