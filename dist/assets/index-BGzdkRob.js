@@ -11655,7 +11655,6 @@ var require_react_jsx_runtime_production = /* @__PURE__ */ __commonJSMin(((expor
 var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_jsx_runtime_production();
 })))();
-var initialOrder = [];
 function bqV40IsChatGptHost() {
 	if (typeof window === "undefined") return false;
 	const hasOpenAiBridge = "openai" in window;
@@ -11677,150 +11676,6 @@ function bqV44ShouldUseEarlyMobileFollowUp() {
 	const userAgent = navigator.userAgent.toLowerCase();
 	return /iphone|ipad|ipod|android|mobile/.test(userAgent) || typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 }
-function bqV46bOrderingRows(list) {
-	return Array.from(list.querySelectorAll(".draggable-order-item, .order-item")).filter((item) => item instanceof HTMLElement);
-}
-function bqV46bClearOrderingDragClasses() {
-	document.querySelectorAll(".bq-ordering-drag-source, .bq-ordering-drag-over").forEach((item) => {
-		item.classList.remove("bq-ordering-drag-source", "bq-ordering-drag-over");
-	});
-	document.documentElement.classList.remove("bq-ordering-drag-active");
-}
-function bqV46bMoveButtonText(button) {
-	return [
-		button.textContent ?? "",
-		button.getAttribute("aria-label") ?? "",
-		button.getAttribute("title") ?? ""
-	].join(" ").toLowerCase();
-}
-function bqV46bFindMoveButton(row, direction) {
-	const buttons = Array.from(row.querySelectorAll("button")).filter((button) => button instanceof HTMLButtonElement);
-	const preferred = buttons.find((button) => {
-		const text = bqV46bMoveButtonText(button);
-		return direction === "up" ? text.includes("up") || text.includes("↑") : text.includes("down") || text.includes("↓");
-	});
-	if (preferred) return preferred;
-	if (direction === "up") return buttons[0] ?? null;
-	return buttons[1] ?? buttons[0] ?? null;
-}
-function bqV46bClickMoveButtons(snapshot) {
-	let completed = 0;
-	function currentRow() {
-		return snapshot.list.querySelector(`[data-bq-v46b-drag-token="${snapshot.token}"]`);
-	}
-	function finish() {
-		const row = currentRow();
-		if (row) delete row.dataset.bqV46bDragToken;
-	}
-	function step() {
-		if (completed >= snapshot.steps) {
-			finish();
-			return;
-		}
-		const row = currentRow();
-		if (!row) {
-			finish();
-			return;
-		}
-		const button = bqV46bFindMoveButton(row, snapshot.direction);
-		if (!button || button.disabled) {
-			finish();
-			return;
-		}
-		button.click();
-		completed += 1;
-		window.requestAnimationFrame(() => {
-			window.requestAnimationFrame(step);
-		});
-	}
-	step();
-}
-function bqV46bInstallOrderingDrag() {
-	if (typeof document === "undefined" || typeof window === "undefined") return () => {};
-	let active = null;
-	function onPointerDown(event) {
-		if (event.button !== 0) return;
-		if (!(event.target instanceof Element)) return;
-		const row = event.target.closest(".draggable-order-item, .order-item");
-		if (!(row instanceof HTMLElement)) return;
-		const target = event.target;
-		const isDragHandle = Boolean(target.closest(".drag-handle, [class*='drag-handle']"));
-		if (Boolean(target.closest("button, input, textarea, select, a")) && !isDragHandle) return;
-		const list = row.parentElement;
-		if (!(list instanceof HTMLElement)) return;
-		const startIndex = bqV46bOrderingRows(list).indexOf(row);
-		if (startIndex < 0) return;
-		const token = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
-		row.dataset.bqV46bDragToken = token;
-		row.classList.add("bq-ordering-drag-source");
-		active = {
-			pointerId: event.pointerId,
-			startX: event.clientX,
-			startY: event.clientY,
-			startIndex,
-			targetIndex: startIndex,
-			row,
-			list,
-			token,
-			dragging: false
-		};
-		try {
-			row.setPointerCapture(event.pointerId);
-		} catch {}
-	}
-	function onPointerMove(event) {
-		if (!active || active.pointerId !== event.pointerId) return;
-		const moved = Math.hypot(event.clientX - active.startX, event.clientY - active.startY);
-		if (!active.dragging && moved < 8) return;
-		active.dragging = true;
-		event.preventDefault();
-		document.documentElement.classList.add("bq-ordering-drag-active");
-		const targetRow = document.elementFromPoint(event.clientX, event.clientY)?.closest(".draggable-order-item, .order-item");
-		bqV46bClearOrderingDragClasses();
-		active.row.classList.add("bq-ordering-drag-source");
-		if (!(targetRow instanceof HTMLElement)) return;
-		if (!active.list.contains(targetRow)) return;
-		const targetIndex = bqV46bOrderingRows(active.list).indexOf(targetRow);
-		if (targetIndex < 0) return;
-		active.targetIndex = targetIndex;
-		targetRow.classList.add("bq-ordering-drag-over");
-	}
-	function onPointerUp(event) {
-		if (!active || active.pointerId !== event.pointerId) return;
-		const snapshot = active;
-		active = null;
-		try {
-			snapshot.row.releasePointerCapture(event.pointerId);
-		} catch {}
-		bqV46bClearOrderingDragClasses();
-		if (!snapshot.dragging || snapshot.targetIndex === snapshot.startIndex) {
-			delete snapshot.row.dataset.bqV46bDragToken;
-			return;
-		}
-		bqV46bClickMoveButtons({
-			list: snapshot.list,
-			token: snapshot.token,
-			direction: snapshot.targetIndex > snapshot.startIndex ? "down" : "up",
-			steps: Math.abs(snapshot.targetIndex - snapshot.startIndex)
-		});
-	}
-	function onPointerCancel() {
-		if (active?.row) delete active.row.dataset.bqV46bDragToken;
-		active = null;
-		bqV46bClearOrderingDragClasses();
-	}
-	document.addEventListener("pointerdown", onPointerDown);
-	document.addEventListener("pointermove", onPointerMove, { passive: false });
-	document.addEventListener("pointerup", onPointerUp);
-	document.addEventListener("pointercancel", onPointerCancel);
-	return () => {
-		document.removeEventListener("pointerdown", onPointerDown);
-		document.removeEventListener("pointermove", onPointerMove);
-		document.removeEventListener("pointerup", onPointerUp);
-		document.removeEventListener("pointercancel", onPointerCancel);
-		onPointerCancel();
-	};
-}
 var SAMPLE_QUIZZES = [
 	tiny_demo_default,
 	aphg_demo_default,
@@ -11836,9 +11691,6 @@ function App() {
 	const routeWidgetMode = (0, import_react.useMemo)(() => isWidgetRoute(), []);
 	const bootstrapWidgetMode = (0, import_react.useMemo)(() => hasBetterQuizzesBootstrap(), []);
 	const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode);
-	(0, import_react.useEffect)(() => {
-		return bqV46bInstallOrderingDrag();
-	}, []);
 	const [screen, setScreen] = (0, import_react.useState)(widgetMode ? "loading" : "import");
 	const [quiz, setQuiz] = (0, import_react.useState)(null);
 	const [launchId, setLaunchId] = (0, import_react.useState)(void 0);
@@ -13767,137 +13619,346 @@ function parseNumericResponse(value) {
 	const parsed = Number(trimmed);
 	return Number.isFinite(parsed) ? parsed : null;
 }
+function useOrderingInputMode() {
+	const [mode, setMode] = (0, import_react.useState)(() => {
+		if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "desktop";
+		return window.matchMedia("(hover: hover) and (pointer: fine)").matches ? "desktop" : "mobile";
+	});
+	(0, import_react.useEffect)(() => {
+		if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+		const query = window.matchMedia("(hover: hover) and (pointer: fine)");
+		const update = () => setMode(query.matches ? "desktop" : "mobile");
+		update();
+		query.addEventListener?.("change", update);
+		return () => query.removeEventListener?.("change", update);
+	}, []);
+	return mode;
+}
+function setOrderingDragScrollLock(enabled) {
+	if (typeof document === "undefined") return;
+	document.documentElement.classList.toggle("bq-ordering-drag-lock", enabled);
+	document.body?.classList.toggle("bq-ordering-drag-lock", enabled);
+}
 function OrderingInput({ question, response, onChange }) {
+	const inputMode = useOrderingInputMode();
 	const [draggedId, setDraggedId] = (0, import_react.useState)(null);
-	const [overId, setOverId] = (0, import_react.useState)(null);
-	const draggingRef = (0, import_react.useRef)(null);
+	const [dropIndex, setDropIndex] = (0, import_react.useState)(null);
+	const dragRef = (0, import_react.useRef)(null);
+	const mobileDocumentCleanupRef = (0, import_react.useRef)(null);
 	const orderRef = (0, import_react.useRef)([]);
+	const listRef = (0, import_react.useRef)(null);
 	const items = getOrderingItems(question);
 	const itemIds = items.map((item) => item.id);
 	const itemIdsKey = itemIds.join("|");
 	const behavior = getOrderingBehavior(question);
 	const order = normalizeOrderingResponse(response, items);
+	const itemById = (0, import_react.useMemo)(() => new Map(items.map((item) => [item.id, item])), [itemIdsKey]);
 	(0, import_react.useEffect)(() => {
 		orderRef.current = order;
 	}, [order.join("|")]);
 	(0, import_react.useEffect)(() => {
-		if (!response.length && itemIds.length) onChange(initialOrder);
-	}, [response.length, itemIdsKey]);
+		if (!response.length && itemIds.length) onChange(bqV26AvoidAlreadyCorrectOrdering(question, items, getInitialOrderingOrder(question, items)));
+	}, [
+		response.length,
+		itemIdsKey,
+		question
+	]);
+	(0, import_react.useEffect)(() => () => {
+		mobileDocumentCleanupRef.current?.();
+		mobileDocumentCleanupRef.current = null;
+		dragRef.current = null;
+		setOrderingDragScrollLock(false);
+	}, []);
 	if (!items.length) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionRenderWarning, {
 		question,
 		detail: "This ordering question did not include any valid items."
 	});
 	function commit(nextOrder) {
 		const normalized = normalizeOrderingResponse(nextOrder, items);
+		if (normalized.join("|") === orderRef.current.join("|")) return;
 		orderRef.current = normalized;
 		onChange(normalized);
 	}
-	function reorder(sourceId, targetId) {
-		if (!sourceId || sourceId === targetId) return;
+	function moveByStep(id, step) {
 		const currentOrder = orderRef.current.length ? orderRef.current : order;
-		const fromIndex = currentOrder.indexOf(sourceId);
-		const toIndex = currentOrder.indexOf(targetId);
-		if (fromIndex < 0 || toIndex < 0) return;
+		const fromIndex = currentOrder.indexOf(id);
+		if (fromIndex < 0) return;
+		const toIndex = Math.max(0, Math.min(currentOrder.length - 1, fromIndex + step));
+		if (toIndex === fromIndex) return;
 		const next = [...currentOrder];
 		next.splice(fromIndex, 1);
-		next.splice(toIndex, 0, sourceId);
+		next.splice(toIndex, 0, id);
 		commit(next);
 	}
-	function reorderNativeDrag(targetId) {
-		if (!draggedId || draggedId === targetId) return;
-		reorder(draggedId, targetId);
+	function moveToIndex(sourceId, rawIndex) {
+		const currentOrder = orderRef.current.length ? orderRef.current : order;
+		if (currentOrder.indexOf(sourceId) < 0) return;
+		const withoutSource = currentOrder.filter((id) => id !== sourceId);
+		const targetIndex = Math.max(0, Math.min(withoutSource.length, rawIndex));
+		const next = [...withoutSource];
+		next.splice(targetIndex, 0, sourceId);
+		if (next.join("|") === currentOrder.join("|")) return;
+		commit(next);
 	}
-	function targetIdFromPoint(clientX, clientY) {
-		return (document.elementFromPoint(clientX, clientY)?.closest?.("[data-order-id]"))?.dataset.orderId ?? null;
+	function insertionIndexFromPoint(clientX, clientY, sourceId) {
+		const list = listRef.current;
+		const currentOrder = orderRef.current.length ? orderRef.current : order;
+		if (!list) return currentOrder.indexOf(sourceId);
+		const rows = Array.from(list.querySelectorAll("[data-order-id]")).filter((row) => row.dataset.orderId !== sourceId);
+		const hit = typeof document !== "undefined" ? document.elementFromPoint(clientX, clientY)?.closest("[data-order-id]") : null;
+		if (hit && hit.dataset.orderId !== sourceId) {
+			const hitIndex = rows.findIndex((row) => row.dataset.orderId === hit.dataset.orderId);
+			if (hitIndex >= 0) {
+				const rect = hit.getBoundingClientRect();
+				return clientY < rect.top + rect.height / 2 ? hitIndex : hitIndex + 1;
+			}
+		}
+		for (let index = 0; index < rows.length; index += 1) {
+			const rect = rows[index].getBoundingClientRect();
+			if (clientY < rect.top + rect.height / 2) return index;
+		}
+		return rows.length;
 	}
-	function beginPointerDrag(event, id) {
-		draggingRef.current = id;
+	function clearMobileDocumentDragListeners() {
+		mobileDocumentCleanupRef.current?.();
+		mobileDocumentCleanupRef.current = null;
+		if (dragRef.current) dragRef.current.cleanup = void 0;
+	}
+	function installMobileDocumentDragListeners() {
+		if (typeof document === "undefined") return () => void 0;
+		clearMobileDocumentDragListeners();
+		const touchMoveOptions = {
+			capture: true,
+			passive: false
+		};
+		const touchEndOptions = { capture: true };
+		const pointerOptions = { capture: true };
+		const findActiveTouch = (touches, touchIdentifier) => Array.from(touches).find((candidate) => candidate.identifier === touchIdentifier);
+		const onDocumentPointerMove = (event) => {
+			const active = dragRef.current;
+			if (!active || active.mode !== "mobile" || active.touchIdentifier !== void 0 || active.pointerId !== event.pointerId) return;
+			moveActiveDrag(event.clientX, event.clientY, event);
+		};
+		const onDocumentPointerEnd = (event) => {
+			const active = dragRef.current;
+			if (!active || active.mode !== "mobile" || active.touchIdentifier !== void 0 || active.pointerId !== event.pointerId) return;
+			event.preventDefault();
+			finishDrag();
+		};
+		const onDocumentTouchMove = (event) => {
+			const active = dragRef.current;
+			if (!active || active.mode !== "mobile" || active.touchIdentifier === void 0) return;
+			const touch = findActiveTouch(event.touches, active.touchIdentifier);
+			if (!touch) {
+				finishDrag();
+				return;
+			}
+			event.preventDefault();
+			active.lastY = touch.clientY;
+			active.moved = true;
+			const nextDropIndex = insertionIndexFromPoint(touch.clientX, touch.clientY, active.id);
+			setDropIndex(nextDropIndex);
+			moveToIndex(active.id, nextDropIndex);
+		};
+		const onDocumentTouchEnd = (event) => {
+			const active = dragRef.current;
+			if (!active || active.mode !== "mobile" || active.touchIdentifier === void 0) return;
+			if (Array.from(event.changedTouches).some((touch) => touch.identifier === active.touchIdentifier)) finishDrag();
+		};
+		const onDocumentTouchCancel = (event) => {
+			const active = dragRef.current;
+			if (!active || active.mode !== "mobile" || active.touchIdentifier === void 0) return;
+			if (Array.from(event.changedTouches).some((touch) => touch.identifier === active.touchIdentifier)) finishDrag();
+		};
+		document.addEventListener("pointermove", onDocumentPointerMove, pointerOptions);
+		document.addEventListener("pointerup", onDocumentPointerEnd, pointerOptions);
+		document.addEventListener("pointercancel", onDocumentPointerEnd, pointerOptions);
+		document.addEventListener("touchmove", onDocumentTouchMove, touchMoveOptions);
+		document.addEventListener("touchend", onDocumentTouchEnd, touchEndOptions);
+		document.addEventListener("touchcancel", onDocumentTouchCancel, touchEndOptions);
+		const cleanup = () => {
+			document.removeEventListener("pointermove", onDocumentPointerMove, pointerOptions);
+			document.removeEventListener("pointerup", onDocumentPointerEnd, pointerOptions);
+			document.removeEventListener("pointercancel", onDocumentPointerEnd, pointerOptions);
+			document.removeEventListener("touchmove", onDocumentTouchMove, touchMoveOptions);
+			document.removeEventListener("touchend", onDocumentTouchEnd, touchEndOptions);
+			document.removeEventListener("touchcancel", onDocumentTouchCancel, touchEndOptions);
+		};
+		mobileDocumentCleanupRef.current = cleanup;
+		return cleanup;
+	}
+	function startDrag(id, mode, clientX, clientY, pointerId, touchIdentifier) {
+		if (dragRef.current) return;
+		dragRef.current = {
+			id,
+			mode,
+			pointerId,
+			touchIdentifier,
+			startX: clientX,
+			startY: clientY,
+			lastY: clientY,
+			moved: false
+		};
 		setDraggedId(id);
-		setOverId(id);
+		setDropIndex(orderRef.current.indexOf(id));
+		setOrderingDragScrollLock(true);
+		if (mode === "mobile") dragRef.current.cleanup = installMobileDocumentDragListeners();
+	}
+	function beginDrag(event, id, mode) {
+		if (event.button !== 0) return;
+		if (!event.isPrimary) return;
+		if (mode === "desktop" && event.pointerType !== "mouse") return;
+		if (mode === "mobile") return;
+		if (event.target.closest("button, input, textarea, select, a")) return;
+		if (dragRef.current) return;
+		startDrag(id, "desktop", event.clientX, event.clientY, event.pointerId);
 		event.preventDefault();
 		try {
 			event.currentTarget.setPointerCapture(event.pointerId);
 		} catch {}
 	}
-	function movePointerDrag(event) {
-		const sourceId = draggingRef.current;
-		if (!sourceId) return;
+	function beginTouchDrag(event, id) {
+		if (inputMode !== "mobile") return;
+		if (dragRef.current) return;
+		if (event.touches.length !== 1) return;
+		const touch = event.touches[0];
+		startDrag(id, "mobile", touch.clientX, touch.clientY, void 0, touch.identifier);
 		event.preventDefault();
-		const targetId = targetIdFromPoint(event.clientX, event.clientY);
-		if (!targetId) return;
-		setOverId(targetId);
-		reorder(sourceId, targetId);
 	}
-	function endPointerDrag(event) {
-		if (!draggingRef.current) return;
+	function beginMobilePointerFallbackDrag(event, id) {
+		if (inputMode !== "mobile") return;
+		if (event.pointerType === "touch") return;
+		if (event.button !== 0 || !event.isPrimary || dragRef.current) return;
+		startDrag(id, "mobile", event.clientX, event.clientY, event.pointerId);
+		event.preventDefault();
+	}
+	function moveActiveDrag(clientX, clientY, event) {
+		const active = dragRef.current;
+		if (!active) return;
+		if (active.mode === "desktop") {
+			const distance = Math.hypot(clientX - active.startX, clientY - active.startY);
+			if (!active.moved && distance < 4) return;
+		}
+		active.moved = true;
+		event?.preventDefault();
+		const nextDropIndex = insertionIndexFromPoint(clientX, clientY, active.id);
+		setDropIndex(nextDropIndex);
+		moveToIndex(active.id, nextDropIndex);
+	}
+	function moveDrag(event) {
+		const active = dragRef.current;
+		if (!active || active.pointerId === void 0 || active.pointerId !== event.pointerId) return;
+		moveActiveDrag(event.clientX, event.clientY, event);
+	}
+	function finishDrag() {
+		clearMobileDocumentDragListeners();
+		dragRef.current = null;
+		setDraggedId(null);
+		setDropIndex(null);
+		setOrderingDragScrollLock(false);
+	}
+	function endDrag(event) {
+		const active = dragRef.current;
+		if (!active || active.pointerId === void 0 || active.pointerId !== event.pointerId) return;
 		try {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		} catch {}
-		draggingRef.current = null;
-		setDraggedId(null);
-		setOverId(null);
+		finishDrag();
+	}
+	function cancelDrag() {
+		finishDrag();
+	}
+	function onHandleKeyDown(event, id) {
+		if (event.key === "ArrowUp") {
+			event.preventDefault();
+			moveByStep(id, -1);
+		} else if (event.key === "ArrowDown") {
+			event.preventDefault();
+			moveByStep(id, 1);
+		} else if (event.key === "Home") {
+			event.preventDefault();
+			moveToIndex(id, 0);
+		} else if (event.key === "End") {
+			event.preventDefault();
+			moveToIndex(id, order.length - 1);
+		}
 	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "order-shell drag-order-shell",
+		className: "order-shell drag-order-shell bq-ordering-rebuilt",
+		"data-ordering-mode": inputMode,
 		"aria-label": "Ordering answer",
 		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "order-end-label top-label",
-				children: behavior.topLabel
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Top" }),
+					" = ",
+					behavior.topLabel
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "compact-status ordering-mode-hint",
+				children: inputMode === "desktop" ? "Desktop: drag a row with your mouse, or use the arrow buttons." : "Mobile: use the Move up/down buttons, or drag from the grip handle."
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				ref: listRef,
 				className: "order-list drag-order-list",
 				"aria-live": "polite",
 				children: order.map((id, index) => {
-					const item = items.find((entry) => entry.id === id);
+					const item = itemById.get(id);
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: (draggedId === id ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (overId === id ? " drag-over" : ""),
+						className: (draggedId === id ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (dropIndex === index ? " drag-over" : ""),
 						"data-order-id": id,
-						draggable: true,
-						onDragStart: (event) => {
-							setDraggedId(id);
-							draggingRef.current = id;
-							event.dataTransfer.effectAllowed = "move";
-							event.dataTransfer.setData("text/plain", id);
-						},
-						onDragEnter: (event) => {
-							event.preventDefault();
-							setOverId(id);
-							reorderNativeDrag(id);
-						},
-						onDragOver: (event) => {
-							event.preventDefault();
-							event.dataTransfer.dropEffect = "move";
-						},
-						onDrop: (event) => {
-							event.preventDefault();
-							reorderNativeDrag(id);
-							draggingRef.current = null;
-							setDraggedId(null);
-							setOverId(null);
-						},
-						onDragEnd: () => {
-							draggingRef.current = null;
-							setDraggedId(null);
-							setOverId(null);
-						},
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-							className: "order-item-text",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-								className: "order-index",
-								children: index + 1
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RichInline, { text: item?.text ?? id })]
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "drag-handle",
-							role: "button",
-							tabIndex: 0,
-							"aria-label": `Drag ${item?.text ?? id}`,
-							onPointerDown: (event) => beginPointerDrag(event, id),
-							onPointerMove: movePointerDrag,
-							onPointerUp: endPointerDrag,
-							onPointerCancel: endPointerDrag,
-							children: "⋮⋮"
-						})]
+						draggable: false,
+						"aria-roledescription": "sortable item",
+						"aria-label": `${index + 1}. ${item?.text ?? id}`,
+						onPointerDown: inputMode === "desktop" ? (event) => beginDrag(event, id, "desktop") : void 0,
+						onPointerMove: inputMode === "desktop" ? moveDrag : void 0,
+						onPointerUp: inputMode === "desktop" ? endDrag : void 0,
+						onPointerCancel: inputMode === "desktop" ? cancelDrag : void 0,
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								className: "order-item-text",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "order-index",
+									children: index + 1
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RichInline, { text: item?.text ?? id })]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								className: "drag-handle",
+								role: "button",
+								tabIndex: 0,
+								"aria-label": `Drag or use arrow keys to move ${item?.text ?? id}`,
+								title: inputMode === "desktop" ? "Drag row or use arrow keys" : "Drag from this handle or use Move buttons",
+								onPointerDown: inputMode === "mobile" ? (event) => beginMobilePointerFallbackDrag(event, id) : void 0,
+								onTouchStart: inputMode === "mobile" ? (event) => beginTouchDrag(event, id) : void 0,
+								onKeyDown: (event) => onHandleKeyDown(event, id),
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									"aria-hidden": "true",
+									children: "⋮⋮"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "drag-label",
+									children: "Drag"
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								className: "order-controls",
+								"aria-label": `Move ${item?.text ?? id}`,
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									disabled: index === 0,
+									onClick: () => moveByStep(id, -1),
+									"aria-label": `Move ${item?.text ?? id} up`,
+									children: "↑"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									disabled: index === order.length - 1,
+									onClick: () => moveByStep(id, 1),
+									"aria-label": `Move ${item?.text ?? id} down`,
+									children: "↓"
+								})]
+							})
+						]
 					}, id);
 				})
 			}),
