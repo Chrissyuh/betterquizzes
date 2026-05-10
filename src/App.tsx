@@ -1855,8 +1855,9 @@ type OrderingInputMode = "desktop" | "mobile";
 type OrderingDragMode = OrderingInputMode;
 type OrderingDragState = {
   id: string;
-  pointerId: number;
   mode: OrderingDragMode;
+  pointerId?: number;
+  touchIdentifier?: number;
   startX: number;
   startY: number;
   moved: boolean;
@@ -1892,6 +1893,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const dragRef = useRef<OrderingDragState | null>(null);
+  const mobileDocumentCleanupRef = useRef<(() => void) | null>(null);
   const orderRef = useRef<string[]>([]);
   const listRef = useRef<HTMLDivElement | null>(null);
   const items = getOrderingItems(question);
@@ -1909,7 +1911,11 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     if (!response.length && itemIds.length) onChange(bqV26AvoidAlreadyCorrectOrdering(question, items, getInitialOrderingOrder(question, items)));
   }, [response.length, itemIdsKey, question]);
 
-  useEffect(() => () => setOrderingDragScrollLock(false), []);
+  useEffect(() => () => {
+    mobileDocumentCleanupRef.current?.();
+    mobileDocumentCleanupRef.current = null;
+    setOrderingDragScrollLock(false);
+  }, []);
 
   if (!items.length) return <QuestionRenderWarning question={question} detail="This ordering question did not include any valid items." />;
 
@@ -1944,15 +1950,89 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     commit(next);
   }
 
-  function insertionIndexFromPoint(clientY: number, sourceId: string): number {
+  function insertionIndexFromPoint(clientX: number, clientY: number, sourceId: string): number {
     const list = listRef.current;
-    if (!list) return orderRef.current.indexOf(sourceId);
+    const currentOrder = orderRef.current.length ? orderRef.current : order;
+    if (!list) return currentOrder.indexOf(sourceId);
+
     const rows = Array.from(list.querySelectorAll<HTMLElement>("[data-order-id]")).filter((row) => row.dataset.orderId !== sourceId);
+    const hit = typeof document !== "undefined" ? document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-order-id]") : null;
+    if (hit && hit.dataset.orderId !== sourceId) {
+      const hitIndex = rows.findIndex((row) => row.dataset.orderId === hit.dataset.orderId);
+      if (hitIndex >= 0) {
+        const rect = hit.getBoundingClientRect();
+        return clientY < rect.top + rect.height / 2 ? hitIndex : hitIndex + 1;
+      }
+    }
+
     for (let index = 0; index < rows.length; index += 1) {
       const rect = rows[index].getBoundingClientRect();
       if (clientY < rect.top + rect.height / 2) return index;
     }
     return rows.length;
+  }
+
+  function installMobileDocumentDragListeners(): void {
+    if (typeof document === "undefined") return;
+    mobileDocumentCleanupRef.current?.();
+
+    const onPointerMove = (event: globalThis.PointerEvent) => {
+      const active = dragRef.current;
+      if (!active || active.mode !== "mobile" || active.pointerId === undefined || active.pointerId !== event.pointerId) return;
+      moveActiveDrag(event.clientX, event.clientY, event);
+    };
+    const onPointerEnd = (event: globalThis.PointerEvent) => {
+      const active = dragRef.current;
+      if (!active || active.mode !== "mobile" || active.pointerId === undefined || active.pointerId !== event.pointerId) return;
+      finishDrag();
+    };
+    const onTouchMove = (event: globalThis.TouchEvent) => {
+      const active = dragRef.current;
+      if (!active || active.mode !== "mobile" || active.touchIdentifier === undefined) return;
+      const touch = Array.from(event.touches).find((candidate) => candidate.identifier === active.touchIdentifier);
+      if (!touch) return;
+      moveActiveDrag(touch.clientX, touch.clientY, event);
+    };
+    const onTouchEnd = (event: globalThis.TouchEvent) => {
+      const active = dragRef.current;
+      if (!active || active.mode !== "mobile" || active.touchIdentifier === undefined) return;
+      const ended = Array.from(event.changedTouches).some((touch) => touch.identifier === active.touchIdentifier);
+      if (ended) finishDrag();
+    };
+
+    document.addEventListener("pointermove", onPointerMove, { passive: false });
+    document.addEventListener("pointerup", onPointerEnd);
+    document.addEventListener("pointercancel", onPointerEnd);
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend", onTouchEnd);
+    document.addEventListener("touchcancel", onTouchEnd);
+
+    mobileDocumentCleanupRef.current = () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerEnd);
+      document.removeEventListener("pointercancel", onPointerEnd);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }
+
+  function startDrag(id: string, mode: OrderingDragMode, clientX: number, clientY: number, pointerId?: number, touchIdentifier?: number): void {
+    if (dragRef.current) return;
+
+    dragRef.current = {
+      id,
+      mode,
+      pointerId,
+      touchIdentifier,
+      startX: clientX,
+      startY: clientY,
+      moved: false,
+    };
+    setDraggedId(id);
+    setDropIndex(orderRef.current.indexOf(id));
+    setOrderingDragScrollLock(true);
+    if (mode === "mobile") installMobileDocumentDragListeners();
   }
 
   function beginDrag(event: PointerEvent<HTMLElement>, id: string, mode: OrderingDragMode): void {
@@ -1961,50 +2041,75 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     if (mode === "mobile" && event.pointerType === "mouse") return;
     if (mode === "desktop" && (event.target as Element).closest("button, input, textarea, select, a")) return;
 
-    dragRef.current = {
-      id,
-      pointerId: event.pointerId,
-      mode,
-      startX: event.clientX,
-      startY: event.clientY,
-      moved: false,
-    };
-    setDraggedId(id);
-    setDropIndex(orderRef.current.indexOf(id));
-    setOrderingDragScrollLock(true);
+    const active = dragRef.current;
+    if (active && mode === "mobile" && active.id === id && active.pointerId === undefined) {
+      active.pointerId = event.pointerId;
+      event.preventDefault();
+      try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* pointer capture is best-effort across embedded webviews */ }
+      return;
+    }
+    if (active) return;
+
+    startDrag(id, mode, event.clientX, event.clientY, event.pointerId);
     event.preventDefault();
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* pointer capture is best-effort across embedded webviews */ }
   }
 
-  function moveDrag(event: PointerEvent<HTMLElement>): void {
-    const active = dragRef.current;
-    if (!active || active.pointerId !== event.pointerId) return;
+  function beginTouchDrag(event: ReactTouchEvent<HTMLElement>, id: string): void {
+    if (inputMode !== "mobile") return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
 
-    const distance = Math.hypot(event.clientX - active.startX, event.clientY - active.startY);
+    const active = dragRef.current;
+    if (active && active.mode === "mobile" && active.id === id && active.touchIdentifier === undefined) {
+      active.touchIdentifier = touch.identifier;
+      event.preventDefault();
+      return;
+    }
+    if (active) return;
+
+    startDrag(id, "mobile", touch.clientX, touch.clientY, undefined, touch.identifier);
+    event.preventDefault();
+  }
+
+  function moveActiveDrag(clientX: number, clientY: number, event?: { preventDefault: () => void }): void {
+    const active = dragRef.current;
+    if (!active) return;
+
+    const distance = Math.hypot(clientX - active.startX, clientY - active.startY);
     if (!active.moved && distance < (active.mode === "desktop" ? 4 : 8)) return;
 
     active.moved = true;
-    event.preventDefault();
-    const nextDropIndex = insertionIndexFromPoint(event.clientY, active.id);
+    event?.preventDefault();
+    const nextDropIndex = insertionIndexFromPoint(clientX, clientY, active.id);
     setDropIndex(nextDropIndex);
     moveToIndex(active.id, nextDropIndex);
   }
 
-  function endDrag(event: PointerEvent<HTMLElement>): void {
+  function moveDrag(event: PointerEvent<HTMLElement>): void {
     const active = dragRef.current;
-    if (!active || active.pointerId !== event.pointerId) return;
-    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
+    if (!active || active.pointerId === undefined || active.pointerId !== event.pointerId) return;
+    moveActiveDrag(event.clientX, event.clientY, event);
+  }
+
+  function finishDrag(): void {
+    mobileDocumentCleanupRef.current?.();
+    mobileDocumentCleanupRef.current = null;
     dragRef.current = null;
     setDraggedId(null);
     setDropIndex(null);
     setOrderingDragScrollLock(false);
   }
 
+  function endDrag(event: PointerEvent<HTMLElement>): void {
+    const active = dragRef.current;
+    if (!active || active.pointerId === undefined || active.pointerId !== event.pointerId) return;
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
+    finishDrag();
+  }
+
   function cancelDrag(): void {
-    dragRef.current = null;
-    setDraggedId(null);
-    setDropIndex(null);
-    setOrderingDragScrollLock(false);
+    finishDrag();
   }
 
   function onHandleKeyDown(event: ReactKeyboardEvent<HTMLElement>, id: string): void {
@@ -2054,9 +2159,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
                 aria-label={`Drag or use arrow keys to move ${item?.text ?? id}`}
                 title={inputMode === "desktop" ? "Drag row or use arrow keys" : "Drag from this handle or use Move buttons"}
                 onPointerDown={inputMode === "mobile" ? (event) => beginDrag(event, id, "mobile") : undefined}
-                onPointerMove={inputMode === "mobile" ? moveDrag : undefined}
-                onPointerUp={inputMode === "mobile" ? endDrag : undefined}
-                onPointerCancel={inputMode === "mobile" ? cancelDrag : undefined}
+                onTouchStart={inputMode === "mobile" ? (event) => beginTouchDrag(event, id) : undefined}
                 onKeyDown={(event) => onHandleKeyDown(event, id)}
               >
                 <span aria-hidden="true">⋮⋮</span><span className="drag-label">Drag</span>

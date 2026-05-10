@@ -236,7 +236,7 @@ details > summary { cursor: pointer; font-weight: 800; color: #334155; }
 }
 .draggable-order-item {
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
 }
 .draggable-order-item.dragging {
@@ -1051,7 +1051,7 @@ button.primary {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: .65rem;
-  touch-action: none;
+  touch-action: pan-y;
 }
 .drag-handle,
 .drag-label {
@@ -2566,7 +2566,7 @@ button.drag-handle:focus-visible {
   background: #f8fafc;
   padding: .75rem;
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
