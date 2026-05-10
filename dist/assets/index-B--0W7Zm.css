@@ -2549,23 +2549,119 @@ button.drag-handle:focus-visible {
 }
 
 
-/* V59 ordering drag scroll lock */
-html.bq-ordering-drag-lock,
-body.bq-ordering-drag-lock {
-  overflow: hidden !important;
-  overscroll-behavior: none !important;
-  touch-action: none !important;
-  user-select: none !important;
-  -webkit-user-select: none !important;
+
+
+/* V60 restored older PC ordering drag behavior */
+.drag-order-list {
+  gap: .5rem;
 }
 
-html.bq-ordering-drag-lock .app-shell,
-html.bq-ordering-drag-lock .quiz-shell,
-html.bq-ordering-drag-lock .question-card,
-html.bq-ordering-drag-lock .order-shell,
-html.bq-ordering-drag-lock .order-list,
-html.bq-ordering-drag-lock .order-item,
-html.bq-ordering-drag-lock .drag-handle {
-  touch-action: none !important;
-  overscroll-behavior: none !important;
+.draggable-order-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: .75rem;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: .75rem;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  transition: border-color .12s ease, background .12s ease, transform .12s ease, box-shadow .12s ease;
 }
+
+.draggable-order-item:hover {
+  border-color: #93b4ff;
+}
+
+.draggable-order-item.dragging,
+.draggable-order-item.bq-ordering-drag-source {
+  cursor: grabbing;
+  opacity: .72;
+  transform: scale(.99);
+  border-color: #1f5eff;
+  background: #e0ebff;
+  box-shadow: 0 10px 24px rgba(31, 94, 255, .16);
+}
+
+.draggable-order-item.bq-ordering-drag-over,
+.order-item.bq-ordering-drag-over {
+  border-color: #1f5eff;
+  background: #eef5ff;
+  box-shadow: inset 0 0 0 2px rgba(31, 94, 255, .22);
+}
+
+.bq-ordering-drag-active,
+.bq-ordering-drag-active body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.drag-handle {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  min-width: 4.25rem;
+  min-height: 2.4rem;
+  border-radius: 12px;
+  background: #edf3ff;
+  color: #123caa;
+  font-weight: 900;
+  letter-spacing: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.drag-handle:active,
+.drag-handle[aria-pressed="true"] {
+  cursor: grabbing;
+  background: #dbe8ff;
+}
+
+.drag-label {
+  display: inline !important;
+  font-size: .72rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.order-item-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.order-controls {
+  display: inline-flex;
+  gap: .25rem;
+}
+
+.order-controls button {
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  padding: .35rem .55rem;
+  margin-left: 0;
+}
+
+.order-controls button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .draggable-order-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .order-controls {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}
+/* END V60 restored older PC ordering drag behavior */

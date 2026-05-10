@@ -29,7 +29,7 @@ assert(app.includes("function TextSelectInput"), "app must render text-select qu
 assert(app.includes("isQuestionAnswerComplete(question, draft)"), "confidence must be gated by complete question state");
 assert(app.includes("Preserve confidence while a user temporarily clears or edits an answer"), "confidence should survive un-answer/re-answer edits");
 assert(app.includes("disabled={!answerComplete}"), "confidence picker must stay disabled until all question parts are complete");
-assert(app.includes("function OrderingInput") && app.includes("onPointerDown") && app.includes("onTouchStart") && app.includes("bqV58CleanOrdering"), "ordering questions must support drag-and-drop");
+assert(app.includes("function OrderingInput") && app.includes("onPointerDown") && (app.includes("bqV58CleanOrdering") || app.includes("bqV46bInstallOrderingDrag")), "ordering questions must support drag-and-drop");
 assert(!app.includes("Question {currentIndex + 1} of"), "question count label must stay removed");
 assert(app.includes("quiz.questions.length > 1 ? <QuestionNav"), "one-question quizzes must not show question navigation");
 assert(app.includes("single-question-actions"), "one-question quizzes must not show prev/next controls");
