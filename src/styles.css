@@ -2691,6 +2691,7 @@ button.drag-handle:focus-visible {
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
+  position: relative;
   transition: border-color .12s ease, background .12s ease, transform .12s ease, box-shadow .12s ease;
 }
 
@@ -2715,10 +2716,28 @@ button.drag-handle:focus-visible {
   box-shadow: 0 12px 28px rgba(31, 94, 255, .16);
 }
 
-.bq-ordering-rebuilt .draggable-order-item.drag-over:not(.dragging) {
+.bq-ordering-rebuilt .draggable-order-item.drag-over:not(.dragging),
+.bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging),
+.bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging) {
   border-color: #1f5eff;
   box-shadow: inset 0 0 0 2px rgba(31, 94, 255, .16);
 }
+
+.bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging)::before,
+.bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging)::after {
+  content: "";
+  position: absolute;
+  left: .85rem;
+  right: .85rem;
+  height: 4px;
+  border-radius: 999px;
+  background: #1f5eff;
+  box-shadow: 0 0 0 4px rgba(31, 94, 255, .14);
+  z-index: 3;
+}
+
+.bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging)::before { top: -7px; }
+.bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging)::after { bottom: -7px; }
 
 .bq-ordering-rebuilt .order-item-text {
   min-width: 0;

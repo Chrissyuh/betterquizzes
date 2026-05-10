@@ -1894,6 +1894,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   const inputMode = useOrderingInputMode();
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [dropMarker, setDropMarker] = useState<{ id: string; edge: "before" | "after" } | null>(null);
   const dragRef = useRef<OrderingDragState | null>(null);
   const mobileDocumentCleanupRef = useRef<(() => void) | null>(null);
   const orderRef = useRef<string[]>([]);
@@ -1903,7 +1904,8 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   const itemIdsKey = itemIds.join("|");
   const behavior = getOrderingBehavior(question);
   const order = normalizeOrderingResponse(response, items);
-  const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [itemIdsKey]);
+  const itemsKey = items.map((item) => `${item.id}\u0000${item.text}`).join("\u0001");
+  const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [itemsKey]);
 
   useEffect(() => {
     orderRef.current = order;
@@ -1939,6 +1941,15 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     next.splice(fromIndex, 1);
     next.splice(toIndex, 0, id);
     commit(next);
+  }
+
+  function markerFromInsertionIndex(sourceId: string, rawIndex: number): { id: string; edge: "before" | "after" } | null {
+    const currentOrder = orderRef.current.length ? orderRef.current : order;
+    const withoutSource = currentOrder.filter((id) => id !== sourceId);
+    if (!withoutSource.length) return null;
+    const targetIndex = Math.max(0, Math.min(withoutSource.length, rawIndex));
+    if (targetIndex < withoutSource.length) return { id: withoutSource[targetIndex], edge: "before" };
+    return { id: withoutSource[withoutSource.length - 1], edge: "after" };
   }
 
   function moveToIndex(sourceId: string, rawIndex: number): void {
@@ -2019,6 +2030,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
       active.moved = true;
       const nextDropIndex = insertionIndexFromPoint(touch.clientX, touch.clientY, active.id);
       setDropIndex(nextDropIndex);
+      setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
       moveToIndex(active.id, nextDropIndex);
     };
 
@@ -2070,6 +2082,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     };
     setDraggedId(id);
     setDropIndex(orderRef.current.indexOf(id));
+    setDropMarker(null);
     setOrderingDragScrollLock(true);
     if (mode === "mobile") dragRef.current.cleanup = installMobileDocumentDragListeners();
   }
@@ -2118,6 +2131,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     event?.preventDefault();
     const nextDropIndex = insertionIndexFromPoint(clientX, clientY, active.id);
     setDropIndex(nextDropIndex);
+    setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
     moveToIndex(active.id, nextDropIndex);
   }
 
@@ -2132,6 +2146,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     dragRef.current = null;
     setDraggedId(null);
     setDropIndex(null);
+    setDropMarker(null);
     setOrderingDragScrollLock(false);
   }
 
@@ -2166,15 +2181,17 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     <div className="order-shell drag-order-shell bq-ordering-rebuilt" data-ordering-mode={inputMode} aria-label="Ordering answer">
       <div className="order-end-label top-label"><strong>Top</strong> = {behavior.topLabel}</div>
       <p className="compact-status ordering-mode-hint">
-        {inputMode === "desktop" ? "Desktop: drag a row with your mouse, or use the arrow buttons." : "Mobile: use the Move up/down buttons, or drag from the grip handle."}
+        {inputMode === "desktop" ? "Desktop: drag a row with your mouse, or focus the grip and press ArrowUp, ArrowDown, Home, or End." : "Mobile: use the Move up/down buttons, drag from the grip handle, or focus the grip and press ArrowUp, ArrowDown, Home, or End."}
       </p>
       <div ref={listRef} className="order-list drag-order-list" aria-live="polite">
         {order.map((id, index) => {
           const item = itemById.get(id);
           const isDragged = draggedId === id;
+          const isDropBefore = dropMarker?.id === id && dropMarker.edge === "before";
+          const isDropAfter = dropMarker?.id === id && dropMarker.edge === "after";
           return (
             <div
-              className={(isDragged ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (dropIndex === index ? " drag-over" : "")}
+              className={(isDragged ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (!isDragged && dropIndex === index ? " drag-over" : "") + (isDropBefore ? " drop-before" : "") + (isDropAfter ? " drop-after" : "")}
               key={id}
               data-order-id={id}
               draggable={false}
@@ -2188,10 +2205,14 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
               <span className="order-item-text"><span className="order-index">{index + 1}</span><RichInline text={item?.text ?? id} /></span>
               <span
                 className="drag-handle"
-                role="button"
+                role="slider"
                 tabIndex={0}
-                aria-label={`Drag or use arrow keys to move ${item?.text ?? id}`}
-                title={inputMode === "desktop" ? "Drag row or use arrow keys" : "Drag from this handle or use Move buttons"}
+                aria-valuemin={1}
+                aria-valuemax={order.length}
+                aria-valuenow={index + 1}
+                aria-valuetext={`Position ${index + 1} of ${order.length}`}
+                aria-label={`Reorder grip for ${item?.text ?? id}. Use ArrowUp, ArrowDown, Home, or End to move.`}
+                title={inputMode === "desktop" ? "Drag row, or focus grip and press ArrowUp, ArrowDown, Home, or End" : "Drag from this handle, or focus grip and press ArrowUp, ArrowDown, Home, or End"}
                 onPointerDown={inputMode === "mobile" ? (event) => beginMobilePointerFallbackDrag(event, id) : undefined}
                 onTouchStart={inputMode === "mobile" ? (event) => beginTouchDrag(event, id) : undefined}
                 onKeyDown={(event) => onHandleKeyDown(event, id)}
