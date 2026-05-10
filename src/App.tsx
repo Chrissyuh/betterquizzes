@@ -94,224 +94,6 @@ function bqV44ShouldUseEarlyMobileFollowUp() {
 
 
 
-type BqV46bOrderingDragState = {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  startIndex: number;
-  targetIndex: number;
-  row: HTMLElement;
-  list: HTMLElement;
-  token: string;
-  dragging: boolean;
-};
-
-function bqV46bOrderingRows(list: HTMLElement): HTMLElement[] {
-  return Array.from(list.querySelectorAll(".draggable-order-item, .order-item"))
-    .filter((item): item is HTMLElement => item instanceof HTMLElement);
-}
-
-function bqV46bClearOrderingDragClasses(): void {
-  document.querySelectorAll(".bq-ordering-drag-source, .bq-ordering-drag-over").forEach((item) => {
-    item.classList.remove("bq-ordering-drag-source", "bq-ordering-drag-over");
-  });
-  document.documentElement.classList.remove("bq-ordering-drag-active");
-}
-
-function bqV46bMoveButtonText(button: HTMLButtonElement): string {
-  return [
-    button.textContent ?? "",
-    button.getAttribute("aria-label") ?? "",
-    button.getAttribute("title") ?? "",
-  ].join(" ").toLowerCase();
-}
-
-function bqV46bFindMoveButton(row: HTMLElement, direction: "up" | "down"): HTMLButtonElement | null {
-  const buttons = Array.from(row.querySelectorAll("button"))
-    .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement);
-
-  const preferred = buttons.find((button) => {
-    const text = bqV46bMoveButtonText(button);
-    return direction === "up"
-      ? text.includes("up") || text.includes("↑")
-      : text.includes("down") || text.includes("↓");
-  });
-
-  if (preferred) return preferred;
-
-  if (direction === "up") return buttons[0] ?? null;
-  return buttons[1] ?? buttons[0] ?? null;
-}
-
-function bqV46bClickMoveButtons(snapshot: {
-  list: HTMLElement;
-  token: string;
-  direction: "up" | "down";
-  steps: number;
-}): void {
-  let completed = 0;
-
-  function currentRow(): HTMLElement | null {
-    return snapshot.list.querySelector(`[data-bq-v46b-drag-token="${snapshot.token}"]`) as HTMLElement | null;
-  }
-
-  function finish(): void {
-    const row = currentRow();
-    if (row) delete row.dataset.bqV46bDragToken;
-  }
-
-  function step(): void {
-    if (completed >= snapshot.steps) {
-      finish();
-      return;
-    }
-
-    const row = currentRow();
-    if (!row) {
-      finish();
-      return;
-    }
-
-    const button = bqV46bFindMoveButton(row, snapshot.direction);
-    if (!button || button.disabled) {
-      finish();
-      return;
-    }
-
-    button.click();
-    completed += 1;
-
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(step);
-    });
-  }
-
-  step();
-}
-
-function bqV46bInstallOrderingDrag(): () => void {
-  if (typeof document === "undefined" || typeof window === "undefined") return () => {};
-
-  let active: BqV46bOrderingDragState | null = null;
-
-  function onPointerDown(event: globalThis.PointerEvent): void {
-    if (event.button !== 0) return;
-    if (!(event.target instanceof Element)) return;
-
-    const row = event.target.closest(".draggable-order-item, .order-item");
-    if (!(row instanceof HTMLElement)) return;
-
-    const target = event.target;
-    const isDragHandle = Boolean(target.closest(".drag-handle, [class*='drag-handle']"));
-    const isInteractive = Boolean(target.closest("button, input, textarea, select, a"));
-
-    if (isInteractive && !isDragHandle) return;
-
-    const list = row.parentElement;
-    if (!(list instanceof HTMLElement)) return;
-
-    const rows = bqV46bOrderingRows(list);
-    const startIndex = rows.indexOf(row);
-    if (startIndex < 0) return;
-
-    const token = String(Date.now()) + "-" + Math.random().toString(36).slice(2);
-    row.dataset.bqV46bDragToken = token;
-    row.classList.add("bq-ordering-drag-source");
-
-    active = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      startIndex,
-      targetIndex: startIndex,
-      row,
-      list,
-      token,
-      dragging: false,
-    };
-
-    try {
-      row.setPointerCapture(event.pointerId);
-    } catch {
-      // Some mobile webviews do not allow pointer capture here. Drag still works without it.
-    }
-  }
-
-  function onPointerMove(event: globalThis.PointerEvent): void {
-    if (!active || active.pointerId !== event.pointerId) return;
-
-    const moved = Math.hypot(event.clientX - active.startX, event.clientY - active.startY);
-    if (!active.dragging && moved < 8) return;
-
-    active.dragging = true;
-    event.preventDefault();
-    document.documentElement.classList.add("bq-ordering-drag-active");
-
-    const target = document.elementFromPoint(event.clientX, event.clientY);
-    const targetRow = target?.closest(".draggable-order-item, .order-item");
-
-    bqV46bClearOrderingDragClasses();
-    active.row.classList.add("bq-ordering-drag-source");
-
-    if (!(targetRow instanceof HTMLElement)) return;
-    if (!active.list.contains(targetRow)) return;
-
-    const rows = bqV46bOrderingRows(active.list);
-    const targetIndex = rows.indexOf(targetRow);
-
-    if (targetIndex < 0) return;
-
-    active.targetIndex = targetIndex;
-    targetRow.classList.add("bq-ordering-drag-over");
-  }
-
-  function onPointerUp(event: globalThis.PointerEvent): void {
-    if (!active || active.pointerId !== event.pointerId) return;
-
-    const snapshot = active;
-    active = null;
-
-    try {
-      snapshot.row.releasePointerCapture(event.pointerId);
-    } catch {
-      // ignore
-    }
-
-    bqV46bClearOrderingDragClasses();
-
-    if (!snapshot.dragging || snapshot.targetIndex === snapshot.startIndex) {
-      delete snapshot.row.dataset.bqV46bDragToken;
-      return;
-    }
-
-    bqV46bClickMoveButtons({
-      list: snapshot.list,
-      token: snapshot.token,
-      direction: snapshot.targetIndex > snapshot.startIndex ? "down" : "up",
-      steps: Math.abs(snapshot.targetIndex - snapshot.startIndex),
-    });
-  }
-
-  function onPointerCancel(): void {
-    if (active?.row) delete active.row.dataset.bqV46bDragToken;
-    active = null;
-    bqV46bClearOrderingDragClasses();
-  }
-
-  document.addEventListener("pointerdown", onPointerDown);
-  document.addEventListener("pointermove", onPointerMove, { passive: false });
-  document.addEventListener("pointerup", onPointerUp);
-  document.addEventListener("pointercancel", onPointerCancel);
-
-  return () => {
-    document.removeEventListener("pointerdown", onPointerDown);
-    document.removeEventListener("pointermove", onPointerMove);
-    document.removeEventListener("pointerup", onPointerUp);
-    document.removeEventListener("pointercancel", onPointerCancel);
-    onPointerCancel();
-  };
-}
-
 type Screen = "loading" | "import" | "quiz" | "submission";
 type DraftAnswer = {
   response: AnswerResponse;
@@ -375,10 +157,7 @@ export default function App(): ReactElement {
   const routeWidgetMode = useMemo(() => isWidgetRoute(), []);
   const bootstrapWidgetMode = useMemo(() => hasBetterQuizzesBootstrap(), []);
   const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode);
-  useEffect(() => {
-    return bqV46bInstallOrderingDrag();
-  }, []);
-const [screen, setScreen] = useState<Screen>(widgetMode ? "loading" : "import");
+  const [screen, setScreen] = useState<Screen>(widgetMode ? "loading" : "import");
   const [quiz, setQuiz] = useState<QuizSpec | null>(null);
   const [launchId, setLaunchId] = useState<string | undefined>(undefined);
   const [startedAt, setStartedAt] = useState(() => new Date().toISOString());
@@ -2071,7 +1850,35 @@ function parseNumericResponse(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-const bqV58CleanOrdering = true;
+const bqV61OrderingRebuild = true;
+type OrderingInputMode = "desktop" | "mobile";
+type OrderingDragMode = OrderingInputMode;
+type OrderingDragState = {
+  id: string;
+  pointerId: number;
+  mode: OrderingDragMode;
+  startX: number;
+  startY: number;
+  moved: boolean;
+};
+
+function useOrderingInputMode(): OrderingInputMode {
+  const [mode, setMode] = useState<OrderingInputMode>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "desktop";
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches ? "desktop" : "mobile";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const update = () => setMode(query.matches ? "desktop" : "mobile");
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  return mode;
+}
 
 function setOrderingDragScrollLock(enabled: boolean): void {
   if (typeof document === "undefined") return;
@@ -2081,133 +1888,187 @@ function setOrderingDragScrollLock(enabled: boolean): void {
 }
 
 function OrderingInput({ question, response, onChange }: { question: Extract<Question, { type: "ordering" }>; response: string[]; onChange: (value: string[]) => void }): ReactElement {
+  const inputMode = useOrderingInputMode();
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
-  const draggingRef = useRef<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const dragRef = useRef<OrderingDragState | null>(null);
   const orderRef = useRef<string[]>([]);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const items = getOrderingItems(question);
   const itemIds = items.map((item) => item.id);
   const itemIdsKey = itemIds.join("|");
   const behavior = getOrderingBehavior(question);
   const order = normalizeOrderingResponse(response, items);
+  const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [itemIdsKey]);
 
   useEffect(() => {
     orderRef.current = order;
   }, [order.join("|")]);
 
   useEffect(() => {
-    if (!response.length && itemIds.length) onChange(initialOrder);
-  }, [response.length, itemIdsKey]);
+    if (!response.length && itemIds.length) onChange(bqV26AvoidAlreadyCorrectOrdering(question, items, getInitialOrderingOrder(question, items)));
+  }, [response.length, itemIdsKey, question]);
+
+  useEffect(() => () => setOrderingDragScrollLock(false), []);
 
   if (!items.length) return <QuestionRenderWarning question={question} detail="This ordering question did not include any valid items." />;
 
   function commit(nextOrder: string[]): void {
     const normalized = normalizeOrderingResponse(nextOrder, items);
+    if (normalized.join("|") === orderRef.current.join("|")) return;
     orderRef.current = normalized;
     onChange(normalized);
   }
 
-  function reorder(sourceId: string, targetId: string): void {
-    if (!sourceId || sourceId === targetId) return;
+  function moveByStep(id: string, step: -1 | 1): void {
     const currentOrder = orderRef.current.length ? orderRef.current : order;
-    const fromIndex = currentOrder.indexOf(sourceId);
-    const toIndex = currentOrder.indexOf(targetId);
-    if (fromIndex < 0 || toIndex < 0) return;
+    const fromIndex = currentOrder.indexOf(id);
+    if (fromIndex < 0) return;
+    const toIndex = Math.max(0, Math.min(currentOrder.length - 1, fromIndex + step));
+    if (toIndex === fromIndex) return;
     const next = [...currentOrder];
     next.splice(fromIndex, 1);
-    next.splice(toIndex, 0, sourceId);
+    next.splice(toIndex, 0, id);
     commit(next);
   }
 
-  function reorderNativeDrag(targetId: string): void {
-    if (!draggedId || draggedId === targetId) return;
-    reorder(draggedId, targetId);
+  function moveToIndex(sourceId: string, rawIndex: number): void {
+    const currentOrder = orderRef.current.length ? orderRef.current : order;
+    const fromIndex = currentOrder.indexOf(sourceId);
+    if (fromIndex < 0) return;
+    const withoutSource = currentOrder.filter((id) => id !== sourceId);
+    const targetIndex = Math.max(0, Math.min(withoutSource.length, rawIndex));
+    const next = [...withoutSource];
+    next.splice(targetIndex, 0, sourceId);
+    if (next.join("|") === currentOrder.join("|")) return;
+    commit(next);
   }
 
-  function targetIdFromPoint(clientX: number, clientY: number): string | null {
-    const element = document.elementFromPoint(clientX, clientY);
-    const row = element?.closest?.("[data-order-id]") as HTMLElement | null;
-    return row?.dataset.orderId ?? null;
+  function insertionIndexFromPoint(clientY: number, sourceId: string): number {
+    const list = listRef.current;
+    if (!list) return orderRef.current.indexOf(sourceId);
+    const rows = Array.from(list.querySelectorAll<HTMLElement>("[data-order-id]")).filter((row) => row.dataset.orderId !== sourceId);
+    for (let index = 0; index < rows.length; index += 1) {
+      const rect = rows[index].getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) return index;
+    }
+    return rows.length;
   }
 
-  function beginPointerDrag(event: PointerEvent<HTMLElement>, id: string): void {
-    draggingRef.current = id;
+  function beginDrag(event: PointerEvent<HTMLElement>, id: string, mode: OrderingDragMode): void {
+    if (event.button !== 0) return;
+    if (mode === "desktop" && event.pointerType !== "mouse") return;
+    if (mode === "mobile" && event.pointerType === "mouse") return;
+    if (mode === "desktop" && (event.target as Element).closest("button, input, textarea, select, a")) return;
+
+    dragRef.current = {
+      id,
+      pointerId: event.pointerId,
+      mode,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
     setDraggedId(id);
-    setOverId(id);
+    setDropIndex(orderRef.current.indexOf(id));
+    setOrderingDragScrollLock(true);
     event.preventDefault();
-    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* no-op */ }
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* pointer capture is best-effort across embedded webviews */ }
   }
 
-  function movePointerDrag(event: PointerEvent<HTMLElement>): void {
-    const sourceId = draggingRef.current;
-    if (!sourceId) return;
+  function moveDrag(event: PointerEvent<HTMLElement>): void {
+    const active = dragRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+
+    const distance = Math.hypot(event.clientX - active.startX, event.clientY - active.startY);
+    if (!active.moved && distance < (active.mode === "desktop" ? 4 : 8)) return;
+
+    active.moved = true;
     event.preventDefault();
-    const targetId = targetIdFromPoint(event.clientX, event.clientY);
-    if (!targetId) return;
-    setOverId(targetId);
-    reorder(sourceId, targetId);
+    const nextDropIndex = insertionIndexFromPoint(event.clientY, active.id);
+    setDropIndex(nextDropIndex);
+    moveToIndex(active.id, nextDropIndex);
   }
 
-  function endPointerDrag(event: PointerEvent<HTMLElement>): void {
-    if (!draggingRef.current) return;
+  function endDrag(event: PointerEvent<HTMLElement>): void {
+    const active = dragRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
     try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* no-op */ }
-    draggingRef.current = null;
+    dragRef.current = null;
     setDraggedId(null);
-    setOverId(null);
+    setDropIndex(null);
+    setOrderingDragScrollLock(false);
+  }
+
+  function cancelDrag(): void {
+    dragRef.current = null;
+    setDraggedId(null);
+    setDropIndex(null);
+    setOrderingDragScrollLock(false);
+  }
+
+  function onHandleKeyDown(event: ReactKeyboardEvent<HTMLElement>, id: string): void {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveByStep(id, -1);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveByStep(id, 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      moveToIndex(id, 0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      moveToIndex(id, order.length - 1);
+    }
   }
 
   return (
-    <div className="order-shell drag-order-shell" aria-label="Ordering answer">
-      <div className="order-end-label top-label">{behavior.topLabel}</div>
-      <div className="order-list drag-order-list" aria-live="polite">
+    <div className="order-shell drag-order-shell bq-ordering-rebuilt" data-ordering-mode={inputMode} aria-label="Ordering answer">
+      <div className="order-end-label top-label"><strong>Top</strong> = {behavior.topLabel}</div>
+      <p className="compact-status ordering-mode-hint">
+        {inputMode === "desktop" ? "Desktop: drag a row with your mouse, or use the arrow buttons." : "Mobile: use the Move up/down buttons, or drag from the grip handle."}
+      </p>
+      <div ref={listRef} className="order-list drag-order-list" aria-live="polite">
         {order.map((id, index) => {
-          const item = items.find((entry) => entry.id === id);
+          const item = itemById.get(id);
+          const isDragged = draggedId === id;
           return (
             <div
-              className={(draggedId === id ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (overId === id ? " drag-over" : "")}
+              className={(isDragged ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (dropIndex === index ? " drag-over" : "")}
               key={id}
               data-order-id={id}
-              draggable
-              onDragStart={(event) => {
-                setDraggedId(id);
-                draggingRef.current = id;
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", id);
-              }}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                setOverId(id);
-                reorderNativeDrag(id);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                reorderNativeDrag(id);
-                draggingRef.current = null;
-                setDraggedId(null);
-                setOverId(null);
-              }}
-              onDragEnd={() => {
-                draggingRef.current = null;
-                setDraggedId(null);
-                setOverId(null);
-              }}
+              draggable={false}
+              aria-roledescription="sortable item"
+              aria-label={`${index + 1}. ${item?.text ?? id}`}
+              onPointerDown={inputMode === "desktop" ? (event) => beginDrag(event, id, "desktop") : undefined}
+              onPointerMove={inputMode === "desktop" ? moveDrag : undefined}
+              onPointerUp={inputMode === "desktop" ? endDrag : undefined}
+              onPointerCancel={inputMode === "desktop" ? cancelDrag : undefined}
             >
               <span className="order-item-text"><span className="order-index">{index + 1}</span><RichInline text={item?.text ?? id} /></span>
               <span
                 className="drag-handle"
-                role="button"
+                role="slider"
                 tabIndex={0}
-                aria-label={`Drag ${item?.text ?? id}`}
-                onPointerDown={(event) => beginPointerDrag(event, id)}
-                onPointerMove={movePointerDrag}
-                onPointerUp={endPointerDrag}
-                onPointerCancel={endPointerDrag}
+                aria-orientation="vertical"
+                aria-valuemin={1}
+                aria-valuemax={order.length}
+                aria-valuenow={index + 1}
+                aria-valuetext={`${index + 1} of ${order.length}`}
+                aria-label={`Position for ${item?.text ?? id}. Drag or use Arrow Up, Arrow Down, Home, and End to reorder.`}
+                title={inputMode === "desktop" ? "Drag row or use Arrow Up/Down, Home, and End" : "Drag from this handle or use Arrow Up/Down, Home, and End"}
+                onPointerDown={inputMode === "mobile" ? (event) => beginDrag(event, id, "mobile") : undefined}
+                onPointerMove={inputMode === "mobile" ? moveDrag : undefined}
+                onPointerUp={inputMode === "mobile" ? endDrag : undefined}
+                onPointerCancel={inputMode === "mobile" ? cancelDrag : undefined}
+                onKeyDown={(event) => onHandleKeyDown(event, id)}
               >
-                ⋮⋮
+                <span aria-hidden="true">⋮⋮</span><span className="drag-label">Drag</span>
+              </span>
+              <span className="order-controls" aria-label={`Move ${item?.text ?? id}`}>
+                <button type="button" disabled={index === 0} onClick={() => moveByStep(id, -1)} aria-label={`Move ${item?.text ?? id} up`}>↑</button>
+                <button type="button" disabled={index === order.length - 1} onClick={() => moveByStep(id, 1)} aria-label={`Move ${item?.text ?? id} down`}>↓</button>
               </span>
             </div>
           );
