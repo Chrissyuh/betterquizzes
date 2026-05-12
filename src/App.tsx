@@ -2207,6 +2207,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
                 className="drag-handle"
                 role="slider"
                 tabIndex={0}
+                aria-orientation="vertical"
                 aria-valuemin={1}
                 aria-valuemax={order.length}
                 aria-valuenow={index + 1}

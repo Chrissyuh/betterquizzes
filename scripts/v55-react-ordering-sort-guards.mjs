@@ -32,6 +32,7 @@ assert(app.includes('!isDragged && dropIndex === index ? " drag-over" : ""'), "d
 assert(app.includes('dropMarker?.id === id && dropMarker.edge === "before"'), "drop-before marker class logic missing");
 assert(app.includes('dropMarker?.id === id && dropMarker.edge === "after"'), "drop-after marker class logic missing");
 assert(app.includes('role="slider"'), "drag handle should expose sortable grip semantics rather than normal button semantics");
+assert(app.includes('aria-orientation="vertical"'), "drag handle slider orientation metadata missing");
 assert(app.includes("aria-valuenow={index + 1}"), "drag handle slider position metadata missing");
 assert(app.includes("Use ArrowUp, ArrowDown, Home, or End to move."), "drag handle accessible label should mention supported keyboard reorder keys");
 assert(app.includes("draggable={false}"), "native HTML draggable should be disabled for rebuilt sorter");
