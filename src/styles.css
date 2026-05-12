@@ -2820,60 +2820,65 @@ button.drag-handle:focus-visible {
 
 .bq-ordering-rebuilt .drag-handle {
   display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  gap: .35rem;
-  width: 2.55rem;
-  min-width: 2.55rem;
-  height: 2.85rem;
-  min-height: 2.85rem;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fbfdff 0%, #eef4ff 100%);
-  color: #64748b;
-  border: 1px solid rgba(148, 163, 184, .34);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 8px 18px rgba(15, 23, 42, .07);
-  font-weight: 900;
-  letter-spacing: 0;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-user-drag: none;
-  justify-self: end;
-  transition: border-color .22s ease, background .22s ease, box-shadow .22s ease, transform .22s ease, color .22s ease;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: .35rem !important;
+  width: 2.55rem !important;
+  min-width: 2.55rem !important;
+  height: 2.85rem !important;
+  min-height: 2.85rem !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 12px !important;
+  background: linear-gradient(180deg, #fbfdff 0%, #eef4ff 100%) !important;
+  color: #64748b !important;
+  border: 1px solid rgba(148, 163, 184, .34) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 8px 18px rgba(15, 23, 42, .07) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0 !important;
+  cursor: grab !important;
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none !important;
+  justify-self: end !important;
+  transition: border-color .22s ease, background .22s ease, box-shadow .22s ease, transform .22s ease, color .22s ease !important;
 }
 
 .bq-ordering-rebuilt .drag-handle:active,
 .bq-ordering-rebuilt .drag-handle:focus-visible {
-  background: linear-gradient(180deg, #edf4ff 0%, #dce8ff 100%);
-  border-color: rgba(41, 71, 211, .44);
-  color: #2947d3;
-  box-shadow: 0 0 0 4px rgba(41, 71, 211, .12), 0 10px 22px rgba(41, 71, 211, .12);
-  transform: scale(1.025);
-  outline: 0;
+  background: linear-gradient(180deg, #edf4ff 0%, #dce8ff 100%) !important;
+  border-color: rgba(41, 71, 211, .44) !important;
+  color: #2947d3 !important;
+  box-shadow: 0 0 0 4px rgba(41, 71, 211, .12), 0 10px 22px rgba(41, 71, 211, .12) !important;
+  transform: scale(1.025) !important;
+  outline: 0 !important;
 }
 
 .bq-ordering-rebuilt .draggable-order-item:hover .drag-handle {
-  border-color: rgba(41, 71, 211, .34);
-  color: #2947d3;
+  border-color: rgba(41, 71, 211, .34) !important;
+  color: #2947d3 !important;
 }
 
 .bq-ordering-rebuilt .drag-handle::before,
 .bq-ordering-rebuilt .drag-handle::after {
-  content: none;
-  display: none;
+  content: none !important;
+  display: none !important;
 }
 
 .bq-ordering-rebuilt .drag-bar-grip {
-  width: 1.12rem;
-  height: .86rem;
-  display: block;
+  width: 1.12rem !important;
+  height: .86rem !important;
+  display: block !important;
   background:
-    linear-gradient(currentColor, currentColor) 50% 16% / 100% 2px no-repeat,
-    linear-gradient(currentColor, currentColor) 50% 50% / 100% 2px no-repeat,
-    linear-gradient(currentColor, currentColor) 50% 84% / 100% 2px no-repeat;
-  border-radius: 999px;
-  opacity: .76;
+    linear-gradient(#64748b, #64748b) 50% 16% / 100% 2px no-repeat,
+    linear-gradient(#64748b, #64748b) 50% 50% / 100% 2px no-repeat,
+    linear-gradient(#64748b, #64748b) 50% 84% / 100% 2px no-repeat !important;
+  border-radius: 999px !important;
+  opacity: .86 !important;
+  color: #64748b !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
 }
 
 .bq-ordering-rebuilt .drag-label {
@@ -2940,11 +2945,11 @@ button.drag-handle:focus-visible {
     position: static;
     grid-column: 2;
     grid-row: 1;
-    justify-self: end;
-    width: 2.42rem;
-    min-width: 2.42rem;
-    height: 2.7rem;
-    min-height: 2.7rem;
+    justify-self: end !important;
+    width: 2.42rem !important;
+    min-width: 2.42rem !important;
+    height: 2.7rem !important;
+    min-height: 2.7rem !important;
   }
 }
 /* END V61 ordering rebuild */

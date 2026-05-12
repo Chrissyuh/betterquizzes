@@ -76,6 +76,8 @@ assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.drag-handle\s*\{[
 assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.draggable-order-item\.dragging\s*\{[^}]*background:/s.test(css), "mobile dragging state should have immediate visual styling");
 assert(css.includes(".bq-ordering-rebuilt .drag-bar-grip"), "three-bar drag grip CSS missing");
 assert(css.includes(".bq-ordering-rebuilt .drag-handle::before"), "rebuilt ordering handle should override older dot pseudo-elements");
+assert(/\.bq-ordering-rebuilt \.drag-bar-grip\s*\{[^}]*linear-gradient\(#64748b/s.test(css), "three-bar grip should use explicit visible bar color");
+assert(/\.bq-ordering-rebuilt \.drag-handle\s*\{[^}]*border-radius:\s*12px !important/s.test(css), "rebuilt ordering handle must override older circular handle rules");
 assert(/\.bq-ordering-rebuilt \.drag-order-list\s*\{[^}]*position:\s*relative/s.test(css), "ordering list should anchor stable row layout measurements");
 assert(!css.includes(".bq-ordering-rebuilt .order-controls"), "visible ordering arrow control CSS should stay removed");
 assert(/\.bq-ordering-rebuilt \.draggable-order-item\.dragging\s*\{[^}]*z-index:\s*10/s.test(css), "held ordering card should stay visually on top");
