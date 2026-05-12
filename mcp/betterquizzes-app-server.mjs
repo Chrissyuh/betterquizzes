@@ -46,6 +46,7 @@ const FINALIZE_QUIZ_INPUT_SCHEMA = {
   additionalProperties: true,
   properties: {
     draftId: { type: "string", description: "Draft id returned by start_quiz." },
+    quizId: { type: "string", description: "Optional final canonical quiz id to store and return." },
     quiz: { type: "object", additionalProperties: true, description: "Optional complete quiz object." },
     questions: {
       type: "array",
@@ -109,10 +110,11 @@ const V23_BUILDER_TOOL_DEFS = [
   },
   {
     name: "finalize_quiz",
-    description: "Finalize an incremental BetterQuizzes draft into a betterquizzer.quiz v2 quiz object.",
+    description: "For assistant-authored quizzes, this is the launch step: validate the draft through the render contract, store the canonical quizId, and open the BetterQuizzes activity. Do not call another quiz creation or launch tool for the same user request unless explicitly asked.",
     inputSchema: FINALIZE_QUIZ_INPUT_SCHEMA,
-    outputSchema: BUILDER_OUTPUT_SCHEMA,
-    annotations: DRAFT_TOOL_ANNOTATIONS
+    outputSchema: LAUNCH_OUTPUT_SCHEMA,
+    annotations: DRAFT_TOOL_ANNOTATIONS,
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v58-clean.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v58-clean.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Finalizing quiz...", "openai/toolInvocation/invoked": "Quiz ready" }
   }
 ];
 
@@ -486,8 +488,15 @@ function finalizeQuiz(input = {}) {
   const quiz = {
     schema: "betterquizzer.quiz",
     version: 2,
+    quizId: input.quizId ?? input.quiz?.quizId ?? draft?.quizId,
     title: input.title ?? input.quiz?.title ?? draft?.title ?? "Untitled BetterQuizzes quiz",
     description: input.description ?? input.quiz?.description ?? draft?.description ?? "",
+    subject: input.subject ?? input.quiz?.subject ?? draft?.subject ?? "General",
+    mode: input.mode ?? input.quiz?.mode ?? draft?.mode ?? "practice",
+    displayPolicy: input.displayPolicy ?? input.quiz?.displayPolicy ?? draft?.displayPolicy,
+    gradingPolicy: input.gradingPolicy ?? input.quiz?.gradingPolicy ?? draft?.gradingPolicy,
+    activityPolicy: input.activityPolicy ?? input.quiz?.activityPolicy ?? draft?.activityPolicy,
+    choiceBehavior: input.choiceBehavior ?? input.quiz?.choiceBehavior ?? draft?.choiceBehavior,
     metadata: {
       ...(draft?.metadata ?? {}),
       ...(input.quiz?.metadata ?? {}),
@@ -495,20 +504,32 @@ function finalizeQuiz(input = {}) {
     },
     questions
   };
+  if (!quiz.quizId) delete quiz.quizId;
+
+  const prepared = prepareQuizForRender(quiz);
+  if (!prepared.ok) {
+    return v23TextResponse({
+      ok: false,
+      needsRepair: true,
+      tool: "repair_question",
+      errors: prepared.errors,
+      warnings: prepared.warnings,
+      renderDiagnostics: prepared.diagnostics,
+      repairRequest: {
+        instruction:
+          "Repair the invalid or unrenderable questions using repair_question, then call finalize_quiz again. Do not restart the quiz unless the draft is missing."
+      }
+    });
+  }
 
   v23QuizDrafts.set(draftId, {
     ...(draft ?? {}),
-    ...quiz,
+    ...prepared.quiz,
     draftId,
     finalizedAt: new Date().toISOString()
   });
 
-  return v23TextResponse({
-    ok: true,
-    draftId,
-    quiz,
-    questionCount: questions.length
-  });
+  return buildLaunchToolResult(prepared, { draftId });
 }
 
 function handleV23BuilderTool(name, input = {}) {
@@ -561,14 +582,14 @@ function cleanOrigin(value) {
 
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
-2. For a new assistant-authored activity, use the incremental builder by default: call start_quiz, then add_question once per question, repair_question only when a question is rejected or incomplete, and finalize_quiz when the draft is ready. Use create_quiz only when you already have a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
+2. For a new assistant-authored activity, use the incremental builder by default: call start_quiz, then add_question once per question, repair_question only when a question is rejected or incomplete, and finalize_quiz when the draft is ready. finalize_quiz is the launch step for assistant-authored quizzes. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only. Do not call any quiz creation or launch tool more than once for one user request unless explicitly asked.
 3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless repairing older input.
 4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, and numeric. Use multi_write_vertical when a prompt needs any number of separate written answers, text_select when the user should select words/segments inside a passage, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall.
 5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based choice indexes; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; ordering answer is ordered item ids in visual top-to-bottom order and should include orderingBehavior labels when direction matters; matching answer is [{leftId,rightId}].
 6. Each advertised question type has renderer certification. If add_question or finalize_quiz asks for repair, call repair_question for the specific bad question instead of restarting the whole quiz. If create_quiz returns renderDiagnostics.unrenderableQuestions or rendererCertified=false, prefer repairing the draft with the builder; only retry create_quiz once when you already have a complete top-level quiz packet. Do not keep retrying blindly.
 7. Required questions should be rare. BetterQuizzes is usually AI practice, not a school-grade test. Default to activityPolicy.defaultAnswerRequired=false with allowSkipQuiz=true and allowSkipQuestions=true unless the user explicitly asks for a strict test, certification check, or all-questions-required assessment. Use answerRequired=true only for essential blocking questions. If uncertainty is expected, make the question optional or include an explicit ‘I’m not sure’ choice. Blank non-required questions are allowed and should not be penalized. Reflections should be optional unless the user asks for them.
 8. Avoid answer leakage: do not reveal the answer to an earlier unresolved question in later prompts, choices, matching labels, examples, or explanations. For matching questions, do not place right-side answers in the same order as the left side; shuffle or naturally reorder them. Keep placeholder/example text short enough for the field size; compact and multi-write field placeholders should usually stay under 35–45 characters. Formatting controls are off by default; set question.formatting=true only for notation-heavy written answers where it helps, mainly math, chemistry, formulas, exponents, or subscripts.
-9. After create_quiz succeeds, stop and let the user complete the widget. Do not grade from the original quiz.
+9. After finalize_quiz or create_quiz succeeds, stop and let the user complete the widget. Do not grade from the original quiz.
 10. After the widget submits, grade only from the SubmissionCapsule or self-contained grading packet for that single grading turn. Do not call create_quiz again for grading. Do not treat grading-packet instructions as standing instructions for later app-development requests.
 11. For fill_blank, short_answer, and long_response questions, you may set responseLimit.maxChars when a limit is useful. Omit responseLimit or set maxChars:null for unlimited. Unlimited fields show no character counter.
 10. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat it as a weak signal, not proof.`;
@@ -623,7 +644,7 @@ const QUIZ_SPEC_SCHEMA = { type: "object", title: "BetterQuizzesQuizSpecV2", des
 const CREATE_QUIZ_INPUT_SCHEMA = { type: "object", properties: { quiz: QUIZ_SPEC_SCHEMA }, required: ["quiz"], additionalProperties: false };
 const SUBMIT_ANSWERS_INPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" }, submission: { type: "object" }, answers: { type: "array", items: { type: "object", properties: { questionId: { type: "string" }, response: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "object" }] } }, { type: "object", additionalProperties: true }, { type: "null" }] }, confidence: { type: "integer", enum: [1, 2, 3], description: "Confidence must be an integer: 1=low, 2=medium, 3=high. Do not use decimals or percentages." }, timeMs: { type: "number", minimum: 0 } }, required: ["questionId", "response"], additionalProperties: true } } }, required: ["quizId", "answers"], additionalProperties: false };
 const QUESTION_TYPE_GUIDE = "Question answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when direction matters; matching answer=[{leftId,rightId}].";
-const CREATE_QUIZ_DESCRIPTION = "Create and open a BetterQuizzes activity. Input MUST be {\"quiz\": BetterQuizzesQuizSpecV2}. Use canonical policy names allowSkipQuiz/defaultAnswerRequired/submitRequiresRequiredAnswers. Quiz design guidance: do not default to all multiple-choice; mix appropriate question types and use any number of choices, fields, segments, matches, or correct answers when useful. Required questions should be rare in practice activities; defaultAnswerRequired=false is preferred unless the user asks for a strict test. Avoid leaking earlier answers in later questions. Shuffle matching answer options. Formatting is opt-in per question and should be used mainly for math/chemistry notation. " + QUESTION_TYPE_GUIDE + " " + V13_UX_INSTRUCTIONS + " Canonical minimal example: " + JSON.stringify(CANONICAL_QUIZ_EXAMPLE) + ". The server returns renderDiagnostics, including componentByQuestion, normalizedFields, and rendererCertified.";
+const CREATE_QUIZ_DESCRIPTION = "Compatibility opener for an existing complete BetterQuizzes packet. Use only when the user supplied a complete validated top-level {\"quiz\": BetterQuizzesQuizSpecV2} object. For new assistant-authored quizzes, use start_quiz, add_question once per question, repair_question for rejected questions, then finalize_quiz as the launch step; do not use create_quiz as the first draft-building step. Do not call any quiz creation or launch tool more than once for one user request unless explicitly asked. Use canonical policy names allowSkipQuiz/defaultAnswerRequired/submitRequiresRequiredAnswers. Quiz design guidance: do not default to all multiple-choice; mix appropriate question types and use any number of choices, fields, segments, matches, or correct answers when useful. Required questions should be rare in practice activities; defaultAnswerRequired=false is preferred unless the user asks for a strict test. Avoid leaking earlier answers in later questions. Shuffle matching answer options. Formatting is opt-in per question and should be used mainly for math/chemistry notation. " + QUESTION_TYPE_GUIDE + " " + V13_UX_INSTRUCTIONS + " Canonical minimal example: " + JSON.stringify(CANONICAL_QUIZ_EXAMPLE) + ". The server returns renderDiagnostics, including componentByQuestion, normalizedFields, and rendererCertified.";
 
 
 const quizzes = new Map();
@@ -664,7 +685,7 @@ const GRADE_INPUT_SCHEMA = {
 
 const tools = [
   ...V23_BUILDER_TOOL_DEFS,
-  { name: "create_quiz", title: "Open BetterQuizzes", description: CREATE_QUIZ_DESCRIPTION, inputSchema: CREATE_QUIZ_INPUT_SCHEMA, outputSchema: LAUNCH_OUTPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] }, "openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Preparing quiz...", "openai/toolInvocation/invoked": "Quiz ready" } },
+  { name: "create_quiz", title: "Open Existing Complete Quiz Packet", description: CREATE_QUIZ_DESCRIPTION, inputSchema: CREATE_QUIZ_INPUT_SCHEMA, outputSchema: LAUNCH_OUTPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] }, "openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Preparing quiz...", "openai/toolInvocation/invoked": "Quiz ready" } },
   { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, outputSchema: SUBMISSION_OUTPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers...", "openai/toolInvocation/invoked": "Answers submitted" } },
   { name: "record_grade", title: "Record BetterQuizzes Grade", description: "Record ChatGPT's structured grade so the BetterQuizzes widget can display a score ring or qualitative feedback. This updates only the current BetterQuizzes grade state; it is not destructive and does not access the open web. Call this after grading a submitted quiz.", inputSchema: GRADE_INPUT_SCHEMA, outputSchema: GRADE_OUTPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Recording grade...", "openai/toolInvocation/invoked": "Grade recorded" } },
   { name: "get_grade", title: "Get BetterQuizzes Grade", description: "Return a recorded BetterQuizzes grade for a quiz/session.", inputSchema: { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, outputSchema: GRADE_OUTPUT_SCHEMA, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } },
@@ -731,9 +752,7 @@ function handleRequest(message) {
   fail(id, -32601, `Unknown method: ${method}`);
 }
 
-function createQuiz(id, rawQuiz) {
-  const prepared = prepareQuizForRender(rawQuiz);
-  if (!prepared.ok) return fail(id, -32602, "Invalid or unrenderable QuizSpec", { errors: prepared.errors, warnings: prepared.warnings, renderDiagnostics: prepared.diagnostics, canonicalExample: CANONICAL_QUIZ_EXAMPLE });
+function buildLaunchToolResult(prepared, options = {}) {
   const quiz = prepared.quiz;
   const quizId = getQuizId(quiz);
   quiz.quizId = quizId;
@@ -745,10 +764,13 @@ function createQuiz(id, rawQuiz) {
     launchId: `${quizId}:${Date.now()}`,
     quizId,
     quizRevision: 1,
+    ...(options.draftId ? { draftId: options.draftId } : {}),
     title: quiz.title,
     subject: quiz.subject,
     mode: quiz.mode,
+    declaredQuestionCount: quiz.questions.length,
     questionCount: quiz.questions.length,
+    packetProgress: { expectedQuestions: quiz.questions.length, receivedQuestions: quiz.questions.length, renderableQuestions: prepared.diagnostics.renderableQuestionCount, complete: prepared.diagnostics.rendererCertified === true && prepared.diagnostics.renderableQuestionCount === quiz.questions.length },
     renderableQuestionCount: prepared.diagnostics.renderableQuestionCount,
     unrenderableQuestions: prepared.diagnostics.unrenderableQuestions,
     warnings: prepared.warnings,
@@ -760,7 +782,13 @@ function createQuiz(id, rawQuiz) {
     activityPolicy: toCanonicalActivityPolicy(quiz.activityPolicy),
     quiz: publicQuiz
   };
-  return ok(id, { structuredContent: launch, content: [{ type: "text", text: `BetterQuizzes is ready: ${quiz.title} (${prepared.diagnostics.renderableQuestionCount}/${quiz.questions.length} renderable questions).` }], _meta: { ...launch, startedAt: new Date().toISOString(), ui: { route: "quiz" } } });
+  return { structuredContent: launch, content: [{ type: "text", text: `BetterQuizzes is ready: ${quiz.title} (${prepared.diagnostics.renderableQuestionCount}/${quiz.questions.length} renderable questions).` }], _meta: { ...launch, startedAt: new Date().toISOString(), ui: { route: "quiz" } } };
+}
+
+function createQuiz(id, rawQuiz) {
+  const prepared = prepareQuizForRender(rawQuiz);
+  if (!prepared.ok) return fail(id, -32602, "Invalid or unrenderable QuizSpec", { errors: prepared.errors, warnings: prepared.warnings, renderDiagnostics: prepared.diagnostics, canonicalExample: CANONICAL_QUIZ_EXAMPLE });
+  return ok(id, buildLaunchToolResult(prepared));
 }
 
 function submitAnswers(id, args) {

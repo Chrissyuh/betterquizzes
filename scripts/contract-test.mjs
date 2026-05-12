@@ -9,6 +9,10 @@ assert(server.includes('ui://widget/betterquizzes-v1-build-bqv1p1.html'), "widge
 assert(server.includes('CREATE_QUIZ_INPUT_SCHEMA'), "create_quiz must use a named input schema");
 assert(server.includes('outputSchema: LAUNCH_OUTPUT_SCHEMA'), "create_quiz must expose an output schema");
 assert(server.includes('outputSchema: BUILDER_OUTPUT_SCHEMA'), "builder tools must expose output schemas");
+assert(server.includes('name: "finalize_quiz"'), "finalize_quiz must be registered");
+assert(server.includes('"openai/toolInvocation/invoking": "Finalizing quiz..."'), "finalize_quiz must attach widget launch metadata");
+assert(server.includes("finalize_quiz is the launch step"), "model instructions must make finalize_quiz the launch step");
+assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");
 assert(server.includes('outputSchema: GRADE_OUTPUT_SCHEMA'), "grade tools must expose output schemas");
 assert(server.includes('outputSchema: INSPECT_QUIZ_OUTPUT_SCHEMA'), "inspect_quiz must expose an output schema");
@@ -21,11 +25,15 @@ assert(server.includes('MultipleChoiceQuestion'), "schema must include multiple 
 assert(server.includes('ShortAnswerQuestion'), "schema must include short answer shape");
 assert(server.includes('prepareQuizForRender'), "server must normalize and validate quizzes before rendering");
 assert(server.includes('getRenderDiagnostics'), "server must return render diagnostics");
+assert(server.includes('buildLaunchToolResult'), "finalize_quiz and create_quiz should share launch storage/result logic");
 assert(server.includes('renderableQuestionCount'), "create_quiz must report renderable question count");
 assert(server.includes('componentByQuestion'), "render diagnostics must include componentByQuestion");
 assert(server.includes('normalizedFields'), "render diagnostics must include normalizedFields");
 assert(server.includes('rendererCertified'), "render diagnostics must include rendererCertified");
 assert(server.includes('canonical minimal example') || server.includes('Canonical minimal example'), "tool description should include canonical example guidance");
 assert(!server.includes('"openai/outputTemplate": RESOURCE_URI,\n      "openai/widgetAccessible": true,\n      "openai/toolInvocation/invoking": "Submitting'), "submit_answers must not attach the widget output template");
+assert(!server.includes("create_quiz exactly once"), "legacy create_quiz exactly-once guidance must not remain");
+assert(!server.includes("destructiveHint: true"), "no tool should be marked destructive");
+assert(!server.includes("openWorldHint: true"), "no tool should be marked open-world");
 
 console.log("V1 MCP/App contract static checks passed.");

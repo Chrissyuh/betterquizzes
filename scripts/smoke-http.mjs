@@ -9,6 +9,7 @@ const child = spawn(process.execPath, ["mcp/remote-server.mjs"], {
 
 let baseUrl = "";
 let stderr = "";
+let passed = false;
 
 const timeout = setTimeout(() => {
   cleanup();
@@ -26,9 +27,9 @@ child.stdout.on("data", async (chunk) => {
         clearTimeout(timeout);
         try {
           await runSmoke();
-          cleanup();
           console.log("HTTP smoke test passed.");
-          process.exit(0);
+          passed = true;
+          cleanup();
         } catch (error) {
           cleanup();
           fail(error instanceof Error ? error.message : String(error));
@@ -41,6 +42,9 @@ child.stdout.on("data", async (chunk) => {
 });
 
 child.on("exit", (code) => {
+  if (passed) {
+    process.exit(0);
+  }
   if (!baseUrl) {
     clearTimeout(timeout);
     fail(`HTTP server exited before ready. code=${code} stderr=${stderr}`);
@@ -60,7 +64,17 @@ async function runSmoke() {
   const listed = await rpc("tools/list", {});
   const toolNames = listed.result.tools.map((tool) => tool.name);
   assert(toolNames.includes("create_quiz"), "create_quiz missing");
+  assert(toolNames.includes("start_quiz"), "start_quiz missing");
+  assert(toolNames.includes("add_question"), "add_question missing");
+  assert(toolNames.includes("finalize_quiz"), "finalize_quiz missing");
   assert(toolNames.includes("submit_answers"), "submit_answers missing");
+  for (const tool of listed.result.tools) {
+    assert(tool.outputSchema && tool.outputSchema.type === "object", `${tool.name} missing object outputSchema`);
+    assert(tool.annotations?.destructiveHint !== true, `${tool.name} should not be destructive`);
+    assert(tool.annotations?.openWorldHint !== true, `${tool.name} should not be open-world`);
+  }
+  const finalizeTool = listed.result.tools.find((tool) => tool.name === "finalize_quiz");
+  assert(finalizeTool._meta?.["openai/outputTemplate"], "finalize_quiz missing widget output template");
 
   const resources = await rpc("resources/list", {});
   assert(resources.result.resources[0].uri.startsWith("ui://widget/"), "widget resource missing");
@@ -86,7 +100,52 @@ async function runSmoke() {
   assert(created.result.structuredContent.quizId === "smoke-quiz", "create_quiz returned wrong quizId");
   assert(created.result._meta.quiz.questions.length === 2, "create_quiz did not include private quiz metadata");
   assert(created.result.structuredContent.quiz.questions.length === 2, "create_quiz did not include model-visible quiz payload for widget hydration");
-  assert(created.result.structuredContent.quiz.questions.length === 2, "create_quiz did not include model-visible quiz payload for widget hydration");
+
+  const started = await rpc("tools/call", {
+    name: "start_quiz",
+    arguments: {
+      title: "Builder Ordering Smoke",
+      topic: "QA"
+    }
+  });
+  const builderDraftId = started.result.structuredContent.draftId;
+  assert(typeof builderDraftId === "string" && builderDraftId.length > 0, "start_quiz did not return a draftId");
+
+  await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: builderDraftId,
+      question: {
+        id: "order-1",
+        type: "ordering",
+        prompt: "Order these release steps.",
+        orderingBehavior: { direction: "top_to_bottom", topLabel: "Top = First", bottomLabel: "Bottom = Last" },
+        items: [
+          { id: "review", text: "Review the change" },
+          { id: "fix", text: "Implement the fix" },
+          { id: "test", text: "Test on mobile" }
+        ],
+        answer: ["review", "fix", "test"],
+        tags: ["smoke"]
+      }
+    }
+  });
+
+  const finalized = await rpc("tools/call", {
+    name: "finalize_quiz",
+    arguments: { draftId: builderDraftId, quizId: "builder-ordering-smoke" }
+  });
+  assert(finalized.result.structuredContent.kind === "betterquizzer.launch", "finalize_quiz did not return a launch packet");
+  assert(finalized.result.structuredContent.quizId === "builder-ordering-smoke", "finalize_quiz returned wrong canonical quizId");
+  assert(finalized.result.structuredContent.questionCount === 1, "finalize_quiz should launch exactly one question");
+  assert(finalized.result._meta?.ui?.route === "quiz", "finalize_quiz missing launch metadata route");
+
+  const inspected = await rpc("tools/call", {
+    name: "inspect_quiz",
+    arguments: { quizId: finalized.result.structuredContent.quizId }
+  });
+  assert(inspected.result.structuredContent.quizId === "builder-ordering-smoke", "inspect_quiz could not find finalized builder quiz");
+  assert(inspected.result.structuredContent.questionCount === 1, "inspect_quiz returned wrong finalized question count");
 
   const submitted = await rpc("tools/call", {
     name: "submit_answers",

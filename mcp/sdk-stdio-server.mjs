@@ -28,7 +28,7 @@ const RESOURCE_URI = "ui://widget/betterquizzes-v58-clean.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
-2. When builder tools are available, prefer start_quiz, add_question, repair_question, then finalize_quiz for new assistant-authored activities. In this SDK-only entrypoint, call create_quiz only after you have a complete BetterQuizzes QuizSpec v2. Do not show raw JSON to the user or ask them to paste JSON.
+2. When builder tools are available, prefer start_quiz, add_question, repair_question, then finalize_quiz for new assistant-authored activities; finalize_quiz is the launch step. In this SDK-only entrypoint, call create_quiz only after the user supplied or you have fully assembled a complete BetterQuizzes QuizSpec v2. Do not call any quiz creation or launch tool more than once for one user request unless explicitly asked. Do not show raw JSON to the user or ask them to paste JSON.
 3. A valid QuizSpec needs schema="betterquizzer.quiz", version=2, title, mode, displayPolicy, gradingPolicy, activityPolicy, and questions. Prefer gradingPolicy.preferredGrader="llm" and includeAnswerKeyInSubmission=true.
 4. Generate valid question data. multiple_choice and multi_select require a non-empty choices array. matching requires left and right arrays. ordering requires an items array. If unsure, use fill_blank, short_answer, or long_response instead of inventing an invalid structure.
 5. Use answerRequired to control whether a question blocks submission. Blank non-required questions are allowed, but grading them is case-dependent. Decide whether to score them, omit them, or mark Needs review from the activity context. Prefer allowSkipQuiz=true and allowSkipQuestions=true for practice. Avoid required reflection prompts unless the user asks for them; reflections are often irritating.
@@ -100,8 +100,8 @@ server.registerResource(
 server.registerTool(
   "create_quiz",
   {
-    title: "Open BetterQuizzes",
-    description: "Create a BetterQuizzes QuizSpec v2 and render the quiz widget so the user can answer in a clean interface. Text questions may include responseLimit.maxChars; omit it or set maxChars:null for unlimited.",
+    title: "Open Existing Complete Quiz Packet",
+    description: "Compatibility opener for a complete BetterQuizzes QuizSpec v2 packet. Use builder finalize_quiz instead when builder tools are available. Text questions may include responseLimit.maxChars; omit it or set maxChars:null for unlimited.",
     inputSchema: {
       quiz: z.any().describe("A BetterQuizzes QuizSpec v2 object. Include displayPolicy and gradingPolicy when possible.")
     },
