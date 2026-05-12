@@ -2181,7 +2181,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     <div className="order-shell drag-order-shell bq-ordering-rebuilt" data-ordering-mode={inputMode} aria-label="Ordering answer">
       <div className="order-end-label top-label"><strong>Top</strong> = {behavior.topLabel}</div>
       <p className="compact-status ordering-mode-hint">
-        {inputMode === "desktop" ? "Desktop: drag a row with your mouse, or focus the grip and press ArrowUp, ArrowDown, Home, or End." : "Mobile: use the Move up/down buttons, drag from the grip handle, or focus the grip and press ArrowUp, ArrowDown, Home, or End."}
+        {inputMode === "desktop" ? "Desktop: drag a row with your mouse, or focus the grip and press ArrowUp, ArrowDown, Home, or End." : "Mobile: drag from the grip handle, or focus it and press ArrowUp, ArrowDown, Home, or End."}
       </p>
       <div ref={listRef} className="order-list drag-order-list" aria-live="polite">
         {order.map((id, index) => {
@@ -2218,11 +2218,8 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
                 onTouchStart={inputMode === "mobile" ? (event) => beginTouchDrag(event, id) : undefined}
                 onKeyDown={(event) => onHandleKeyDown(event, id)}
               >
-                <span aria-hidden="true">⋮⋮</span><span className="drag-label">Drag</span>
-              </span>
-              <span className="order-controls" aria-label={`Move ${item?.text ?? id}`}>
-                <button type="button" disabled={index === 0} onClick={() => moveByStep(id, -1)} aria-label={`Move ${item?.text ?? id} up`}>↑</button>
-                <button type="button" disabled={index === order.length - 1} onClick={() => moveByStep(id, 1)} aria-label={`Move ${item?.text ?? id} down`}>↓</button>
+                <span aria-hidden="true" className="drag-dot-grid" />
+                <span className="drag-label">Drag</span>
               </span>
             </div>
           );

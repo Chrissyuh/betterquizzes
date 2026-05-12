@@ -40,6 +40,8 @@ assert(app.includes("data-ordering-mode={inputMode}"), "ordering DOM must expose
 assert(app.includes("inputMode === \"desktop\" ? (event) => beginDrag(event, id, \"desktop\")"), "desktop drag should start from rows");
 assert(app.includes("onTouchStart={inputMode === \"mobile\" ? (event) => beginTouchDrag(event, id) : undefined}"), "mobile ordering should start from a handle touchstart handler");
 assert(app.includes("beginMobilePointerFallbackDrag"), "mobile ordering should keep a pointer fallback separate from desktop row dragging");
+assert(app.includes("drag-dot-grid"), "ordering drag handle should use the polished grip visual");
+assert(!app.includes("order-controls"), "visible ordering arrow controls should stay removed");
 assert(app.includes('document.addEventListener("touchmove", onDocumentTouchMove'), "mobile ordering should track touchmove with document-level listeners");
 assert(app.includes('document.addEventListener("touchmove", onDocumentTouchMove, touchMoveOptions)'), "mobile ordering touchmove listener should use explicit options");
 assert(app.includes("const touchMoveOptions = { capture: true, passive: false } as const"), "mobile ordering touchmove listener must be capture/passive:false");
@@ -48,18 +50,19 @@ assert(app.includes('document.removeEventListener("touchend", onDocumentTouchEnd
 assert(app.includes('document.removeEventListener("touchcancel", onDocumentTouchCancel'), "mobile ordering cleanup should remove touchcancel listener");
 assert(!app.includes('onPointerMove={inputMode === "mobile"'), "mobile drag must not depend on handle-scoped onPointerMove");
 assert(app.includes("onKeyDown={(event) => onHandleKeyDown(event, id)}"), "keyboard sorting fallback missing");
-assert(app.includes("Move up/down buttons"), "mobile user guidance missing");
+assert(app.includes("Mobile: drag from the grip handle"), "mobile drag guidance missing");
 
 assert(css.includes("V61 ordering rebuild"), "V61 ordering CSS block missing");
 assert(css.includes('data-ordering-mode="desktop"'), "desktop-specific ordering CSS missing");
 assert(/\.bq-ordering-rebuilt \.draggable-order-item\s*\{[^}]*position:\s*relative/s.test(css), "rebuilt ordering rows should anchor insertion-edge markers");
 assert(css.includes(".bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging)"), "rebuilt ordering drop-before marker CSS missing");
 assert(css.includes(".bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging)"), "rebuilt ordering drop-after marker CSS missing");
-assert(/\.bq-ordering-rebuilt \.draggable-order-item\.drop-before:not\(\.dragging\)::before,[\s\S]*\.bq-ordering-rebuilt \.draggable-order-item\.drop-after:not\(\.dragging\)::after[\s\S]*background:\s*#1f5eff/s.test(css), "rebuilt ordering insertion-edge indicator should draw a visible blue marker");
+assert(/\.bq-ordering-rebuilt \.draggable-order-item\.drop-before:not\(\.dragging\)::before,[\s\S]*\.bq-ordering-rebuilt \.draggable-order-item\.drop-after:not\(\.dragging\)::after[\s\S]*background:\s*linear-gradient/s.test(css), "rebuilt ordering insertion-edge indicator should draw a visible marker");
 assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.draggable-order-item\s*\{[^}]*touch-action:\s*pan-y/s.test(css), "mobile row should preserve vertical panning");
 assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.drag-handle\s*\{[^}]*touch-action:\s*none/s.test(css), "drag handle should own touch drag gestures");
 assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.draggable-order-item\.dragging\s*\{[^}]*background:/s.test(css), "mobile dragging state should have immediate visual styling");
-assert(css.includes(".bq-ordering-rebuilt .order-controls"), "fallback controls CSS missing");
+assert(css.includes(".bq-ordering-rebuilt .drag-dot-grid"), "polished drag grip CSS missing");
+assert(!css.includes(".bq-ordering-rebuilt .order-controls"), "visible ordering arrow control CSS should stay removed");
 assert(css.includes("@media (max-width: 720px), (hover: none), (pointer: coarse)"), "mobile-specific ordering CSS missing");
 assert(css.includes("bq-ordering-drag-lock"), "drag scroll lock CSS missing");
 

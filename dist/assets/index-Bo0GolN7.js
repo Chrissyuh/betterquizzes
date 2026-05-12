@@ -13643,6 +13643,7 @@ function OrderingInput({ question, response, onChange }) {
 	const inputMode = useOrderingInputMode();
 	const [draggedId, setDraggedId] = (0, import_react.useState)(null);
 	const [dropIndex, setDropIndex] = (0, import_react.useState)(null);
+	const [dropMarker, setDropMarker] = (0, import_react.useState)(null);
 	const dragRef = (0, import_react.useRef)(null);
 	const mobileDocumentCleanupRef = (0, import_react.useRef)(null);
 	const orderRef = (0, import_react.useRef)([]);
@@ -13652,7 +13653,7 @@ function OrderingInput({ question, response, onChange }) {
 	const itemIdsKey = itemIds.join("|");
 	const behavior = getOrderingBehavior(question);
 	const order = normalizeOrderingResponse(response, items);
-	const itemById = (0, import_react.useMemo)(() => new Map(items.map((item) => [item.id, item])), [itemIdsKey]);
+	const itemById = (0, import_react.useMemo)(() => new Map(items.map((item) => [item.id, item])), [items.map((item) => `${item.id}\u0000${item.text}`).join("")]);
 	(0, import_react.useEffect)(() => {
 		orderRef.current = order;
 	}, [order.join("|")]);
@@ -13689,6 +13690,19 @@ function OrderingInput({ question, response, onChange }) {
 		next.splice(fromIndex, 1);
 		next.splice(toIndex, 0, id);
 		commit(next);
+	}
+	function markerFromInsertionIndex(sourceId, rawIndex) {
+		const withoutSource = (orderRef.current.length ? orderRef.current : order).filter((id) => id !== sourceId);
+		if (!withoutSource.length) return null;
+		const targetIndex = Math.max(0, Math.min(withoutSource.length, rawIndex));
+		if (targetIndex < withoutSource.length) return {
+			id: withoutSource[targetIndex],
+			edge: "before"
+		};
+		return {
+			id: withoutSource[withoutSource.length - 1],
+			edge: "after"
+		};
 	}
 	function moveToIndex(sourceId, rawIndex) {
 		const currentOrder = orderRef.current.length ? orderRef.current : order;
@@ -13758,6 +13772,7 @@ function OrderingInput({ question, response, onChange }) {
 			active.moved = true;
 			const nextDropIndex = insertionIndexFromPoint(touch.clientX, touch.clientY, active.id);
 			setDropIndex(nextDropIndex);
+			setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
 			moveToIndex(active.id, nextDropIndex);
 		};
 		const onDocumentTouchEnd = (event) => {
@@ -13801,6 +13816,7 @@ function OrderingInput({ question, response, onChange }) {
 		};
 		setDraggedId(id);
 		setDropIndex(orderRef.current.indexOf(id));
+		setDropMarker(null);
 		setOrderingDragScrollLock(true);
 		if (mode === "mobile") dragRef.current.cleanup = installMobileDocumentDragListeners();
 	}
@@ -13843,6 +13859,7 @@ function OrderingInput({ question, response, onChange }) {
 		event?.preventDefault();
 		const nextDropIndex = insertionIndexFromPoint(clientX, clientY, active.id);
 		setDropIndex(nextDropIndex);
+		setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
 		moveToIndex(active.id, nextDropIndex);
 	}
 	function moveDrag(event) {
@@ -13855,6 +13872,7 @@ function OrderingInput({ question, response, onChange }) {
 		dragRef.current = null;
 		setDraggedId(null);
 		setDropIndex(null);
+		setDropMarker(null);
 		setOrderingDragScrollLock(false);
 	}
 	function endDrag(event) {
@@ -13898,7 +13916,7 @@ function OrderingInput({ question, response, onChange }) {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "compact-status ordering-mode-hint",
-				children: inputMode === "desktop" ? "Desktop: drag a row with your mouse, or use the arrow buttons." : "Mobile: use the Move up/down buttons, or drag from the grip handle."
+				children: inputMode === "desktop" ? "Desktop: drag a row with your mouse, or focus the grip and press ArrowUp, ArrowDown, Home, or End." : "Mobile: drag from the grip handle, or focus it and press ArrowUp, ArrowDown, Home, or End."
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				ref: listRef,
@@ -13906,8 +13924,11 @@ function OrderingInput({ question, response, onChange }) {
 				"aria-live": "polite",
 				children: order.map((id, index) => {
 					const item = itemById.get(id);
+					const isDragged = draggedId === id;
+					const isDropBefore = dropMarker?.id === id && dropMarker.edge === "before";
+					const isDropAfter = dropMarker?.id === id && dropMarker.edge === "after";
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: (draggedId === id ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (dropIndex === index ? " drag-over" : ""),
+						className: (isDragged ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (!isDragged && dropIndex === index ? " drag-over" : "") + (isDropBefore ? " drop-before" : "") + (isDropAfter ? " drop-after" : ""),
 						"data-order-id": id,
 						draggable: false,
 						"aria-roledescription": "sortable item",
@@ -13916,49 +13937,34 @@ function OrderingInput({ question, response, onChange }) {
 						onPointerMove: inputMode === "desktop" ? moveDrag : void 0,
 						onPointerUp: inputMode === "desktop" ? endDrag : void 0,
 						onPointerCancel: inputMode === "desktop" ? cancelDrag : void 0,
-						children: [
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-								className: "order-item-text",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "order-index",
-									children: index + 1
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RichInline, { text: item?.text ?? id })]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-								className: "drag-handle",
-								role: "button",
-								tabIndex: 0,
-								"aria-label": `Drag or use arrow keys to move ${item?.text ?? id}`,
-								title: inputMode === "desktop" ? "Drag row or use arrow keys" : "Drag from this handle or use Move buttons",
-								onPointerDown: inputMode === "mobile" ? (event) => beginMobilePointerFallbackDrag(event, id) : void 0,
-								onTouchStart: inputMode === "mobile" ? (event) => beginTouchDrag(event, id) : void 0,
-								onKeyDown: (event) => onHandleKeyDown(event, id),
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									"aria-hidden": "true",
-									children: "⋮⋮"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "drag-label",
-									children: "Drag"
-								})]
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-								className: "order-controls",
-								"aria-label": `Move ${item?.text ?? id}`,
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									disabled: index === 0,
-									onClick: () => moveByStep(id, -1),
-									"aria-label": `Move ${item?.text ?? id} up`,
-									children: "↑"
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-									type: "button",
-									disabled: index === order.length - 1,
-									onClick: () => moveByStep(id, 1),
-									"aria-label": `Move ${item?.text ?? id} down`,
-									children: "↓"
-								})]
-							})
-						]
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							className: "order-item-text",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "order-index",
+								children: index + 1
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RichInline, { text: item?.text ?? id })]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							className: "drag-handle",
+							role: "slider",
+							tabIndex: 0,
+							"aria-orientation": "vertical",
+							"aria-valuemin": 1,
+							"aria-valuemax": order.length,
+							"aria-valuenow": index + 1,
+							"aria-valuetext": `Position ${index + 1} of ${order.length}`,
+							"aria-label": `Reorder grip for ${item?.text ?? id}. Use ArrowUp, ArrowDown, Home, or End to move.`,
+							title: inputMode === "desktop" ? "Drag row, or focus grip and press ArrowUp, ArrowDown, Home, or End" : "Drag from this handle, or focus grip and press ArrowUp, ArrowDown, Home, or End",
+							onPointerDown: inputMode === "mobile" ? (event) => beginMobilePointerFallbackDrag(event, id) : void 0,
+							onTouchStart: inputMode === "mobile" ? (event) => beginTouchDrag(event, id) : void 0,
+							onKeyDown: (event) => onHandleKeyDown(event, id),
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								"aria-hidden": "true",
+								className: "drag-dot-grid"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "drag-label",
+								children: "Drag"
+							})]
+						})]
 					}, id);
 				})
 			}),

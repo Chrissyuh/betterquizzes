@@ -2667,31 +2667,58 @@ button.drag-handle:focus-visible {
 /* END V60 restored older PC ordering drag behavior */
 
 /* V61 ordering rebuild: separate desktop mouse sorting from mobile handle/control sorting. */
+.bq-ordering-rebuilt {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.question-card,
+.question-card > *,
+.question-card h2,
+.main-column {
+  min-width: 0;
+}
+
+.question-card h2 {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .bq-ordering-rebuilt .ordering-mode-hint {
-  margin: -.1rem 0 .2rem;
-  color: #475467;
+  margin: -.05rem 0 .35rem;
+  color: #5b6678;
+  font-size: .86rem;
   font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .bq-ordering-rebuilt .drag-order-list {
-  gap: .55rem;
+  gap: .65rem;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .bq-ordering-rebuilt .draggable-order-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: .65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .75rem;
   align-items: center;
-  border: 1px solid #dbe3ef;
-  border-radius: 16px;
-  background: #f8fafc;
-  padding: .72rem;
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: .78rem .82rem;
   cursor: default;
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
-  transition: border-color .12s ease, background .12s ease, transform .12s ease, box-shadow .12s ease;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .05);
+  transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease, opacity .18s ease;
 }
 
 .bq-ordering-rebuilt[data-ordering-mode="desktop"] .draggable-order-item {
@@ -2704,32 +2731,64 @@ button.drag-handle:focus-visible {
 }
 
 .bq-ordering-rebuilt .draggable-order-item:hover {
-  border-color: #93b4ff;
+  border-color: rgba(41, 71, 211, .38);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .08);
+  transform: translateY(-1px);
 }
 
 .bq-ordering-rebuilt .draggable-order-item.dragging {
-  opacity: .78;
-  transform: scale(.992);
-  border-color: #1f5eff;
-  background: #eaf1ff;
-  box-shadow: 0 12px 28px rgba(31, 94, 255, .16);
+  opacity: .9;
+  transform: scale(.985);
+  border-color: rgba(41, 71, 211, .62);
+  background: linear-gradient(180deg, #eef4ff 0%, #e8efff 100%);
+  box-shadow: 0 18px 42px rgba(41, 71, 211, .18);
+  z-index: 4;
 }
 
-.bq-ordering-rebuilt .draggable-order-item.drag-over:not(.dragging) {
-  border-color: #1f5eff;
-  box-shadow: inset 0 0 0 2px rgba(31, 94, 255, .16);
+.bq-ordering-rebuilt .draggable-order-item.drag-over:not(.dragging),
+.bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging),
+.bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging) {
+  border-color: rgba(41, 71, 211, .52);
+  box-shadow: inset 0 0 0 1px rgba(41, 71, 211, .16), 0 12px 28px rgba(41, 71, 211, .10);
 }
+
+.bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging)::before,
+.bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging)::after {
+  content: "";
+  position: absolute;
+  left: .85rem;
+  right: .85rem;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2947d3, #00aeca);
+  box-shadow: 0 0 0 4px rgba(41, 71, 211, .12);
+  z-index: 3;
+}
+
+.bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging)::before { top: -6px; }
+.bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging)::after { bottom: -6px; }
 
 .bq-ordering-rebuilt .order-item-text {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: .55rem;
+  gap: .7rem;
   overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .bq-ordering-rebuilt .order-index {
+  display: inline-grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
   margin-right: 0;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #2947d3;
+  font-size: .82rem;
+  font-weight: 900;
+  flex: 0 0 auto;
 }
 
 .bq-ordering-rebuilt .drag-handle {
@@ -2737,12 +2796,15 @@ button.drag-handle:focus-visible {
   align-items: center;
   justify-content: center;
   gap: .35rem;
-  min-width: 4.4rem;
-  min-height: 2.55rem;
-  border-radius: 12px;
-  background: #edf3ff;
-  color: #123caa;
-  border: 1px solid #d8e4ff;
+  width: 3rem;
+  min-width: 3rem;
+  height: 3rem;
+  min-height: 3rem;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #344054;
+  border: 1px solid rgba(148, 163, 184, .32);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .75), 0 8px 18px rgba(15, 23, 42, .08);
   font-weight: 900;
   letter-spacing: 0;
   cursor: grab;
@@ -2750,45 +2812,42 @@ button.drag-handle:focus-visible {
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
+  justify-self: end;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
 }
 
 .bq-ordering-rebuilt .drag-handle:active,
 .bq-ordering-rebuilt .drag-handle:focus-visible {
-  background: #dbe8ff;
-  color: #0f2f8f;
+  background: #eef4ff;
+  border-color: rgba(41, 71, 211, .44);
+  color: #2947d3;
+  box-shadow: 0 0 0 4px rgba(41, 71, 211, .12), 0 10px 22px rgba(41, 71, 211, .12);
+  transform: scale(1.03);
+  outline: 0;
+}
+
+.bq-ordering-rebuilt .draggable-order-item:hover .drag-handle {
+  border-color: rgba(41, 71, 211, .34);
+  color: #2947d3;
+}
+
+.bq-ordering-rebuilt .drag-dot-grid {
+  width: 1rem;
+  height: 1.2rem;
+  display: block;
+  background:
+    radial-gradient(circle, currentColor 1.8px, transparent 2.3px) 0 0 / .5rem .5rem,
+    radial-gradient(circle, currentColor 1.8px, transparent 2.3px) .5rem 0 / .5rem .5rem;
+  opacity: .72;
 }
 
 .bq-ordering-rebuilt .drag-label {
-  display: inline !important;
-  font-size: .72rem;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.bq-ordering-rebuilt .order-controls {
-  display: inline-flex !important;
-  gap: .3rem;
-}
-
-.bq-ordering-rebuilt .order-controls button {
-  min-width: 2.5rem;
-  min-height: 2.5rem;
-  padding: .35rem .6rem;
-  margin-left: 0;
-  border: 1px solid #d8dee8;
-  background: #ffffff;
-  color: #344054;
-}
-
-.bq-ordering-rebuilt .order-controls button:not(:disabled):hover {
-  background: #eef2ff;
-  border-color: #b8c3ff;
-  transform: none;
-}
-
-.bq-ordering-rebuilt .order-controls button:disabled {
-  opacity: .42;
-  cursor: not-allowed;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .bq-ordering-drag-lock,
@@ -2807,49 +2866,50 @@ button.drag-handle:focus-visible {
 }
 
 .bq-ordering-rebuilt[data-ordering-mode="mobile"] .draggable-order-item.dragging {
-  opacity: .86;
-  transform: scale(.99);
-  border-color: #1f5eff;
-  background: #e4edff;
-  box-shadow: 0 14px 30px rgba(31, 94, 255, .2);
+  opacity: .92;
+  transform: scale(.986);
+  border-color: rgba(41, 71, 211, .64);
+  background: linear-gradient(180deg, #eef4ff 0%, #e5edff 100%);
+  box-shadow: 0 16px 34px rgba(41, 71, 211, .20);
 }
 
 @media (max-width: 720px), (hover: none), (pointer: coarse) {
   .bq-ordering-rebuilt .ordering-mode-hint {
     font-size: .82rem;
+    max-width: calc(100vw - 5rem);
   }
 
   .bq-ordering-rebuilt .draggable-order-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .55rem;
+    align-items: center;
+    padding: .68rem .68rem .68rem 4rem;
+    max-width: calc(100vw - 2.75rem);
     touch-action: pan-y;
   }
 
+  .bq-ordering-rebuilt .order-item-text {
+    grid-column: 1;
+  }
+
+  .question-card h2 {
+    display: block;
+    width: calc(100vw - 5rem);
+    max-width: calc(100vw - 5rem);
+    white-space: normal !important;
+    word-break: break-word;
+  }
+
   .bq-ordering-rebuilt .drag-handle {
-    min-width: 3rem;
-    width: 3rem;
-    min-height: 3rem;
-  }
-
-  .bq-ordering-rebuilt .drag-label {
     position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-
-  .bq-ordering-rebuilt .order-controls {
-    grid-column: 1 / -1;
-    display: grid !important;
-    grid-template-columns: 1fr 1fr;
-    gap: .45rem;
-  }
-
-  .bq-ordering-rebuilt .order-controls button {
-    width: 100%;
-    min-height: 48px;
+    left: .68rem;
+    top: 50%;
+    justify-self: auto;
+    width: 2.85rem;
+    min-width: 2.85rem;
+    height: 2.85rem;
+    min-height: 2.85rem;
+    transform: translateY(-50%);
   }
 }
 /* END V61 ordering rebuild */
