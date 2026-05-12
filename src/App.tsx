@@ -1145,6 +1145,16 @@ function getOrderingItems(question: unknown): { id: string; text: string }[] {
     .filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
 }
 
+function isRenderableOrderingDragText(text: string): boolean {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 0 && normalized.length <= ORDERING_ITEM_TEXT_MAX_CHARS && !/[\r\n]/.test(text);
+}
+
+function limitForDisplay(text: string, maxChars: number): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > maxChars ? normalized.slice(0, Math.max(0, maxChars - 1)) + "..." : normalized;
+}
+
 
 function bqV23OrderingKey(item: unknown): string {
   if (item && typeof item === "object") {
@@ -1864,6 +1874,7 @@ type OrderingDragState = {
   moved: boolean;
   cleanup?: () => void;
 };
+const ORDERING_ITEM_TEXT_MAX_CHARS = 64;
 
 function useOrderingInputMode(): OrderingInputMode {
   const [mode, setMode] = useState<OrderingInputMode>(() => {
@@ -1898,6 +1909,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   const dragRef = useRef<OrderingDragState | null>(null);
   const mobileDocumentCleanupRef = useRef<(() => void) | null>(null);
   const orderRef = useRef<string[]>([]);
+  const pendingRowRectsRef = useRef<Map<string, DOMRect> | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const items = getOrderingItems(question);
   const itemIds = items.map((item) => item.id);
@@ -1909,6 +1921,28 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
 
   useEffect(() => {
     orderRef.current = order;
+  }, [order.join("|")]);
+
+  useLayoutEffect(() => {
+    const previousRects = pendingRowRectsRef.current;
+    pendingRowRectsRef.current = null;
+    if (!previousRects || typeof Element === "undefined" || typeof HTMLElement === "undefined") return;
+    const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-order-id]") ?? []);
+    for (const row of rows) {
+      if (row.classList.contains("dragging")) continue;
+      const previous = previousRects.get(row.dataset.orderId ?? "");
+      if (!previous) continue;
+      const next = row.getBoundingClientRect();
+      const deltaY = previous.top - next.top;
+      if (Math.abs(deltaY) < 1) continue;
+      row.animate(
+        [
+          { transform: `translateY(${deltaY}px)` },
+          { transform: "translateY(0)" },
+        ],
+        { duration: 210, easing: "cubic-bezier(.2, .8, .2, 1)" }
+      );
+    }
   }, [order.join("|")]);
 
   useEffect(() => {
@@ -1924,11 +1958,22 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
 
   if (!items.length) return <QuestionRenderWarning question={question} detail="This ordering question did not include any valid items." />;
 
+  const oversizedItem = items.find((item) => !isRenderableOrderingDragText(item.text));
+  if (oversizedItem) {
+    return <QuestionRenderWarning question={question} detail={`Ordering item "${limitForDisplay(oversizedItem.text, 42)}" is too long for the drag sorter. Ask ChatGPT to regenerate this question with one-line item labels under ${ORDERING_ITEM_TEXT_MAX_CHARS} characters.`} />;
+  }
+
   function commit(nextOrder: string[]): void {
     const normalized = normalizeOrderingResponse(nextOrder, items);
     if (normalized.join("|") === orderRef.current.join("|")) return;
+    pendingRowRectsRef.current = captureOrderingRowRects();
     orderRef.current = normalized;
     onChange(normalized);
+  }
+
+  function captureOrderingRowRects(): Map<string, DOMRect> {
+    const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-order-id]") ?? []);
+    return new Map(rows.map((row) => [row.dataset.orderId ?? "", row.getBoundingClientRect()]));
   }
 
   function moveByStep(id: string, step: -1 | 1): void {

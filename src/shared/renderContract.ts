@@ -50,6 +50,7 @@ const SUPPORTED_QUESTION_TYPES = new Set<QuestionType>([
   "ordering",
   "numeric",
 ]);
+const ORDERING_ITEM_TEXT_MAX_CHARS = 64;
 
 const QUESTION_TYPE_ALIASES = new Map<string, QuestionType>([
   ["multipleChoice", "multiple_choice"],
@@ -203,8 +204,8 @@ export function getRenderDiagnostics(quiz: unknown, inheritedWarnings: string[] 
     if (type === "matching" && (!Array.isArray(rawQuestion.left) || !Array.isArray(rawQuestion.right) || rawQuestion.left.length < 1 || rawQuestion.right.length < 1 || !rawQuestion.left.every(isRenderableItem) || !rawQuestion.right.every(isRenderableItem))) {
       unrenderableQuestions.push({ index, questionId, reason: "Matching question requires left and right arrays of {id,text} items." });
     }
-    if (type === "ordering" && (!Array.isArray(rawQuestion.items) || rawQuestion.items.length < 2 || !rawQuestion.items.every(isRenderableItem))) {
-      unrenderableQuestions.push({ index, questionId, reason: "Ordering question requires items: {id,text}[] with at least two valid items." });
+    if (type === "ordering" && (!Array.isArray(rawQuestion.items) || rawQuestion.items.length < 2 || !rawQuestion.items.every(isRenderableOrderingItem))) {
+      unrenderableQuestions.push({ index, questionId, reason: `Ordering question requires at least two one-line {id,text} items with text under ${ORDERING_ITEM_TEXT_MAX_CHARS} characters.` });
     }
     validateAnswerShape(rawQuestion, questionId, answerKeyWarnings);
   });
@@ -485,8 +486,17 @@ function rendererComponentForType(type: QuestionType): string {
   }[type] ?? "UnsupportedQuestion";
 }
 
-function isRenderableItem(item: unknown): boolean {
+function isRenderableItem(item: unknown): item is { id: string; text: string } {
   return isRecord(item) && isNonEmptyString(item.id) && isNonEmptyString(item.text);
+}
+
+function isRenderableOrderingItem(item: unknown): item is { id: string; text: string } {
+  return isRenderableItem(item) && typeof item.text === "string" && isOneLineOrderingItemText(item.text);
+}
+
+function isOneLineOrderingItemText(text: string): boolean {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 0 && normalized.length <= ORDERING_ITEM_TEXT_MAX_CHARS && !/[\r\n]/.test(text);
 }
 
 function isRenderableTypingField(item: unknown): boolean {

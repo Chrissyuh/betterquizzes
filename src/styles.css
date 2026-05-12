@@ -2702,7 +2702,7 @@ button.drag-handle:focus-visible {
 
 .bq-ordering-rebuilt .draggable-order-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 4.25rem;
   gap: .75rem;
   align-items: center;
   border: 1px solid rgba(148, 163, 184, .24);
@@ -2715,8 +2715,9 @@ button.drag-handle:focus-visible {
   -webkit-user-select: none;
   -webkit-user-drag: none;
   position: relative;
-  width: 100%;
+  width: min(100%, calc(100vw - 3.5rem));
   min-width: 0;
+  overflow: hidden;
   box-shadow: 0 8px 20px rgba(15, 23, 42, .05);
   transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease, opacity .18s ease;
 }
@@ -2737,12 +2738,27 @@ button.drag-handle:focus-visible {
 }
 
 .bq-ordering-rebuilt .draggable-order-item.dragging {
-  opacity: .9;
-  transform: scale(.985);
+  opacity: 1;
+  transform: translateY(-2px) scale(.994);
   border-color: rgba(41, 71, 211, .62);
   background: linear-gradient(180deg, #eef4ff 0%, #e8efff 100%);
-  box-shadow: 0 18px 42px rgba(41, 71, 211, .18);
-  z-index: 4;
+  box-shadow: 0 22px 48px rgba(41, 71, 211, .22);
+  z-index: 10;
+}
+
+.bq-ordering-rebuilt .draggable-order-item.dragging::before {
+  content: "";
+  position: absolute;
+  inset: .4rem;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, .16);
+  z-index: 0;
+}
+
+.bq-ordering-rebuilt .draggable-order-item.dragging .order-item-text,
+.bq-ordering-rebuilt .draggable-order-item.dragging .drag-handle {
+  position: relative;
+  z-index: 1;
 }
 
 .bq-ordering-rebuilt .draggable-order-item.drag-over:not(.dragging),
@@ -2773,8 +2789,14 @@ button.drag-handle:focus-visible {
   display: flex;
   align-items: center;
   gap: .7rem;
-  overflow-wrap: anywhere;
   line-height: 1.35;
+}
+
+.bq-ordering-rebuilt .order-item-text > :last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bq-ordering-rebuilt .order-index {
@@ -2812,7 +2834,7 @@ button.drag-handle:focus-visible {
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
-  justify-self: end;
+  justify-self: start;
   transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
 }
 
@@ -2866,8 +2888,8 @@ button.drag-handle:focus-visible {
 }
 
 .bq-ordering-rebuilt[data-ordering-mode="mobile"] .draggable-order-item.dragging {
-  opacity: .92;
-  transform: scale(.986);
+  opacity: 1;
+  transform: translateY(-2px) scale(.994);
   border-color: rgba(41, 71, 211, .64);
   background: linear-gradient(180deg, #eef4ff 0%, #e5edff 100%);
   box-shadow: 0 16px 34px rgba(41, 71, 211, .20);
@@ -2880,11 +2902,12 @@ button.drag-handle:focus-visible {
   }
 
   .bq-ordering-rebuilt .draggable-order-item {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 4rem;
     gap: .55rem;
     align-items: center;
-    padding: .68rem .68rem .68rem 4rem;
-    max-width: calc(100vw - 2.75rem);
+    padding: .68rem;
+    width: min(100%, calc(100vw - 5.5rem));
+    max-width: calc(100vw - 5.5rem);
     touch-action: pan-y;
   }
 
@@ -2901,15 +2924,14 @@ button.drag-handle:focus-visible {
   }
 
   .bq-ordering-rebuilt .drag-handle {
-    position: absolute;
-    left: .68rem;
-    top: 50%;
+    position: static;
+    grid-column: 2;
+    grid-row: 1;
     justify-self: auto;
     width: 2.85rem;
     min-width: 2.85rem;
     height: 2.85rem;
     min-height: 2.85rem;
-    transform: translateY(-50%);
   }
 }
 /* END V61 ordering rebuild */

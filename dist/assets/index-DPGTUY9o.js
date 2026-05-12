@@ -10381,6 +10381,7 @@ var SUPPORTED_QUESTION_TYPES = new Set([
 	"ordering",
 	"numeric"
 ]);
+var ORDERING_ITEM_TEXT_MAX_CHARS$1 = 64;
 var QUESTION_TYPE_ALIASES = new Map([
 	["multipleChoice", "multiple_choice"],
 	["multiple-choice", "multiple_choice"],
@@ -10537,10 +10538,10 @@ function getRenderDiagnostics(quiz, inheritedWarnings = [], normalizedFields = [
 			questionId,
 			reason: "Matching question requires left and right arrays of {id,text} items."
 		});
-		if (type === "ordering" && (!Array.isArray(rawQuestion.items) || rawQuestion.items.length < 2 || !rawQuestion.items.every(isRenderableItem))) unrenderableQuestions.push({
+		if (type === "ordering" && (!Array.isArray(rawQuestion.items) || rawQuestion.items.length < 2 || !rawQuestion.items.every(isRenderableOrderingItem))) unrenderableQuestions.push({
 			index,
 			questionId,
-			reason: "Ordering question requires items: {id,text}[] with at least two valid items."
+			reason: `Ordering question requires at least two one-line {id,text} items with text under ${ORDERING_ITEM_TEXT_MAX_CHARS$1} characters.`
 		});
 		validateAnswerShape(rawQuestion, questionId, answerKeyWarnings);
 	});
@@ -10858,6 +10859,13 @@ function rendererComponentForType(type) {
 }
 function isRenderableItem(item) {
 	return isRecord(item) && isNonEmptyString(item.id) && isNonEmptyString(item.text);
+}
+function isRenderableOrderingItem(item) {
+	return isRenderableItem(item) && typeof item.text === "string" && isOneLineOrderingItemText(item.text);
+}
+function isOneLineOrderingItemText(text) {
+	const normalized = text.replace(/\s+/g, " ").trim();
+	return normalized.length > 0 && normalized.length <= ORDERING_ITEM_TEXT_MAX_CHARS$1 && !/[\r\n]/.test(text);
 }
 function isRenderableTypingField(item) {
 	return isRecord(item) && isNonEmptyString(item.id) && isNonEmptyString(item.label);
@@ -12806,6 +12814,14 @@ function getOrderingItems(question) {
 		text: String(item.text)
 	})).filter((item) => item.id.trim().length > 0 && item.text.trim().length > 0);
 }
+function isRenderableOrderingDragText(text) {
+	const normalized = text.replace(/\s+/g, " ").trim();
+	return normalized.length > 0 && normalized.length <= ORDERING_ITEM_TEXT_MAX_CHARS && !/[\r\n]/.test(text);
+}
+function limitForDisplay(text, maxChars) {
+	const normalized = text.replace(/\s+/g, " ").trim();
+	return normalized.length > maxChars ? normalized.slice(0, Math.max(0, maxChars - 1)) + "..." : normalized;
+}
 function bqV26OrderingKey(item) {
 	if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") return String(item);
 	if (item && typeof item === "object") {
@@ -13619,6 +13635,7 @@ function parseNumericResponse(value) {
 	const parsed = Number(trimmed);
 	return Number.isFinite(parsed) ? parsed : null;
 }
+var ORDERING_ITEM_TEXT_MAX_CHARS = 64;
 function useOrderingInputMode() {
 	const [mode, setMode] = (0, import_react.useState)(() => {
 		if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "desktop";
@@ -13647,6 +13664,7 @@ function OrderingInput({ question, response, onChange }) {
 	const dragRef = (0, import_react.useRef)(null);
 	const mobileDocumentCleanupRef = (0, import_react.useRef)(null);
 	const orderRef = (0, import_react.useRef)([]);
+	const pendingRowRectsRef = (0, import_react.useRef)(null);
 	const listRef = (0, import_react.useRef)(null);
 	const items = getOrderingItems(question);
 	const itemIds = items.map((item) => item.id);
@@ -13656,6 +13674,24 @@ function OrderingInput({ question, response, onChange }) {
 	const itemById = (0, import_react.useMemo)(() => new Map(items.map((item) => [item.id, item])), [items.map((item) => `${item.id}\u0000${item.text}`).join("")]);
 	(0, import_react.useEffect)(() => {
 		orderRef.current = order;
+	}, [order.join("|")]);
+	(0, import_react.useLayoutEffect)(() => {
+		const previousRects = pendingRowRectsRef.current;
+		pendingRowRectsRef.current = null;
+		if (!previousRects || typeof Element === "undefined" || typeof HTMLElement === "undefined") return;
+		const rows = Array.from(listRef.current?.querySelectorAll("[data-order-id]") ?? []);
+		for (const row of rows) {
+			if (row.classList.contains("dragging")) continue;
+			const previous = previousRects.get(row.dataset.orderId ?? "");
+			if (!previous) continue;
+			const next = row.getBoundingClientRect();
+			const deltaY = previous.top - next.top;
+			if (Math.abs(deltaY) < 1) continue;
+			row.animate([{ transform: `translateY(${deltaY}px)` }, { transform: "translateY(0)" }], {
+				duration: 210,
+				easing: "cubic-bezier(.2, .8, .2, 1)"
+			});
+		}
 	}, [order.join("|")]);
 	(0, import_react.useEffect)(() => {
 		if (!response.length && itemIds.length) onChange(bqV26AvoidAlreadyCorrectOrdering(question, items, getInitialOrderingOrder(question, items)));
@@ -13674,11 +13710,21 @@ function OrderingInput({ question, response, onChange }) {
 		question,
 		detail: "This ordering question did not include any valid items."
 	});
+	const oversizedItem = items.find((item) => !isRenderableOrderingDragText(item.text));
+	if (oversizedItem) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionRenderWarning, {
+		question,
+		detail: `Ordering item "${limitForDisplay(oversizedItem.text, 42)}" is too long for the drag sorter. Ask ChatGPT to regenerate this question with one-line item labels under ${ORDERING_ITEM_TEXT_MAX_CHARS} characters.`
+	});
 	function commit(nextOrder) {
 		const normalized = normalizeOrderingResponse(nextOrder, items);
 		if (normalized.join("|") === orderRef.current.join("|")) return;
+		pendingRowRectsRef.current = captureOrderingRowRects();
 		orderRef.current = normalized;
 		onChange(normalized);
+	}
+	function captureOrderingRowRects() {
+		const rows = Array.from(listRef.current?.querySelectorAll("[data-order-id]") ?? []);
+		return new Map(rows.map((row) => [row.dataset.orderId ?? "", row.getBoundingClientRect()]));
 	}
 	function moveByStep(id, step) {
 		const currentOrder = orderRef.current.length ? orderRef.current : order;

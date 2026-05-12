@@ -13,6 +13,7 @@ function assert(value, message) {
 
 const app = read("src/App.tsx");
 const css = read("src/styles.css");
+const render = read("src/shared/renderContract.ts");
 const remote = fs.existsSync("mcp/remote-server.mjs") ? read("mcp/remote-server.mjs") : "";
 
 assert(app.includes("const bqV61OrderingRebuild = true"), "V61 ordering rebuild marker missing");
@@ -26,6 +27,10 @@ assert(app.includes('const itemsKey = items.map((item) => `${item.id}\\u0000${it
 assert(app.includes("useMemo(() => new Map(items.map((item) => [item.id, item])), [itemsKey])"), "ordering itemById memo must refresh when item text changes");
 assert(app.includes("function markerFromInsertionIndex"), "ordering drag insertion marker helper missing");
 assert(app.includes("const [dropMarker, setDropMarker]"), "ordering drag should track a non-dragged drop marker");
+assert(app.includes("const ORDERING_ITEM_TEXT_MAX_CHARS = 64"), "ordering drag text length cap missing");
+assert(app.includes("function isRenderableOrderingDragText"), "ordering drag text renderability guard missing");
+assert(app.includes("pendingRowRectsRef"), "ordering row animation rect capture missing");
+assert(app.includes("row.animate("), "ordering row movement animation missing");
 assert(app.includes("setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex))"), "pointer drag should update non-dragged insertion marker before sorting");
 assert(app.includes("setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));\n      moveToIndex(active.id, nextDropIndex);"), "touch drag should update insertion marker before sorting");
 assert(app.includes('!isDragged && dropIndex === index ? " drag-over" : ""'), "drop-over class must not be applied to the actively dragged row");
@@ -42,6 +47,7 @@ assert(app.includes("onTouchStart={inputMode === \"mobile\" ? (event) => beginTo
 assert(app.includes("beginMobilePointerFallbackDrag"), "mobile ordering should keep a pointer fallback separate from desktop row dragging");
 assert(app.includes("drag-dot-grid"), "ordering drag handle should use the polished grip visual");
 assert(!app.includes("order-controls"), "visible ordering arrow controls should stay removed");
+assert(app.includes("too long for the drag sorter"), "oversized ordering item warning missing");
 assert(app.includes('document.addEventListener("touchmove", onDocumentTouchMove'), "mobile ordering should track touchmove with document-level listeners");
 assert(app.includes('document.addEventListener("touchmove", onDocumentTouchMove, touchMoveOptions)'), "mobile ordering touchmove listener should use explicit options");
 assert(app.includes("const touchMoveOptions = { capture: true, passive: false } as const"), "mobile ordering touchmove listener must be capture/passive:false");
@@ -63,8 +69,13 @@ assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.drag-handle\s*\{[
 assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.draggable-order-item\.dragging\s*\{[^}]*background:/s.test(css), "mobile dragging state should have immediate visual styling");
 assert(css.includes(".bq-ordering-rebuilt .drag-dot-grid"), "polished drag grip CSS missing");
 assert(!css.includes(".bq-ordering-rebuilt .order-controls"), "visible ordering arrow control CSS should stay removed");
+assert(/\.bq-ordering-rebuilt \.draggable-order-item\.dragging\s*\{[^}]*z-index:\s*10/s.test(css), "held ordering card should stay visually on top");
+assert(css.includes(".bq-ordering-rebuilt .draggable-order-item.dragging::before"), "drag placeholder underlay missing");
+assert(css.includes("grid-template-columns: minmax(0, 1fr) 4rem"), "mobile ordering handle should stay on the right");
 assert(css.includes("@media (max-width: 720px), (hover: none), (pointer: coarse)"), "mobile-specific ordering CSS missing");
 assert(css.includes("bq-ordering-drag-lock"), "drag scroll lock CSS missing");
+assert(render.includes("ORDERING_ITEM_TEXT_MAX_CHARS = 64"), "render contract ordering item length cap missing");
+assert(render.includes("isRenderableOrderingItem"), "render contract should reject oversized ordering labels before launch");
 
 if (remote) {
   assert(!remote.includes("destructiveHint: true"), "destructiveHint true still present");
