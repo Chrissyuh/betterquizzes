@@ -772,6 +772,8 @@ function QuizRunner({
     setError(null);
     const session = createSession(quiz, records, startedAt);
     const submission = createSubmissionCapsule(quiz, session);
+    if (launchId) submission.launchId = launchId;
+    if (typeof quiz.metadata?.quizRevision === "number") submission.quizRevision = quiz.metadata.quizRevision;
 
     submission.status = {
       ...(submission.status ?? { localSaved: true, hostSubmitted: false, followUpRequested: false, duplicateSubmission: false, warnings: [] }),

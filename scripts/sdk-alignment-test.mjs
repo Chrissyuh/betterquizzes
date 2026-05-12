@@ -22,7 +22,7 @@ for (const required of [
 }
 
 const remoteServer = readFileSync("mcp/remote-server.mjs", "utf8");
-const stableServer = readFileSync("mcp/betterquizzer-app-server.mjs", "utf8");
+const stableServer = readFileSync("mcp/betterquizzes-app-server.mjs", "utf8");
 for (const text of [remoteServer, stableServer]) {
   const match = text.match(/const RESOURCE_URI = "([^"]+)";/);
   if (!match) throw new Error("Server resource URI missing.");

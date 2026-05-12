@@ -77,6 +77,8 @@ export type QuizMetadata = {
   sourceModel?: string;
   createdAt?: string;
   estimatedTimeMinutes?: number;
+  expectedQuestionCount?: number;
+  quizRevision?: number;
   tags?: string[];
 };
 
@@ -302,6 +304,8 @@ export type SubmissionCapsule = {
   version: 2;
   quizId: string;
   sessionId: string;
+  launchId?: string;
+  quizRevision?: number;
   title: string;
   subject?: string;
   mode: QuizMode;

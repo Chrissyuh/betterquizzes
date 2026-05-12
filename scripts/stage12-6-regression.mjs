@@ -37,7 +37,7 @@ assertIncludes("src/host/openaiBridge.ts", "isCompleteRenderableLaunch", "sealed
 assertIncludes("src/host/openaiBridge.ts", "getExpectedQuestionCount", "expected question count gate");
 assertExcludes("src/host/openaiBridge.ts", "bridge.widgetState", "widgetState launch hydration");
 
-for (const path of ["mcp/remote-server.mjs", "mcp/betterquizzer-app-server.mjs", "mcp/sdk-stdio-server.mjs"]) {
+for (const path of ["mcp/remote-server.mjs", "mcp/betterquizzes-app-server.mjs", "mcp/sdk-stdio-server.mjs"]) {
   assertIncludes(path, 'kind: "betterquizzer.launch"', "sealed launch packet");
   assertIncludes(path, 'kind: "betterquizzer.submission"', "sealed submission packet");
   assertIncludes(path, "complete: true", "complete packet flag");

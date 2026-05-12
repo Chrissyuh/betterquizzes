@@ -10,8 +10,10 @@ assert(server.includes('CREATE_QUIZ_INPUT_SCHEMA'), "create_quiz must use a name
 assert(server.includes('outputSchema: LAUNCH_OUTPUT_SCHEMA'), "create_quiz must expose an output schema");
 assert(server.includes('outputSchema: BUILDER_OUTPUT_SCHEMA'), "builder tools must expose output schemas");
 assert(server.includes('name: "finalize_quiz"'), "finalize_quiz must be registered");
-assert(server.includes('"openai/toolInvocation/invoking": "Finalizing quiz..."'), "finalize_quiz must attach widget launch metadata");
-assert(server.includes("finalize_quiz is the UI launch step"), "model instructions must make finalize_quiz the UI launch step");
+assert(server.includes('name: "open_quiz"'), "open_quiz must be registered");
+assert(server.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "open_quiz must attach widget launch metadata");
+assert(server.includes("finalize_quiz is storage-only; open_quiz is the UI launch step"), "model instructions must make open_quiz the UI launch step");
+assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");
 assert(server.includes('outputSchema: GRADE_OUTPUT_SCHEMA'), "grade tools must expose output schemas");
@@ -25,7 +27,7 @@ assert(server.includes('MultipleChoiceQuestion'), "schema must include multiple 
 assert(server.includes('ShortAnswerQuestion'), "schema must include short answer shape");
 assert(server.includes('prepareQuizForRender'), "server must normalize and validate quizzes before rendering");
 assert(server.includes('getRenderDiagnostics'), "server must return render diagnostics");
-assert(server.includes('buildLaunchToolResult'), "finalize_quiz and create_quiz should share launch storage/result logic");
+assert(server.includes('buildLaunchToolResult') && server.includes('function openQuiz'), "open_quiz and create_quiz should share launch storage/result logic");
 assert(server.includes('renderableQuestionCount'), "create_quiz must report renderable question count");
 assert(server.includes('componentByQuestion'), "render diagnostics must include componentByQuestion");
 assert(server.includes('normalizedFields'), "render diagnostics must include normalizedFields");

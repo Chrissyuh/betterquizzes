@@ -68,6 +68,7 @@ async function runSmoke() {
   assert(toolNames.includes("start_quiz"), "start_quiz missing");
   assert(toolNames.includes("add_question"), "add_question missing");
   assert(toolNames.includes("finalize_quiz"), "finalize_quiz missing");
+  assert(toolNames.includes("open_quiz"), "open_quiz missing");
   assert(toolNames.includes("submit_answers"), "submit_answers missing");
   for (const tool of listed.result.tools) {
     assert(tool.outputSchema && tool.outputSchema.type === "object", `${tool.name} missing object outputSchema`);
@@ -75,7 +76,12 @@ async function runSmoke() {
     assert(tool.annotations?.openWorldHint !== true, `${tool.name} should not be open-world`);
   }
   const finalizeTool = listed.result.tools.find((tool) => tool.name === "finalize_quiz");
-  assert(finalizeTool._meta?.["openai/outputTemplate"], "finalize_quiz missing widget output template");
+  assert(!finalizeTool._meta?.["openai/outputTemplate"], "finalize_quiz must not have widget output template");
+  const openTool = listed.result.tools.find((tool) => tool.name === "open_quiz");
+  assert(openTool._meta?.["openai/outputTemplate"], "open_quiz missing widget output template");
+  assert(openTool.annotations?.readOnlyHint === true, "open_quiz should be read-only");
+  assert(openTool.annotations?.idempotentHint === true, "open_quiz should be idempotent");
+  assert(!openTool.inputSchema?.required?.length, "open_quiz should not require arguments");
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(startTool?.inputSchema?.properties?.questions?.type === "array", "start_quiz schema missing bulk questions array");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
@@ -134,10 +140,23 @@ async function runSmoke() {
     name: "finalize_quiz",
     arguments: { quizId: "staged-builder-smoke" }
   });
-  assert(partialFinalized.result.structuredContent.kind === "betterquizzer.launch", "partial finalize did not return launch packet");
-  assert(partialFinalized.result.structuredContent.declaredQuestionCount === 3, "partial finalize should preserve expected question count");
-  assert(partialFinalized.result.structuredContent.questionCount === 1, "partial finalize should launch available questions");
-  assert(partialFinalized.result.structuredContent.packetProgress.complete === false, "partial finalize should not be marked complete");
+  assert(partialFinalized.result.structuredContent.ok === true, "partial finalize should validate/store successfully");
+  assert(partialFinalized.result.structuredContent.questionCount === 1, "partial finalize should store available questions");
+  assert(partialFinalized.result.structuredContent.complete === false, "partial finalize should not be marked complete");
+
+  const opened = await rpc("tools/call", {
+    name: "open_quiz",
+    arguments: {}
+  });
+  assert(opened.result.structuredContent.kind === "betterquizzer.launch", "open_quiz did not return a launch packet");
+  assert(opened.result.structuredContent.declaredQuestionCount === 3, "open_quiz should preserve expected question count");
+  assert(opened.result.structuredContent.questionCount === 1, "open_quiz should launch available questions");
+  assert(opened.result.structuredContent.packetProgress.complete === false, "open_quiz partial launch should not be complete");
+  const replayedOpen = await rpc("tools/call", {
+    name: "open_quiz",
+    arguments: {}
+  });
+  assert(replayedOpen.result.structuredContent.launchId === opened.result.structuredContent.launchId, "open_quiz should replay a stable launchId for the same revision");
 
   await rpc("tools/call", {
     name: "add_question",
@@ -172,7 +191,7 @@ async function runSmoke() {
         ],
         right: [
           { id: "r1", text: "Create draft" },
-          { id: "r2", text: "Launch widget" }
+          { id: "r2", text: "Store validated quiz" }
         ],
         answer: [
           { leftId: "l1", rightId: "r1" },
@@ -309,12 +328,17 @@ async function runSmoke() {
     name: "finalize_quiz",
     arguments: { draftId: builderDraftId, quizId: "builder-ordering-smoke" }
   });
-  assert(finalized.result.structuredContent.kind === "betterquizzer.launch", "finalize_quiz did not return a launch packet");
+  assert(finalized.result.structuredContent.ok === true, "finalize_quiz did not validate/store builder quiz");
   assert(finalized.result.structuredContent.quizId === "builder-ordering-smoke", "finalize_quiz returned wrong canonical quizId");
-  assert(finalized.result.structuredContent.questionCount === 3, "finalize_quiz should launch all builder questions");
-  assert(finalized.result._meta?.ui?.route === "quiz", "finalize_quiz missing launch metadata route");
-  assert(finalized.result.structuredContent.quiz.questions[1].type === "matching", "canonical matching question was not preserved");
-  assert(Array.isArray(finalized.result.structuredContent.quiz.questions[2].left), "legacy matching pairs were not normalized to left/right");
+  assert(finalized.result.structuredContent.questionCount === 3, "finalize_quiz should store all builder questions");
+
+  const openedFinal = await rpc("tools/call", {
+    name: "open_quiz",
+    arguments: { quizId: "builder-ordering-smoke" }
+  });
+  assert(openedFinal.result._meta?.ui?.route === "quiz", "open_quiz missing launch metadata route");
+  assert(openedFinal.result.structuredContent.quiz.questions[1].type === "matching", "canonical matching question was not preserved");
+  assert(Array.isArray(openedFinal.result.structuredContent.quiz.questions[2].left), "legacy matching pairs were not normalized to left/right");
 
   const inspected = await rpc("tools/call", {
     name: "inspect_quiz",

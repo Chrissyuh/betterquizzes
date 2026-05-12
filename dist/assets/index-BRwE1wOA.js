@@ -37578,9 +37578,8 @@ function isCompleteRenderableLaunch(summaryRecord, quiz, diagnostics, source) {
 		if (summaryRecord.kind === "betterquizzer.tool_input_fallback") return countMatches;
 		return asRecord(summaryRecord.renderDiagnostics)?.rendererCertified === true && countMatches;
 	}
-	if (summaryRecord.complete !== true) return false;
 	if (summaryRecord.rendererCertified !== true) return false;
-	if (expectedQuestionCount === null || quiz.questions.length !== expectedQuestionCount) return false;
+	if (expectedQuestionCount === null || quiz.questions.length < 1 || quiz.questions.length > expectedQuestionCount) return false;
 	const summaryDiagnostics = asRecord(summaryRecord.renderDiagnostics);
 	if (!summaryDiagnostics) return false;
 	const summaryCertified = summaryDiagnostics.rendererCertified === true;
@@ -38684,6 +38683,8 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 		setError(null);
 		const session = createSession(quiz, records, startedAt);
 		const submission = createSubmissionCapsule(quiz, session);
+		if (launchId) submission.launchId = launchId;
+		if (typeof quiz.metadata?.quizRevision === "number") submission.quizRevision = quiz.metadata.quizRevision;
 		submission.status = {
 			...submission.status ?? {
 				localSaved: true,

@@ -43,13 +43,15 @@ async function runTrial() {
   const listed = await check("MCP tools/list", () => rpc("tools/list", {}), (value) => Array.isArray(value.result?.tools));
   const tools = listed.result.tools;
   const toolNames = tools.map((tool) => tool.name);
-  for (const required of ["start_quiz", "add_question", "finalize_quiz", "create_quiz", "submit_answers", "inspect_quiz"]) {
+  for (const required of ["start_quiz", "add_question", "finalize_quiz", "open_quiz", "create_quiz", "submit_answers", "inspect_quiz"]) {
     assert(toolNames.includes(required), `${required} missing from tools/list`);
   }
 
   const finalizeTool = tools.find((tool) => tool.name === "finalize_quiz");
-  const resourceUri = finalizeTool?._meta?.["openai/outputTemplate"] || finalizeTool?._meta?.ui?.resourceUri;
-  assert(typeof resourceUri === "string" && resourceUri.startsWith("ui://"), "finalize_quiz must expose a UI resource URI");
+  assert(!finalizeTool?._meta?.["openai/outputTemplate"], "finalize_quiz must not expose a UI output template");
+  const openTool = tools.find((tool) => tool.name === "open_quiz");
+  const resourceUri = openTool?._meta?.["openai/outputTemplate"] || openTool?._meta?.ui?.resourceUri;
+  assert(typeof resourceUri === "string" && resourceUri.startsWith("ui://"), "open_quiz must expose a UI resource URI");
 
   const resources = await check("MCP resources/list", () => rpc("resources/list", {}), (value) => Array.isArray(value.result?.resources));
   assert(resources.result.resources.some((resource) => resource.uri === resourceUri), "resources/list must include the widget resource");
@@ -65,7 +67,9 @@ async function runTrial() {
     await check(`MCP tools/call add_question ${question.id}`, () => callTool("add_question", { draftId, question }), (value) => value.result?.structuredContent?.ok === true);
   }
   const created = await check("MCP tools/call finalize_quiz", () => callTool("finalize_quiz", { draftId, quizId: quiz.quizId }), (value) => value.result?.structuredContent?.quizId === quiz.quizId);
-  assert(created.result?._meta?.quiz?.quizId === quiz.quizId, "finalize_quiz must privately hydrate the widget with the quiz");
+  assert(created.result?.structuredContent?.ok === true, "finalize_quiz must validate/store the quiz");
+  const opened = await check("MCP tools/call open_quiz", () => callTool("open_quiz", { quizId: quiz.quizId }), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch");
+  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "open_quiz must privately hydrate the widget with the quiz");
 
   const inspected = await check("MCP tools/call inspect_quiz", () => callTool("inspect_quiz", { quizId: quiz.quizId }), (value) => value.result?.structuredContent?.questionCount === quiz.questions.length);
 
@@ -208,6 +212,6 @@ function markdownReport(report) {
   lines.push("");
   lines.push(`## Next manual step`);
   lines.push("");
-  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz` and `add_question`, launch with `finalize_quiz`, take the quiz in the widget, then verify the LLM receives and grades the `SubmissionCapsule`.");
+  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz` and `add_question`, validate/store with `finalize_quiz`, launch once with `open_quiz`, take the quiz in the widget, then verify the LLM receives and grades the `SubmissionCapsule`.");
   return lines.join("\n");
 }

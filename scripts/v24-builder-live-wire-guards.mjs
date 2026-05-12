@@ -25,6 +25,7 @@ for (const tool of [
   "add_question",
   "repair_question",
   "finalize_quiz",
+  "open_quiz",
   "record_grade",
   "get_grade"
 ]) {
@@ -49,8 +50,9 @@ const spreadIndex = remote.indexOf("...V23_BUILDER_TOOL_DEFS");
 assert(toolsIndex >= 0, "remote-server.mjs missing live tools array");
 assert(spreadIndex > toolsIndex, "V23 builder tools are not spread into the live tools array");
 assert(remote.includes("handleV23BuilderTool(name, v24BuilderArgs)"), "builder tool dispatch is not wired");
-assert(remote.includes('"openai/toolInvocation/invoking": "Finalizing quiz..."'), "finalize_quiz is missing launch widget metadata");
-assert(remote.includes("outputSchema: LAUNCH_OUTPUT_SCHEMA"), "finalize_quiz/create_quiz must expose launch output schema");
+assert(remote.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "open_quiz is missing launch widget metadata");
+assert(remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be idempotent");
+assert(remote.includes("outputSchema: LAUNCH_OUTPUT_SCHEMA"), "open_quiz/create_quiz must expose launch output schema");
 
 for (const token of [
   "requireConfidence?: boolean",

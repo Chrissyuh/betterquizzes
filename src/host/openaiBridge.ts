@@ -399,9 +399,8 @@ function isCompleteRenderableLaunch(summaryRecord: Record<string, unknown> | und
     return diagnosticsCertified && countMatches;
   }
 
-  if (summaryRecord.complete !== true) return false;
   if (summaryRecord.rendererCertified !== true) return false;
-  if (expectedQuestionCount === null || quiz.questions.length !== expectedQuestionCount) return false;
+  if (expectedQuestionCount === null || quiz.questions.length < 1 || quiz.questions.length > expectedQuestionCount) return false;
 
   const summaryDiagnostics = asRecord(summaryRecord.renderDiagnostics);
   if (!summaryDiagnostics) return false;

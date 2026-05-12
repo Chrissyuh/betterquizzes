@@ -13,7 +13,7 @@ const app = read("src/App.tsx");
 const dist = read(currentDistBundle());
 const submission = read("src/shared/submission.ts");
 const remote = read("mcp/remote-server.mjs");
-const appServer = read("mcp/betterquizzer-app-server.mjs");
+const appServer = read("mcp/betterquizzes-app-server.mjs");
 const css = read("src/styles.css");
 
 assert(remote.includes('stage: "12.7.0"'), "manifest/debug stage must be 12.7.0");
