@@ -32,7 +32,10 @@ assert(app.includes("function isRenderableOrderingDragText"), "ordering drag tex
 assert(app.includes("pendingRowRectsRef"), "ordering row animation rect capture missing");
 assert(app.includes("row.animate("), "ordering row movement animation missing");
 assert(app.includes("const [dragVisualOffset, setDragVisualOffset]"), "dragged ordering row should track a pointer-following visual offset");
+assert(app.includes("dragVisualOffsetRef"), "dragged ordering row should avoid transform feedback loops");
 assert(app.includes("updateDraggedVisualOffset"), "dragged ordering row visual offset updater missing");
+assert(app.includes("row.offsetTop"), "ordering drop math should use stable layout positions during row animations");
+assert(!app.includes("elementFromPoint(clientX, clientY)"), "ordering drop math should not depend on animated hit-test positions");
 assert(app.includes("setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex))"), "pointer drag should update non-dragged insertion marker before sorting");
 assert(app.includes("moveActiveDrag(touch.clientX, touch.clientY, event);"), "touch drag should route through the shared pointer-following sorter");
 assert(/setDropMarker\(markerFromInsertionIndex\(active\.id, nextDropIndex\)\);[\s\S]*moveToIndex\(active\.id, nextDropIndex\);/.test(app), "shared drag sorter should update insertion marker before sorting");
@@ -71,6 +74,7 @@ assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.draggable-order-i
 assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.drag-handle\s*\{[^}]*touch-action:\s*none/s.test(css), "drag handle should own touch drag gestures");
 assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.draggable-order-item\.dragging\s*\{[^}]*background:/s.test(css), "mobile dragging state should have immediate visual styling");
 assert(css.includes(".bq-ordering-rebuilt .drag-dot-grid"), "polished drag grip CSS missing");
+assert(/\.bq-ordering-rebuilt \.drag-order-list\s*\{[^}]*position:\s*relative/s.test(css), "ordering list should anchor stable row layout measurements");
 assert(!css.includes(".bq-ordering-rebuilt .order-controls"), "visible ordering arrow control CSS should stay removed");
 assert(/\.bq-ordering-rebuilt \.draggable-order-item\.dragging\s*\{[^}]*z-index:\s*10/s.test(css), "held ordering card should stay visually on top");
 assert(/\.bq-ordering-rebuilt \.draggable-order-item\.dragging\s*\{[^}]*translate3d\(var\(--drag-x/s.test(css), "held ordering card should follow the cursor/finger with CSS variables");

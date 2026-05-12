@@ -13662,6 +13662,7 @@ function OrderingInput({ question, response, onChange }) {
 	const [dropIndex, setDropIndex] = (0, import_react.useState)(null);
 	const [dropMarker, setDropMarker] = (0, import_react.useState)(null);
 	const [dragVisualOffset, setDragVisualOffset] = (0, import_react.useState)(null);
+	const dragVisualOffsetRef = (0, import_react.useRef)(null);
 	const dragRef = (0, import_react.useRef)(null);
 	const mobileDocumentCleanupRef = (0, import_react.useRef)(null);
 	const orderRef = (0, import_react.useRef)([]);
@@ -13736,16 +13737,23 @@ function OrderingInput({ question, response, onChange }) {
 	function updateDraggedVisualOffset() {
 		const active = dragRef.current;
 		if (!active) {
-			setDragVisualOffset(null);
+			setOrderingDragVisualOffset(null);
 			return;
 		}
 		const row = getOrderingRow(active.id);
 		if (!row) return;
 		const rect = row.getBoundingClientRect();
-		setDragVisualOffset({
-			x: active.currentX - active.grabOffsetX - rect.left,
-			y: active.currentY - active.grabOffsetY - rect.top
+		const previousOffset = dragVisualOffsetRef.current;
+		const baseLeft = rect.left - (previousOffset?.x ?? 0);
+		const baseTop = rect.top - (previousOffset?.y ?? 0);
+		setOrderingDragVisualOffset({
+			x: active.currentX - active.grabOffsetX - baseLeft,
+			y: active.currentY - active.grabOffsetY - baseTop
 		});
+	}
+	function setOrderingDragVisualOffset(offset) {
+		dragVisualOffsetRef.current = offset;
+		setDragVisualOffset(offset);
 	}
 	function moveByStep(id, step) {
 		const currentOrder = orderRef.current.length ? orderRef.current : order;
@@ -13781,22 +13789,15 @@ function OrderingInput({ question, response, onChange }) {
 		if (next.join("|") === currentOrder.join("|")) return;
 		commit(next);
 	}
-	function insertionIndexFromPoint(clientX, clientY, sourceId) {
+	function insertionIndexFromPoint(_clientX, clientY, sourceId) {
 		const list = listRef.current;
 		const currentOrder = orderRef.current.length ? orderRef.current : order;
 		if (!list) return currentOrder.indexOf(sourceId);
 		const rows = Array.from(list.querySelectorAll("[data-order-id]")).filter((row) => row.dataset.orderId !== sourceId);
-		const hit = typeof document !== "undefined" ? document.elementFromPoint(clientX, clientY)?.closest("[data-order-id]") : null;
-		if (hit && hit.dataset.orderId !== sourceId) {
-			const hitIndex = rows.findIndex((row) => row.dataset.orderId === hit.dataset.orderId);
-			if (hitIndex >= 0) {
-				const rect = hit.getBoundingClientRect();
-				return clientY < rect.top + rect.height / 2 ? hitIndex : hitIndex + 1;
-			}
-		}
+		const listRect = list.getBoundingClientRect();
 		for (let index = 0; index < rows.length; index += 1) {
-			const rect = rows[index].getBoundingClientRect();
-			if (clientY < rect.top + rect.height / 2) return index;
+			const row = rows[index];
+			if (clientY < listRect.top + row.offsetTop - list.scrollTop + row.offsetHeight / 2) return index;
 		}
 		return rows.length;
 	}
@@ -13881,7 +13882,7 @@ function OrderingInput({ question, response, onChange }) {
 			moved: false
 		};
 		setDraggedId(id);
-		setDragVisualOffset({
+		setOrderingDragVisualOffset({
 			x: 0,
 			y: 0
 		});
@@ -13945,7 +13946,7 @@ function OrderingInput({ question, response, onChange }) {
 		clearMobileDocumentDragListeners();
 		dragRef.current = null;
 		setDraggedId(null);
-		setDragVisualOffset(null);
+		setOrderingDragVisualOffset(null);
 		setDropIndex(null);
 		setDropMarker(null);
 		setOrderingDragScrollLock(false);

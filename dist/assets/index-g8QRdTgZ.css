@@ -2698,6 +2698,7 @@ button.drag-handle:focus-visible {
   gap: .65rem;
   max-width: 100%;
   min-width: 0;
+  position: relative;
 }
 
 .bq-ordering-rebuilt .draggable-order-item {
@@ -2741,7 +2742,7 @@ button.drag-handle:focus-visible {
 
 .bq-ordering-rebuilt .draggable-order-item.dragging {
   opacity: 1;
-  transform: translate3d(var(--drag-x, 0), var(--drag-y, 0), 0) scale(1.01);
+  transform: translate3d(var(--drag-x, 0), var(--drag-y, 0), 0);
   border-color: rgba(41, 71, 211, .62);
   background: linear-gradient(180deg, #eef4ff 0%, #e8efff 100%);
   box-shadow: 0 22px 48px rgba(41, 71, 211, .22);
@@ -2897,7 +2898,7 @@ button.drag-handle:focus-visible {
 
 .bq-ordering-rebuilt[data-ordering-mode="mobile"] .draggable-order-item.dragging {
   opacity: 1;
-  transform: translate3d(var(--drag-x, 0), var(--drag-y, 0), 0) scale(1.01);
+  transform: translate3d(var(--drag-x, 0), var(--drag-y, 0), 0);
   border-color: rgba(41, 71, 211, .64);
   background: linear-gradient(180deg, #eef4ff 0%, #e5edff 100%);
   box-shadow: 0 16px 34px rgba(41, 71, 211, .20);
