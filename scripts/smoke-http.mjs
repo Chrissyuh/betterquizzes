@@ -55,7 +55,7 @@ async function runSmoke() {
   assert(manifest.mcpEndpoint === "/mcp", "well-known manifest missing MCP endpoint");
 
   const initialized = await rpc("initialize", { protocolVersion: "2025-11-25", clientInfo: { name: "smoke-test", version: "0.1.0" } });
-  assert(initialized.result?.serverInfo?.name === "betterquizzer", "initialize failed");
+  assert(["betterquizzes", "betterquizzer"].includes(initialized.result?.serverInfo?.name), "initialize failed");
 
   const listed = await rpc("tools/list", {});
   const toolNames = listed.result.tools.map((tool) => tool.name);

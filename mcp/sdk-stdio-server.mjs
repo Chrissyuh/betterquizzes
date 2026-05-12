@@ -28,7 +28,7 @@ const RESOURCE_URI = "ui://widget/betterquizzes-v58-clean.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
-2. To start an activity, call create_quiz exactly once with a complete BetterQuizzes QuizSpec v2. Do not show raw JSON to the user or ask them to paste JSON.
+2. When builder tools are available, prefer start_quiz, add_question, repair_question, then finalize_quiz for new assistant-authored activities. In this SDK-only entrypoint, call create_quiz only after you have a complete BetterQuizzes QuizSpec v2. Do not show raw JSON to the user or ask them to paste JSON.
 3. A valid QuizSpec needs schema="betterquizzer.quiz", version=2, title, mode, displayPolicy, gradingPolicy, activityPolicy, and questions. Prefer gradingPolicy.preferredGrader="llm" and includeAnswerKeyInSubmission=true.
 4. Generate valid question data. multiple_choice and multi_select require a non-empty choices array. matching requires left and right arrays. ordering requires an items array. If unsure, use fill_blank, short_answer, or long_response instead of inventing an invalid structure.
 5. Use answerRequired to control whether a question blocks submission. Blank non-required questions are allowed, but grading them is case-dependent. Decide whether to score them, omit them, or mark Needs review from the activity context. Prefer allowSkipQuiz=true and allowSkipQuestions=true for practice. Avoid required reflection prompts unless the user asks for them; reflections are often irritating.
@@ -59,6 +59,31 @@ const server = new McpServer({
   }
 });
 
+const LAUNCH_OUTPUT_SCHEMA = {
+  kind: z.literal("betterquizzer.launch"),
+  launchId: z.string(),
+  quizId: z.string(),
+  title: z.string(),
+  questionCount: z.number(),
+  renderableQuestionCount: z.number().optional(),
+  rendererCertified: z.boolean().optional(),
+  complete: z.boolean().optional(),
+  quiz: z.any()
+};
+const SUBMISSION_OUTPUT_SCHEMA = {
+  kind: z.literal("betterquizzer.submission"),
+  complete: z.boolean(),
+  quizId: z.string(),
+  sessionId: z.string(),
+  submission: z.any()
+};
+const INSPECT_QUIZ_OUTPUT_SCHEMA = {
+  quizId: z.string(),
+  title: z.string(),
+  questionCount: z.number(),
+  types: z.array(z.string()).optional()
+};
+
 server.registerResource(
   "betterquizzer-widget",
   RESOURCE_URI,
@@ -80,6 +105,7 @@ server.registerTool(
     inputSchema: {
       quiz: z.any().describe("A BetterQuizzes QuizSpec v2 object. Include displayPolicy and gradingPolicy when possible.")
     },
+    outputSchema: LAUNCH_OUTPUT_SCHEMA,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false },
     _meta: {
       ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] },
@@ -108,6 +134,7 @@ server.registerTool(
         timeMs: z.number().min(0).optional()
       }).passthrough())
     },
+    outputSchema: SUBMISSION_OUTPUT_SCHEMA,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false },
     _meta: {
       "openai/widgetAccessible": true,
@@ -135,6 +162,7 @@ server.registerTool(
         timeMs: z.number().min(0).optional()
       }).passthrough())
     },
+    outputSchema: SUBMISSION_OUTPUT_SCHEMA,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false },
     _meta: {
       "openai/widgetAccessible": true,
@@ -151,6 +179,7 @@ server.registerTool(
     title: "Inspect BetterQuizzes Quiz",
     description: "Return a short summary of a stored quiz for debugging and smoke tests.",
     inputSchema: { quizId: z.string() },
+    outputSchema: INSPECT_QUIZ_OUTPUT_SCHEMA,
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true }
   },
   async ({ quizId }) => inspectQuizResult(quizId)

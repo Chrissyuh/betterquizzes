@@ -48,7 +48,7 @@ const spreadIndex = remote.indexOf("...V23_BUILDER_TOOL_DEFS");
 
 assert(toolsIndex >= 0, "remote-server.mjs missing live tools array");
 assert(spreadIndex > toolsIndex, "V23 builder tools are not spread into the live tools array");
-assert(remote.includes("return handleV23BuilderTool"), "builder tool dispatch is not wired");
+assert(remote.includes("okResponse(id, handleV23BuilderTool"), "builder tool dispatch must return a valid JSON-RPC tool result");
 
 for (const token of [
   "requireConfidence?: boolean",

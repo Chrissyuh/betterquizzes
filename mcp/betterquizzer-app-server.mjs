@@ -58,26 +58,61 @@ const FINALIZE_QUIZ_INPUT_SCHEMA = {
   }
 };
 
+
+const GENERIC_OBJECT_SCHEMA = { type: "object", additionalProperties: true };
+const BUILDER_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    ok: { type: "boolean" },
+    draftId: { type: "string" },
+    questionCount: { type: "integer", minimum: 0 },
+    question: GENERIC_OBJECT_SCHEMA,
+    draft: GENERIC_OBJECT_SCHEMA,
+    quiz: GENERIC_OBJECT_SCHEMA,
+    needsRepair: { type: "boolean" },
+    tool: { type: "string" },
+    issues: { type: "array", items: { type: "string" } },
+    invalid: { type: "array", items: GENERIC_OBJECT_SCHEMA },
+    repairRequest: GENERIC_OBJECT_SCHEMA,
+    instructions: { type: "string" },
+    next: { type: "string" }
+  },
+  additionalProperties: true
+};
+const LAUNCH_OUTPUT_SCHEMA = { type: "object", properties: { kind: { const: "betterquizzer.launch" }, launchId: { type: "string" }, quizId: { type: "string" }, title: { type: "string" }, questionCount: { type: "integer", minimum: 0 }, renderableQuestionCount: { type: "integer", minimum: 0 }, rendererCertified: { type: "boolean" }, complete: { type: "boolean" }, renderDiagnostics: GENERIC_OBJECT_SCHEMA, quiz: GENERIC_OBJECT_SCHEMA }, additionalProperties: true };
+const SUBMISSION_OUTPUT_SCHEMA = { type: "object", properties: { kind: { const: "betterquizzer.submission" }, complete: { type: "boolean" }, quizId: { type: "string" }, sessionId: { type: "string" }, submission: GENERIC_OBJECT_SCHEMA }, required: ["kind", "quizId", "submission"], additionalProperties: true };
+const GRADE_OUTPUT_SCHEMA = { type: "object", properties: { ok: { type: "boolean" }, grade: { anyOf: [GENERIC_OBJECT_SCHEMA, { type: "null" }] } }, additionalProperties: true };
+const INSPECT_QUIZ_OUTPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, title: { type: "string" }, questionCount: { type: "integer", minimum: 0 }, renderableQuestionCount: { type: "integer", minimum: 0 }, unrenderableQuestions: { type: "array", items: GENERIC_OBJECT_SCHEMA }, warnings: { type: "array", items: { type: "string" } }, renderDiagnostics: GENERIC_OBJECT_SCHEMA, types: { type: "array", items: { type: "string" } } }, additionalProperties: true };
+const DRAFT_TOOL_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false };
+
 const V23_BUILDER_TOOL_DEFS = [
   {
     name: "start_quiz",
     description: "Start an incremental BetterQuizzes draft. " + V2_BUILDER_INSTRUCTIONS,
-    inputSchema: START_QUIZ_INPUT_SCHEMA
+    inputSchema: START_QUIZ_INPUT_SCHEMA,
+    outputSchema: BUILDER_OUTPUT_SCHEMA,
+    annotations: DRAFT_TOOL_ANNOTATIONS
   },
   {
     name: "add_question",
     description: "Add one validated question to an incremental BetterQuizzes draft.",
-    inputSchema: ADD_QUESTION_INPUT_SCHEMA
+    inputSchema: ADD_QUESTION_INPUT_SCHEMA,
+    outputSchema: BUILDER_OUTPUT_SCHEMA,
+    annotations: DRAFT_TOOL_ANNOTATIONS
   },
   {
     name: "repair_question",
     description: "Replace or repair one invalid or incomplete question in an incremental BetterQuizzes draft.",
-    inputSchema: ADD_QUESTION_INPUT_SCHEMA
+    inputSchema: ADD_QUESTION_INPUT_SCHEMA,
+    outputSchema: BUILDER_OUTPUT_SCHEMA,
+    annotations: DRAFT_TOOL_ANNOTATIONS
   },
   {
     name: "finalize_quiz",
     description: "Finalize an incremental BetterQuizzes draft into a betterquizzer.quiz v2 quiz object.",
-    inputSchema: FINALIZE_QUIZ_INPUT_SCHEMA
+    inputSchema: FINALIZE_QUIZ_INPUT_SCHEMA,
+    outputSchema: BUILDER_OUTPUT_SCHEMA,
+    annotations: DRAFT_TOOL_ANNOTATIONS
   }
 ];
 
@@ -526,11 +561,11 @@ function cleanOrigin(value) {
 
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
-2. To start an activity, call create_quiz exactly once with {"quiz": BetterQuizzesQuizSpecV2}. Do not call create_quiz with raw questions only.
+2. For a new assistant-authored activity, use the incremental builder by default: call start_quiz, then add_question once per question, repair_question only when a question is rejected or incomplete, and finalize_quiz when the draft is ready. Use create_quiz only when you already have a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
 3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless repairing older input.
 4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, and numeric. Use multi_write_vertical when a prompt needs any number of separate written answers, text_select when the user should select words/segments inside a passage, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall.
 5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based choice indexes; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; ordering answer is ordered item ids in visual top-to-bottom order and should include orderingBehavior labels when direction matters; matching answer is [{leftId,rightId}].
-6. Each advertised question type has renderer certification. If create_quiz returns renderDiagnostics.unrenderableQuestions or rendererCertified=false, fix the QuizSpec and call create_quiz once more. Do not keep retrying blindly.
+6. Each advertised question type has renderer certification. If add_question or finalize_quiz asks for repair, call repair_question for the specific bad question instead of restarting the whole quiz. If create_quiz returns renderDiagnostics.unrenderableQuestions or rendererCertified=false, prefer repairing the draft with the builder; only retry create_quiz once when you already have a complete top-level quiz packet. Do not keep retrying blindly.
 7. Required questions should be rare. BetterQuizzes is usually AI practice, not a school-grade test. Default to activityPolicy.defaultAnswerRequired=false with allowSkipQuiz=true and allowSkipQuestions=true unless the user explicitly asks for a strict test, certification check, or all-questions-required assessment. Use answerRequired=true only for essential blocking questions. If uncertainty is expected, make the question optional or include an explicit ‘I’m not sure’ choice. Blank non-required questions are allowed and should not be penalized. Reflections should be optional unless the user asks for them.
 8. Avoid answer leakage: do not reveal the answer to an earlier unresolved question in later prompts, choices, matching labels, examples, or explanations. For matching questions, do not place right-side answers in the same order as the left side; shuffle or naturally reorder them. Keep placeholder/example text short enough for the field size; compact and multi-write field placeholders should usually stay under 35–45 characters. Formatting controls are off by default; set question.formatting=true only for notation-heavy written answers where it helps, mainly math, chemistry, formulas, exponents, or subscripts.
 9. After create_quiz succeeds, stop and let the user complete the widget. Do not grade from the original quiz.
@@ -628,13 +663,12 @@ const GRADE_INPUT_SCHEMA = {
 };
 
 const tools = [
-  
   ...V23_BUILDER_TOOL_DEFS,
-{ name: "create_quiz", title: "Open BetterQuizzes", description: CREATE_QUIZ_DESCRIPTION, inputSchema: CREATE_QUIZ_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] }, "openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Preparing quiz…", "openai/toolInvocation/invoked": "Quiz ready" } },
-  { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers…", "openai/toolInvocation/invoked": "Answers submitted" } },
-  { name: "record_grade", title: "Record BetterQuizzes Grade", description: "Record ChatGPT's structured grade so the BetterQuizzes widget can display a score ring or qualitative feedback. Call this after grading a submitted quiz.", inputSchema: GRADE_INPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Recording grade…", "openai/toolInvocation/invoked": "Grade recorded" } },
-  { name: "get_grade", title: "Get BetterQuizzes Grade", description: "Return a recorded BetterQuizzes grade for a quiz/session.", inputSchema: { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } },
-  { name: "inspect_quiz", title: "Inspect BetterQuizzes Quiz", description: "Return a short summary and render diagnostics for a stored quiz.", inputSchema: { type: "object", properties: { quizId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } }
+  { name: "create_quiz", title: "Open BetterQuizzes", description: CREATE_QUIZ_DESCRIPTION, inputSchema: CREATE_QUIZ_INPUT_SCHEMA, outputSchema: LAUNCH_OUTPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ["model", "app"] }, "openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Preparing quiz...", "openai/toolInvocation/invoked": "Quiz ready" } },
+  { name: "submit_answers", title: "Submit BetterQuizzes Answers", description: "Receive final user answers from the BetterQuizzes widget and return a SubmissionCapsule. After this tool returns, grade immediately and concisely from this result; do not reopen, recreate, or re-run the original quiz. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.", inputSchema: SUBMIT_ANSWERS_INPUT_SCHEMA, outputSchema: SUBMISSION_OUTPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Submitting answers...", "openai/toolInvocation/invoked": "Answers submitted" } },
+  { name: "record_grade", title: "Record BetterQuizzes Grade", description: "Record ChatGPT's structured grade so the BetterQuizzes widget can display a score ring or qualitative feedback. This updates only the current BetterQuizzes grade state; it is not destructive and does not access the open web. Call this after grading a submitted quiz.", inputSchema: GRADE_INPUT_SCHEMA, outputSchema: GRADE_OUTPUT_SCHEMA, annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false }, _meta: { "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Recording grade...", "openai/toolInvocation/invoked": "Grade recorded" } },
+  { name: "get_grade", title: "Get BetterQuizzes Grade", description: "Return a recorded BetterQuizzes grade for a quiz/session.", inputSchema: { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, outputSchema: GRADE_OUTPUT_SCHEMA, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } },
+  { name: "inspect_quiz", title: "Inspect BetterQuizzes Quiz", description: "Return a short summary and render diagnostics for a stored quiz.", inputSchema: { type: "object", properties: { quizId: { type: "string" } }, required: ["quizId"], additionalProperties: false }, outputSchema: INSPECT_QUIZ_OUTPUT_SCHEMA, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true } }
 ];
 
 const submitAnswersAlias = tools.find((tool) => tool.name === "submit_answers");
@@ -685,7 +719,7 @@ function handleRequest(message) {
                 : typeof request !== "undefined"
                   ? request?.params?.arguments ?? {}
                   : {};
-      return handleV23BuilderTool(name, v24BuilderArgs);
+      return ok(id, handleV23BuilderTool(name, v24BuilderArgs));
     }
 
     if (name === "create_quiz") return createQuiz(id, args.quiz);
