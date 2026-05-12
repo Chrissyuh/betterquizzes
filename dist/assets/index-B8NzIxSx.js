@@ -13661,6 +13661,7 @@ function OrderingInput({ question, response, onChange }) {
 	const [draggedId, setDraggedId] = (0, import_react.useState)(null);
 	const [dropIndex, setDropIndex] = (0, import_react.useState)(null);
 	const [dropMarker, setDropMarker] = (0, import_react.useState)(null);
+	const [dragVisualOffset, setDragVisualOffset] = (0, import_react.useState)(null);
 	const dragRef = (0, import_react.useRef)(null);
 	const mobileDocumentCleanupRef = (0, import_react.useRef)(null);
 	const orderRef = (0, import_react.useRef)([]);
@@ -13688,11 +13689,14 @@ function OrderingInput({ question, response, onChange }) {
 			const deltaY = previous.top - next.top;
 			if (Math.abs(deltaY) < 1) continue;
 			row.animate([{ transform: `translateY(${deltaY}px)` }, { transform: "translateY(0)" }], {
-				duration: 210,
-				easing: "cubic-bezier(.2, .8, .2, 1)"
+				duration: 430,
+				easing: "cubic-bezier(.16, 1, .3, 1)"
 			});
 		}
 	}, [order.join("|")]);
+	(0, import_react.useLayoutEffect)(() => {
+		updateDraggedVisualOffset();
+	}, [order.join("|"), draggedId]);
 	(0, import_react.useEffect)(() => {
 		if (!response.length && itemIds.length) onChange(bqV26AvoidAlreadyCorrectOrdering(question, items, getInitialOrderingOrder(question, items)));
 	}, [
@@ -13725,6 +13729,23 @@ function OrderingInput({ question, response, onChange }) {
 	function captureOrderingRowRects() {
 		const rows = Array.from(listRef.current?.querySelectorAll("[data-order-id]") ?? []);
 		return new Map(rows.map((row) => [row.dataset.orderId ?? "", row.getBoundingClientRect()]));
+	}
+	function getOrderingRow(id) {
+		return Array.from(listRef.current?.querySelectorAll("[data-order-id]") ?? []).find((row) => row.dataset.orderId === id) ?? null;
+	}
+	function updateDraggedVisualOffset() {
+		const active = dragRef.current;
+		if (!active) {
+			setDragVisualOffset(null);
+			return;
+		}
+		const row = getOrderingRow(active.id);
+		if (!row) return;
+		const rect = row.getBoundingClientRect();
+		setDragVisualOffset({
+			x: active.currentX - active.grabOffsetX - rect.left,
+			y: active.currentY - active.grabOffsetY - rect.top
+		});
 	}
 	function moveByStep(id, step) {
 		const currentOrder = orderRef.current.length ? orderRef.current : order;
@@ -13813,13 +13834,7 @@ function OrderingInput({ question, response, onChange }) {
 				finishDrag();
 				return;
 			}
-			event.preventDefault();
-			active.lastY = touch.clientY;
-			active.moved = true;
-			const nextDropIndex = insertionIndexFromPoint(touch.clientX, touch.clientY, active.id);
-			setDropIndex(nextDropIndex);
-			setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
-			moveToIndex(active.id, nextDropIndex);
+			moveActiveDrag(touch.clientX, touch.clientY, event);
 		};
 		const onDocumentTouchEnd = (event) => {
 			const active = dragRef.current;
@@ -13850,6 +13865,7 @@ function OrderingInput({ question, response, onChange }) {
 	}
 	function startDrag(id, mode, clientX, clientY, pointerId, touchIdentifier) {
 		if (dragRef.current) return;
+		const rowRect = getOrderingRow(id)?.getBoundingClientRect();
 		dragRef.current = {
 			id,
 			mode,
@@ -13857,10 +13873,18 @@ function OrderingInput({ question, response, onChange }) {
 			touchIdentifier,
 			startX: clientX,
 			startY: clientY,
+			grabOffsetX: rowRect ? clientX - rowRect.left : 0,
+			grabOffsetY: rowRect ? clientY - rowRect.top : 0,
+			currentX: clientX,
+			currentY: clientY,
 			lastY: clientY,
 			moved: false
 		};
 		setDraggedId(id);
+		setDragVisualOffset({
+			x: 0,
+			y: 0
+		});
 		setDropIndex(orderRef.current.indexOf(id));
 		setDropMarker(null);
 		setOrderingDragScrollLock(true);
@@ -13902,11 +13926,15 @@ function OrderingInput({ question, response, onChange }) {
 			if (!active.moved && distance < 4) return;
 		}
 		active.moved = true;
+		active.currentX = clientX;
+		active.currentY = clientY;
+		active.lastY = clientY;
 		event?.preventDefault();
 		const nextDropIndex = insertionIndexFromPoint(clientX, clientY, active.id);
 		setDropIndex(nextDropIndex);
 		setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
 		moveToIndex(active.id, nextDropIndex);
+		updateDraggedVisualOffset();
 	}
 	function moveDrag(event) {
 		const active = dragRef.current;
@@ -13917,6 +13945,7 @@ function OrderingInput({ question, response, onChange }) {
 		clearMobileDocumentDragListeners();
 		dragRef.current = null;
 		setDraggedId(null);
+		setDragVisualOffset(null);
 		setDropIndex(null);
 		setDropMarker(null);
 		setOrderingDragScrollLock(false);
@@ -13973,8 +14002,13 @@ function OrderingInput({ question, response, onChange }) {
 					const isDragged = draggedId === id;
 					const isDropBefore = dropMarker?.id === id && dropMarker.edge === "before";
 					const isDropAfter = dropMarker?.id === id && dropMarker.edge === "after";
+					const dragStyle = isDragged && dragVisualOffset ? {
+						"--drag-x": `${dragVisualOffset.x}px`,
+						"--drag-y": `${dragVisualOffset.y}px`
+					} : void 0;
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: (isDragged ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (!isDragged && dropIndex === index ? " drag-over" : "") + (isDropBefore ? " drop-before" : "") + (isDropAfter ? " drop-after" : ""),
+						style: dragStyle,
 						"data-order-id": id,
 						draggable: false,
 						"aria-roledescription": "sortable item",

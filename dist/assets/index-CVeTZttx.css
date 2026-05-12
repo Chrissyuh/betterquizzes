@@ -2702,24 +2702,26 @@ button.drag-handle:focus-visible {
 
 .bq-ordering-rebuilt .draggable-order-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 4.25rem;
-  gap: .75rem;
+  grid-template-columns: minmax(0, 1fr) 3.05rem;
+  gap: .48rem;
   align-items: center;
   border: 1px solid rgba(148, 163, 184, .24);
   border-radius: 14px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  padding: .78rem .82rem;
+  padding: .78rem .62rem .78rem .82rem;
   cursor: default;
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
   position: relative;
-  width: min(100%, calc(100vw - 3.5rem));
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   box-shadow: 0 8px 20px rgba(15, 23, 42, .05);
-  transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease, opacity .18s ease;
+  transition: border-color .3s ease, background .3s ease, transform .34s cubic-bezier(.16, 1, .3, 1), box-shadow .3s ease, opacity .3s ease;
 }
 
 .bq-ordering-rebuilt[data-ordering-mode="desktop"] .draggable-order-item {
@@ -2739,11 +2741,13 @@ button.drag-handle:focus-visible {
 
 .bq-ordering-rebuilt .draggable-order-item.dragging {
   opacity: 1;
-  transform: translateY(-2px) scale(.994);
+  transform: translate3d(var(--drag-x, 0), var(--drag-y, 0), 0) scale(1.01);
   border-color: rgba(41, 71, 211, .62);
   background: linear-gradient(180deg, #eef4ff 0%, #e8efff 100%);
   box-shadow: 0 22px 48px rgba(41, 71, 211, .22);
   z-index: 10;
+  transition: border-color .24s ease, background .24s ease, box-shadow .24s ease, opacity .24s ease;
+  will-change: transform;
 }
 
 .bq-ordering-rebuilt .draggable-order-item.dragging::before {
@@ -2818,15 +2822,15 @@ button.drag-handle:focus-visible {
   align-items: center;
   justify-content: center;
   gap: .35rem;
-  width: 3rem;
-  min-width: 3rem;
-  height: 3rem;
-  min-height: 3rem;
-  border-radius: 14px;
-  background: #ffffff;
-  color: #344054;
-  border: 1px solid rgba(148, 163, 184, .32);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .75), 0 8px 18px rgba(15, 23, 42, .08);
+  width: 2.55rem;
+  min-width: 2.55rem;
+  height: 2.85rem;
+  min-height: 2.85rem;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdff 0%, #eef4ff 100%);
+  color: #64748b;
+  border: 1px solid rgba(148, 163, 184, .34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 8px 18px rgba(15, 23, 42, .07);
   font-weight: 900;
   letter-spacing: 0;
   cursor: grab;
@@ -2834,17 +2838,17 @@ button.drag-handle:focus-visible {
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
-  justify-self: start;
-  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
+  justify-self: end;
+  transition: border-color .22s ease, background .22s ease, box-shadow .22s ease, transform .22s ease, color .22s ease;
 }
 
 .bq-ordering-rebuilt .drag-handle:active,
 .bq-ordering-rebuilt .drag-handle:focus-visible {
-  background: #eef4ff;
+  background: linear-gradient(180deg, #edf4ff 0%, #dce8ff 100%);
   border-color: rgba(41, 71, 211, .44);
   color: #2947d3;
   box-shadow: 0 0 0 4px rgba(41, 71, 211, .12), 0 10px 22px rgba(41, 71, 211, .12);
-  transform: scale(1.03);
+  transform: scale(1.025);
   outline: 0;
 }
 
@@ -2854,13 +2858,17 @@ button.drag-handle:focus-visible {
 }
 
 .bq-ordering-rebuilt .drag-dot-grid {
-  width: 1rem;
-  height: 1.2rem;
+  width: .82rem;
+  height: 1.08rem;
   display: block;
   background:
-    radial-gradient(circle, currentColor 1.8px, transparent 2.3px) 0 0 / .5rem .5rem,
-    radial-gradient(circle, currentColor 1.8px, transparent 2.3px) .5rem 0 / .5rem .5rem;
-  opacity: .72;
+    radial-gradient(circle at 25% 20%, currentColor 1.65px, transparent 2.15px),
+    radial-gradient(circle at 75% 20%, currentColor 1.65px, transparent 2.15px),
+    radial-gradient(circle at 25% 50%, currentColor 1.65px, transparent 2.15px),
+    radial-gradient(circle at 75% 50%, currentColor 1.65px, transparent 2.15px),
+    radial-gradient(circle at 25% 80%, currentColor 1.65px, transparent 2.15px),
+    radial-gradient(circle at 75% 80%, currentColor 1.65px, transparent 2.15px);
+  opacity: .68;
 }
 
 .bq-ordering-rebuilt .drag-label {
@@ -2889,7 +2897,7 @@ button.drag-handle:focus-visible {
 
 .bq-ordering-rebuilt[data-ordering-mode="mobile"] .draggable-order-item.dragging {
   opacity: 1;
-  transform: translateY(-2px) scale(.994);
+  transform: translate3d(var(--drag-x, 0), var(--drag-y, 0), 0) scale(1.01);
   border-color: rgba(41, 71, 211, .64);
   background: linear-gradient(180deg, #eef4ff 0%, #e5edff 100%);
   box-shadow: 0 16px 34px rgba(41, 71, 211, .20);
@@ -2902,12 +2910,12 @@ button.drag-handle:focus-visible {
   }
 
   .bq-ordering-rebuilt .draggable-order-item {
-    grid-template-columns: minmax(0, 1fr) 4rem;
-    gap: .55rem;
+    grid-template-columns: minmax(0, 1fr) 2.85rem;
+    gap: .38rem;
     align-items: center;
-    padding: .68rem;
-    width: min(100%, calc(100vw - 5.5rem));
-    max-width: calc(100vw - 5.5rem);
+    padding: .68rem .52rem .68rem .68rem;
+    width: 100%;
+    max-width: 100%;
     touch-action: pan-y;
   }
 
@@ -2927,11 +2935,11 @@ button.drag-handle:focus-visible {
     position: static;
     grid-column: 2;
     grid-row: 1;
-    justify-self: auto;
-    width: 2.85rem;
-    min-width: 2.85rem;
-    height: 2.85rem;
-    min-height: 2.85rem;
+    justify-self: end;
+    width: 2.42rem;
+    min-width: 2.42rem;
+    height: 2.7rem;
+    min-height: 2.7rem;
   }
 }
 /* END V61 ordering rebuild */

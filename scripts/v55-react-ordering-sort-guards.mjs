@@ -31,8 +31,11 @@ assert(app.includes("const ORDERING_ITEM_TEXT_MAX_CHARS = 64"), "ordering drag t
 assert(app.includes("function isRenderableOrderingDragText"), "ordering drag text renderability guard missing");
 assert(app.includes("pendingRowRectsRef"), "ordering row animation rect capture missing");
 assert(app.includes("row.animate("), "ordering row movement animation missing");
+assert(app.includes("const [dragVisualOffset, setDragVisualOffset]"), "dragged ordering row should track a pointer-following visual offset");
+assert(app.includes("updateDraggedVisualOffset"), "dragged ordering row visual offset updater missing");
 assert(app.includes("setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex))"), "pointer drag should update non-dragged insertion marker before sorting");
-assert(app.includes("setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));\n      moveToIndex(active.id, nextDropIndex);"), "touch drag should update insertion marker before sorting");
+assert(app.includes("moveActiveDrag(touch.clientX, touch.clientY, event);"), "touch drag should route through the shared pointer-following sorter");
+assert(/setDropMarker\(markerFromInsertionIndex\(active\.id, nextDropIndex\)\);[\s\S]*moveToIndex\(active\.id, nextDropIndex\);/.test(app), "shared drag sorter should update insertion marker before sorting");
 assert(app.includes('!isDragged && dropIndex === index ? " drag-over" : ""'), "drop-over class must not be applied to the actively dragged row");
 assert(app.includes('dropMarker?.id === id && dropMarker.edge === "before"'), "drop-before marker class logic missing");
 assert(app.includes('dropMarker?.id === id && dropMarker.edge === "after"'), "drop-after marker class logic missing");
@@ -70,8 +73,9 @@ assert(/\.bq-ordering-rebuilt\[data-ordering-mode="mobile"\] \.draggable-order-i
 assert(css.includes(".bq-ordering-rebuilt .drag-dot-grid"), "polished drag grip CSS missing");
 assert(!css.includes(".bq-ordering-rebuilt .order-controls"), "visible ordering arrow control CSS should stay removed");
 assert(/\.bq-ordering-rebuilt \.draggable-order-item\.dragging\s*\{[^}]*z-index:\s*10/s.test(css), "held ordering card should stay visually on top");
+assert(/\.bq-ordering-rebuilt \.draggable-order-item\.dragging\s*\{[^}]*translate3d\(var\(--drag-x/s.test(css), "held ordering card should follow the cursor/finger with CSS variables");
 assert(css.includes(".bq-ordering-rebuilt .draggable-order-item.dragging::before"), "drag placeholder underlay missing");
-assert(css.includes("grid-template-columns: minmax(0, 1fr) 4rem"), "mobile ordering handle should stay on the right");
+assert(css.includes("grid-template-columns: minmax(0, 1fr) 2.85rem"), "mobile ordering handle should stay compact on the right");
 assert(css.includes("@media (max-width: 720px), (hover: none), (pointer: coarse)"), "mobile-specific ordering CSS missing");
 assert(css.includes("bq-ordering-drag-lock"), "drag scroll lock CSS missing");
 assert(render.includes("ORDERING_ITEM_TEXT_MAX_CHARS = 64"), "render contract ordering item length cap missing");

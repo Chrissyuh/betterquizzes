@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type PointerEvent, type TouchEvent as ReactTouchEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode, type PointerEvent, type TouchEvent as ReactTouchEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   buildCompactReturnPrompt,
   buildCompletionSummary,
@@ -1870,6 +1870,10 @@ type OrderingDragState = {
   touchIdentifier?: number;
   startX: number;
   startY: number;
+  grabOffsetX: number;
+  grabOffsetY: number;
+  currentX: number;
+  currentY: number;
   lastY: number;
   moved: boolean;
   cleanup?: () => void;
@@ -1906,6 +1910,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [dropMarker, setDropMarker] = useState<{ id: string; edge: "before" | "after" } | null>(null);
+  const [dragVisualOffset, setDragVisualOffset] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<OrderingDragState | null>(null);
   const mobileDocumentCleanupRef = useRef<(() => void) | null>(null);
   const orderRef = useRef<string[]>([]);
@@ -1940,10 +1945,14 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
           { transform: `translateY(${deltaY}px)` },
           { transform: "translateY(0)" },
         ],
-        { duration: 210, easing: "cubic-bezier(.2, .8, .2, 1)" }
+        { duration: 430, easing: "cubic-bezier(.16, 1, .3, 1)" }
       );
     }
   }, [order.join("|")]);
+
+  useLayoutEffect(() => {
+    updateDraggedVisualOffset();
+  }, [order.join("|"), draggedId]);
 
   useEffect(() => {
     if (!response.length && itemIds.length) onChange(bqV26AvoidAlreadyCorrectOrdering(question, items, getInitialOrderingOrder(question, items)));
@@ -1974,6 +1983,28 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   function captureOrderingRowRects(): Map<string, DOMRect> {
     const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-order-id]") ?? []);
     return new Map(rows.map((row) => [row.dataset.orderId ?? "", row.getBoundingClientRect()]));
+  }
+
+  function getOrderingRow(id: string): HTMLElement | null {
+    const rows = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-order-id]") ?? []);
+    return rows.find((row) => row.dataset.orderId === id) ?? null;
+  }
+
+  function updateDraggedVisualOffset(): void {
+    const active = dragRef.current;
+    if (!active) {
+      setDragVisualOffset(null);
+      return;
+    }
+
+    const row = getOrderingRow(active.id);
+    if (!row) return;
+
+    const rect = row.getBoundingClientRect();
+    setDragVisualOffset({
+      x: active.currentX - active.grabOffsetX - rect.left,
+      y: active.currentY - active.grabOffsetY - rect.top,
+    });
   }
 
   function moveByStep(id: string, step: -1 | 1): void {
@@ -2070,13 +2101,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
         return;
       }
 
-      event.preventDefault();
-      active.lastY = touch.clientY;
-      active.moved = true;
-      const nextDropIndex = insertionIndexFromPoint(touch.clientX, touch.clientY, active.id);
-      setDropIndex(nextDropIndex);
-      setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
-      moveToIndex(active.id, nextDropIndex);
+      moveActiveDrag(touch.clientX, touch.clientY, event);
     };
 
     const onDocumentTouchEnd = (event: globalThis.TouchEvent): void => {
@@ -2115,6 +2140,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   function startDrag(id: string, mode: OrderingDragMode, clientX: number, clientY: number, pointerId?: number, touchIdentifier?: number): void {
     if (dragRef.current) return;
 
+    const rowRect = getOrderingRow(id)?.getBoundingClientRect();
     dragRef.current = {
       id,
       mode,
@@ -2122,10 +2148,15 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
       touchIdentifier,
       startX: clientX,
       startY: clientY,
+      grabOffsetX: rowRect ? clientX - rowRect.left : 0,
+      grabOffsetY: rowRect ? clientY - rowRect.top : 0,
+      currentX: clientX,
+      currentY: clientY,
       lastY: clientY,
       moved: false,
     };
     setDraggedId(id);
+    setDragVisualOffset({ x: 0, y: 0 });
     setDropIndex(orderRef.current.indexOf(id));
     setDropMarker(null);
     setOrderingDragScrollLock(true);
@@ -2173,11 +2204,15 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     }
 
     active.moved = true;
+    active.currentX = clientX;
+    active.currentY = clientY;
+    active.lastY = clientY;
     event?.preventDefault();
     const nextDropIndex = insertionIndexFromPoint(clientX, clientY, active.id);
     setDropIndex(nextDropIndex);
     setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
     moveToIndex(active.id, nextDropIndex);
+    updateDraggedVisualOffset();
   }
 
   function moveDrag(event: PointerEvent<HTMLElement>): void {
@@ -2190,6 +2225,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     clearMobileDocumentDragListeners();
     dragRef.current = null;
     setDraggedId(null);
+    setDragVisualOffset(null);
     setDropIndex(null);
     setDropMarker(null);
     setOrderingDragScrollLock(false);
@@ -2234,10 +2270,14 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
           const isDragged = draggedId === id;
           const isDropBefore = dropMarker?.id === id && dropMarker.edge === "before";
           const isDropAfter = dropMarker?.id === id && dropMarker.edge === "after";
+          const dragStyle = isDragged && dragVisualOffset
+            ? ({ "--drag-x": `${dragVisualOffset.x}px`, "--drag-y": `${dragVisualOffset.y}px` } as CSSProperties)
+            : undefined;
           return (
             <div
               className={(isDragged ? "order-item draggable-order-item dragging" : "order-item draggable-order-item") + (!isDragged && dropIndex === index ? " drag-over" : "") + (isDropBefore ? " drop-before" : "") + (isDropAfter ? " drop-after" : "")}
               key={id}
+              style={dragStyle}
               data-order-id={id}
               draggable={false}
               aria-roledescription="sortable item"
