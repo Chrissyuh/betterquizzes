@@ -660,8 +660,8 @@ function QuizRunner({
   useEffect(() => {
     if (!widgetMode) return;
     persistWidgetState({
-      kind: "betterquizzer.draft_state",
-      status: "draft",
+      kind: "betterquizzer.answer_state",
+      status: "answering",
       quizId: getQuizId(quiz),
       launchId,
       currentIndex,

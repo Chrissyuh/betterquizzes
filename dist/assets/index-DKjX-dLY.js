@@ -36960,6 +36960,7 @@ function normalizeQuestion(raw, index, warnings, normalizedFields) {
 		if (question.type === "multi_select" && Array.isArray(question.answer)) question.answer = question.answer.map((answer) => normalizeChoiceAnswer(answer, normalized, warnings, index)).filter((value) => Number.isInteger(value));
 	}
 	if ((question.type === "multi_typing" || question.type === "multi_write_vertical") && Array.isArray(question.fields)) question.fields = question.fields.map((field, fieldIndex) => normalizeTypingField(field, fieldIndex));
+	if (question.type === "matching") normalizeMatchingQuestion(question, index, warnings, normalizedFields);
 	if (question.type === "text_select") {
 		if (!Array.isArray(question.segments) && Array.isArray(question.selectableSegments)) {
 			question.segments = question.selectableSegments;
@@ -36987,6 +36988,65 @@ function normalizeQuestion(raw, index, warnings, normalizedFields) {
 		});
 	}
 	return question;
+}
+function normalizeMatchingQuestion(question, index, warnings, normalizedFields) {
+	const legacyPairs = question.pairs ?? question.matches ?? question.items;
+	if ((!Array.isArray(question.left) || !Array.isArray(question.right)) && Array.isArray(legacyPairs)) {
+		const left = [];
+		const right = [];
+		const answer = [];
+		legacyPairs.forEach((pair, pairIndex) => {
+			if (!isRecord(pair)) return;
+			const leftText = matchingSideText(pair.left ?? pair.term ?? pair.prompt ?? pair.source);
+			const rightText = matchingSideText(pair.right ?? pair.match ?? pair.answer ?? pair.target);
+			if (!leftText || !rightText) return;
+			const leftId = String(pair.leftId ?? pair.left_id ?? `left${pairIndex + 1}`);
+			const rightId = String(pair.rightId ?? pair.right_id ?? `right${pairIndex + 1}`);
+			left.push({
+				id: leftId,
+				text: leftText
+			});
+			right.push({
+				id: rightId,
+				text: rightText
+			});
+			answer.push({
+				leftId,
+				rightId
+			});
+		});
+		if (left.length && right.length) {
+			question.left = left;
+			question.right = right;
+			if (question.answer === void 0) question.answer = answer;
+			warnings.push(`questions[${index}]: normalized legacy matching pairs to left/right/answer.`);
+			normalizedFields.push({
+				path: `questions[${index}]`,
+				from: "pairs",
+				to: "left/right/answer"
+			});
+		}
+	}
+	if (isRecord(question.answer)) {
+		question.answer = Object.entries(question.answer).filter(([, rightId]) => typeof rightId === "string" || typeof rightId === "number").map(([leftId, rightId]) => ({
+			leftId,
+			rightId: String(rightId)
+		}));
+		warnings.push(`questions[${index}]: normalized matching answer object to [{leftId,rightId}].`);
+		normalizedFields.push({
+			path: `questions[${index}].answer`,
+			from: "object",
+			to: "array"
+		});
+	}
+}
+function matchingSideText(value) {
+	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value).trim();
+	if (isRecord(value)) {
+		const text = value.text ?? value.label ?? value.value ?? value.id;
+		return typeof text === "string" || typeof text === "number" || typeof text === "boolean" ? String(text).trim() : "";
+	}
+	return "";
 }
 function normalizeTypingField(field, fieldIndex) {
 	if (!isRecord(field)) return field;
@@ -37275,12 +37335,12 @@ function getPersistedDraftState(quizId) {
 	const state = getPersistedWidgetStateRecord();
 	if (!state) return null;
 	const kind = state.kind;
-	if (kind !== "betterquizzer.draft_state" && kind !== "betterquizzer.submission_state") return null;
+	if (kind !== "betterquizzer.answer_state" && kind !== "betterquizzer.draft_state" && kind !== "betterquizzer.submission_state") return null;
 	if (state.quizId !== quizId) return null;
 	if (kind === "betterquizzer.submission_state" && asSubmissionCapsule(state.submission)) return null;
 	return {
-		kind: "betterquizzer.draft_state",
-		status: "draft",
+		kind: "betterquizzer.answer_state",
+		status: "answering",
 		quizId,
 		launchId: typeof state.launchId === "string" ? state.launchId : void 0,
 		currentIndex: typeof state.currentIndex === "number" && Number.isFinite(state.currentIndex) ? state.currentIndex : void 0,
@@ -38509,8 +38569,8 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 	(0, import_react.useEffect)(() => {
 		if (!widgetMode) return;
 		persistWidgetState({
-			kind: "betterquizzer.draft_state",
-			status: "draft",
+			kind: "betterquizzer.answer_state",
+			status: "answering",
 			quizId: getQuizId(quiz),
 			launchId,
 			currentIndex,

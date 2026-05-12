@@ -132,21 +132,92 @@ async function runSmoke() {
     }
   });
 
+  await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: builderDraftId,
+      question: {
+        id: "match-1",
+        type: "matching",
+        prompt: "Match each release term to its meaning.",
+        left: [
+          { id: "l1", text: "Patch" },
+          { id: "l2", text: "Rollback" }
+        ],
+        right: [
+          { id: "r1", text: "Small fix" },
+          { id: "r2", text: "Revert to a previous version" }
+        ],
+        answer: [
+          { leftId: "l1", rightId: "r1" },
+          { leftId: "l2", rightId: "r2" }
+        ],
+        tags: ["smoke"]
+      }
+    }
+  });
+
+  await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: builderDraftId,
+      question: {
+        id: "match-legacy",
+        type: "matching",
+        prompt: "Match the legacy pair terms.",
+        pairs: [
+          { left: "Alpha", right: "First" },
+          { left: "Beta", right: "Second" }
+        ],
+        tags: ["smoke"]
+      }
+    }
+  });
+
+  await rpc("tools/call", {
+    name: "repair_question",
+    arguments: {
+      draftId: builderDraftId,
+      replace: true,
+      replaceQuestionId: "match-legacy",
+      repairedQuestion: {
+        id: "match-legacy",
+        type: "matching",
+        prompt: "Match the repaired canonical terms.",
+        left: [
+          { id: "left1", text: "Alpha" },
+          { id: "left2", text: "Beta" }
+        ],
+        right: [
+          { id: "right1", text: "First" },
+          { id: "right2", text: "Second" }
+        ],
+        answer: [
+          { leftId: "left1", rightId: "right1" },
+          { leftId: "left2", rightId: "right2" }
+        ],
+        tags: ["smoke"]
+      }
+    }
+  });
+
   const finalized = await rpc("tools/call", {
     name: "finalize_quiz",
     arguments: { draftId: builderDraftId, quizId: "builder-ordering-smoke" }
   });
   assert(finalized.result.structuredContent.kind === "betterquizzer.launch", "finalize_quiz did not return a launch packet");
   assert(finalized.result.structuredContent.quizId === "builder-ordering-smoke", "finalize_quiz returned wrong canonical quizId");
-  assert(finalized.result.structuredContent.questionCount === 1, "finalize_quiz should launch exactly one question");
+  assert(finalized.result.structuredContent.questionCount === 3, "finalize_quiz should launch all builder questions");
   assert(finalized.result._meta?.ui?.route === "quiz", "finalize_quiz missing launch metadata route");
+  assert(finalized.result.structuredContent.quiz.questions[1].type === "matching", "canonical matching question was not preserved");
+  assert(Array.isArray(finalized.result.structuredContent.quiz.questions[2].left), "legacy matching pairs were not normalized to left/right");
 
   const inspected = await rpc("tools/call", {
     name: "inspect_quiz",
     arguments: { quizId: finalized.result.structuredContent.quizId }
   });
   assert(inspected.result.structuredContent.quizId === "builder-ordering-smoke", "inspect_quiz could not find finalized builder quiz");
-  assert(inspected.result.structuredContent.questionCount === 1, "inspect_quiz returned wrong finalized question count");
+  assert(inspected.result.structuredContent.questionCount === 3, "inspect_quiz returned wrong finalized question count");
 
   const submitted = await rpc("tools/call", {
     name: "submit_answers",

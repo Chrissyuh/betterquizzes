@@ -22,8 +22,8 @@ export type SubmissionBridgeState = {
 };
 
 export type DraftBridgeState = {
-  kind: "betterquizzer.draft_state";
-  status: "draft";
+  kind: "betterquizzer.answer_state";
+  status: "answering";
   quizId: string;
   launchId?: string;
   currentIndex?: number;
@@ -130,7 +130,7 @@ export function getPersistedDraftState(quizId: string): DraftBridgeState | null 
   const state = getPersistedWidgetStateRecord();
   if (!state) return null;
   const kind = state.kind;
-  if (kind !== "betterquizzer.draft_state" && kind !== "betterquizzer.submission_state") return null;
+  if (kind !== "betterquizzer.answer_state" && kind !== "betterquizzer.draft_state" && kind !== "betterquizzer.submission_state") return null;
   if (state.quizId !== quizId) return null;
 
   // Terminal submissions must not be reinterpreted as editable drafts.
@@ -138,8 +138,8 @@ export function getPersistedDraftState(quizId: string): DraftBridgeState | null 
   if (kind === "betterquizzer.submission_state" && asSubmissionCapsule(state.submission)) return null;
 
   return {
-    kind: "betterquizzer.draft_state",
-    status: "draft",
+    kind: "betterquizzer.answer_state",
+    status: "answering",
     quizId,
     launchId: typeof state.launchId === "string" ? state.launchId : undefined,
     currentIndex: typeof state.currentIndex === "number" && Number.isFinite(state.currentIndex) ? state.currentIndex : undefined,

@@ -43,6 +43,8 @@ assert(app.includes("katex.renderToString") && app.includes("dangerouslySetInner
 assert(styles.includes("katex/dist/katex.min.css") || readFileSync("src/main.tsx", "utf8").includes("katex/dist/katex.min.css"), "KaTeX CSS must be loaded");
 assert(remote.includes("LaTeX math using only \\\\(...\\\\)") && remote.includes("Do not use dollar-sign math delimiters"), "model instructions must allow explicit LaTeX delimiters and reject dollar delimiters");
 assert(render.includes("COMPACT_CHOICE_TEXT_WARN_CHARS") && render.includes("compact display text"), "render contract must warn about long compact labels");
+assert(remote.includes("v23NormalizeMatchingQuestion") && remote.includes("Matching canonical shape") && remote.includes("left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]"), "builder tools must accept and describe canonical matching schema");
+assert(render.includes("normalizeMatchingQuestion") && render.includes("normalized legacy matching pairs to left/right/answer"), "render contract must normalize legacy matching pairs before finalization");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
 assert(app.includes("function formatPlainText"), "format buttons must not insert raw markdown/html tags into student answers");
 assert(app.includes("stripTextFormatting"), "format buttons must be reversible and able to clear plain-text formatting");

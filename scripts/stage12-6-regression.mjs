@@ -56,7 +56,7 @@ assertIncludes("src/App.tsx", "STABLE_LAUNCH_MS", "stable launch barrier");
 assertIncludes("src/App.tsx", "pendingLaunchRef", "pending launch stability state");
 assertIncludes("src/App.tsx", "HYDRATION_ERROR_DELAY_MS", "delayed hydration errors");
 assertIncludes("src/App.tsx", "getPersistedDraftState", "draft restore bridge read");
-assertIncludes("src/App.tsx", "betterquizzer.draft_state", "draft state persistence");
+assertIncludes("src/App.tsx", "betterquizzer.answer_state", "answer state persistence");
 assertIncludes("src/App.tsx", "responseDirection: behavior.direction", "ordering response direction metadata");
 assertExcludes("src/App.tsx", "Your order is submitted from top to bottom.", "removed ordering visual direction copy");
 assertIncludes("src/host/openaiBridge.ts", "source === \"chatgpt-widget\"", "stricter widget-only launch gate");
@@ -64,7 +64,7 @@ assertIncludes("src/host/openaiBridge.ts", "summaryRecord.kind !== \"betterquizz
 assertIncludes("src/shared/renderContract.ts", "normalizeOrderingBehavior", "ordering label normalization");
 assertIncludes("src/shared/submission.ts", "response arrays are visual top-to-bottom order", "ordering grading instruction");
 assertIncludes(DIST_JS, "STABLE_LAUNCH_MS", "compiled stable launch barrier");
-assertIncludes(DIST_JS, "betterquizzer.draft_state", "compiled draft persistence");
+assertIncludes(DIST_JS, "betterquizzer.answer_state", "compiled answer persistence");
 assertExcludes(DIST_JS, "Your order is submitted from top to bottom.", "compiled removed ordering copy");
 
 

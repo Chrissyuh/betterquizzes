@@ -313,6 +313,10 @@ function normalizeQuestion(raw: unknown, index: number, warnings: string[], norm
     question.fields = question.fields.map((field, fieldIndex) => normalizeTypingField(field, fieldIndex));
   }
 
+  if (question.type === "matching") {
+    normalizeMatchingQuestion(question, index, warnings, normalizedFields);
+  }
+
   if (question.type === "text_select") {
     if (!Array.isArray(question.segments) && Array.isArray(question.selectableSegments)) {
       question.segments = question.selectableSegments;
@@ -333,6 +337,52 @@ function normalizeQuestion(raw: unknown, index: number, warnings: string[], norm
   }
 
   return question;
+}
+
+function normalizeMatchingQuestion(question: MutableRecord, index: number, warnings: string[], normalizedFields: RenderNormalizedField[]): void {
+  const legacyPairs = question.pairs ?? question.matches ?? question.items;
+  if ((!Array.isArray(question.left) || !Array.isArray(question.right)) && Array.isArray(legacyPairs)) {
+    const left: Array<{ id: string; text: string }> = [];
+    const right: Array<{ id: string; text: string }> = [];
+    const answer: Array<{ leftId: string; rightId: string }> = [];
+
+    legacyPairs.forEach((pair, pairIndex) => {
+      if (!isRecord(pair)) return;
+      const leftText = matchingSideText(pair.left ?? pair.term ?? pair.prompt ?? pair.source);
+      const rightText = matchingSideText(pair.right ?? pair.match ?? pair.answer ?? pair.target);
+      if (!leftText || !rightText) return;
+      const leftId = String(pair.leftId ?? pair.left_id ?? `left${pairIndex + 1}`);
+      const rightId = String(pair.rightId ?? pair.right_id ?? `right${pairIndex + 1}`);
+      left.push({ id: leftId, text: leftText });
+      right.push({ id: rightId, text: rightText });
+      answer.push({ leftId, rightId });
+    });
+
+    if (left.length && right.length) {
+      question.left = left;
+      question.right = right;
+      if (question.answer === undefined) question.answer = answer;
+      warnings.push(`questions[${index}]: normalized legacy matching pairs to left/right/answer.`);
+      normalizedFields.push({ path: `questions[${index}]`, from: "pairs", to: "left/right/answer" });
+    }
+  }
+
+  if (isRecord(question.answer)) {
+    question.answer = Object.entries(question.answer)
+      .filter(([, rightId]) => typeof rightId === "string" || typeof rightId === "number")
+      .map(([leftId, rightId]) => ({ leftId, rightId: String(rightId) }));
+    warnings.push(`questions[${index}]: normalized matching answer object to [{leftId,rightId}].`);
+    normalizedFields.push({ path: `questions[${index}].answer`, from: "object", to: "array" });
+  }
+}
+
+function matchingSideText(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value).trim();
+  if (isRecord(value)) {
+    const text = value.text ?? value.label ?? value.value ?? value.id;
+    return typeof text === "string" || typeof text === "number" || typeof text === "boolean" ? String(text).trim() : "";
+  }
+  return "";
 }
 
 function normalizeTypingField(field: unknown, fieldIndex: number): unknown {
