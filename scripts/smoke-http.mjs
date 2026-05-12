@@ -107,62 +107,108 @@ async function runSmoke() {
   assert(created.result._meta.quiz.questions.length === 2, "create_quiz did not include private quiz metadata");
   assert(created.result.structuredContent.quiz.questions.length === 2, "create_quiz did not include model-visible quiz payload for widget hydration");
 
-  const bulkStarted = await rpc("tools/call", {
+  const stagedStarted = await rpc("tools/call", {
     name: "start_quiz",
     arguments: {
-      title: "Bulk Builder Smoke",
+      title: "Staged Builder Smoke",
       topic: "QA",
-      expectedQuestionCount: 3,
-      questions: [
-        {
-          id: "bulk-choice",
-          type: "multiple_choice",
-          prompt: "Pick the checked path.",
-          choices: ["Builder", "Legacy"],
-          answer: 0
-        },
-        {
-          id: "bulk-text-select",
-          type: "text_select",
-          prompt: "Select the sentence that says the app validates before launch.",
-          segments: [
-            { id: "s1", text: "The draft stores each question." },
-            { id: "s2", text: "The app validates before launch." },
-            { id: "s3", text: "The result is shown after finalization." }
-          ],
-          selectionPolicy: { mode: "exact_count", count: 1 },
-          answer: ["s2"]
-        },
-        {
-          id: "bulk-match",
-          type: "matching",
-          prompt: "Match each builder step to its role.",
-          left: [
-            { id: "l1", text: "start_quiz" },
-            { id: "l2", text: "finalize_quiz" }
-          ],
-          right: [
-            { id: "r1", text: "Create draft" },
-            { id: "r2", text: "Launch widget" }
-          ],
-          answer: [
-            { leftId: "l1", rightId: "r1" },
-            { leftId: "l2", rightId: "r2" }
-          ]
-        }
-      ]
+      expectedQuestionCount: 3
     }
   });
-  assert(bulkStarted.result.structuredContent.questionCount === 3, "start_quiz bulk questions were not accepted");
-  assert(bulkStarted.result.structuredContent.rejectedQuestionCount === 0, "start_quiz bulk questions should not be rejected");
-
-  const bulkFinalized = await rpc("tools/call", {
-    name: "finalize_quiz",
-    arguments: { draftId: bulkStarted.result.structuredContent.draftId, quizId: "bulk-builder-smoke" }
+  const stagedDraftId = stagedStarted.result.structuredContent.draftId;
+  await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: stagedDraftId,
+      question: {
+        id: "staged-choice",
+        type: "multiple_choice",
+        prompt: "Pick the checked path.",
+        choices: ["Builder", "Legacy"],
+        answer: 0
+      }
+    }
   });
-  assert(bulkFinalized.result.structuredContent.kind === "betterquizzer.launch", "bulk finalize did not return launch packet");
-  assert(bulkFinalized.result.structuredContent.questionCount === 3, "bulk finalize should launch all questions");
-  assert(bulkFinalized.result.structuredContent.quiz.questions[1].type === "text_select", "bulk text_select question was not preserved");
+
+  const partialFinalized = await rpc("tools/call", {
+    name: "finalize_quiz",
+    arguments: { quizId: "staged-builder-smoke" }
+  });
+  assert(partialFinalized.result.structuredContent.kind === "betterquizzer.launch", "partial finalize did not return launch packet");
+  assert(partialFinalized.result.structuredContent.declaredQuestionCount === 3, "partial finalize should preserve expected question count");
+  assert(partialFinalized.result.structuredContent.questionCount === 1, "partial finalize should launch available questions");
+  assert(partialFinalized.result.structuredContent.packetProgress.complete === false, "partial finalize should not be marked complete");
+
+  await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: stagedDraftId,
+      question: {
+        id: "staged-text-select",
+        type: "text_select",
+        prompt: "Select the evidence phrase that best supports the claim about validation.",
+        segments: [
+          { id: "s1", text: "The draft stores each question before launch." },
+          { id: "s2", text: "The server validates the draft through the render contract before the widget opens." },
+          { id: "s3", text: "The final packet then reports whether every question can render." }
+        ],
+        selectionPolicy: { mode: "exact_count", count: 1 },
+        answer: ["s2"]
+      }
+    }
+  });
+
+  await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: stagedDraftId,
+      question: {
+        id: "staged-match",
+        type: "matching",
+        prompt: "Match each builder step to its role.",
+        left: [
+          { id: "l1", text: "start_quiz" },
+          { id: "l2", text: "finalize_quiz" }
+        ],
+        right: [
+          { id: "r1", text: "Create draft" },
+          { id: "r2", text: "Launch widget" }
+        ],
+        answer: [
+          { leftId: "l1", rightId: "r1" },
+          { leftId: "l2", rightId: "r2" }
+        ]
+      }
+    }
+  });
+
+  const stagedFinalized = await rpc("tools/call", {
+    name: "finalize_quiz",
+    arguments: { quizId: "staged-builder-smoke" }
+  });
+  assert(stagedFinalized.result.structuredContent.questionCount === 3, "staged finalize should launch all questions");
+  assert(stagedFinalized.result.structuredContent.packetProgress.complete === true, "staged finalize should be complete after expected count");
+  assert(stagedFinalized.result.structuredContent.quiz.questions[1].type === "text_select", "staged text_select question was not preserved");
+
+  const badTextSelect = await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: stagedDraftId,
+      question: {
+        id: "bad-text-select",
+        type: "text_select",
+        prompt: "Select the phrase that describes natural selection.",
+        segments: [
+          { id: "s1", text: "Natural selection happens when " },
+          { id: "s2", text: "individuals with useful traits leave more offspring" },
+          { id: "s3", text: "." }
+        ],
+        answer: ["s2"]
+      }
+    }
+  });
+  assert(badTextSelect.result.structuredContent.needsRepair === true, "single-obvious-phrase text_select should be rejected");
+  assert(String(badTextSelect.result.structuredContent.issues).includes("single obvious sentence"), "bad text_select repair should explain the quality issue");
 
   const started = await rpc("tools/call", {
     name: "start_quiz",
