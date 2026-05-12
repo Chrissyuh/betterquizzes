@@ -81,7 +81,7 @@ Check that the MCP tool metadata includes:
 - an accurate widget description
 - current version/build strings
 
-The `create_quiz` tool description should tell the model about every supported question type and encourage varied quiz design.
+The `finalize_quiz` tool should attach the widget output template and act as the normal launch step for assistant-authored quizzes. Keep `create_quiz` described as a compatibility opener for complete user-supplied quiz packets.
 
 ## 6. Prepare user-facing submission materials
 

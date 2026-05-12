@@ -63,7 +63,7 @@ assert(app.includes('document.removeEventListener("touchend", onDocumentTouchEnd
 assert(app.includes('document.removeEventListener("touchcancel", onDocumentTouchCancel'), "mobile ordering cleanup should remove touchcancel listener");
 assert(!app.includes('onPointerMove={inputMode === "mobile"'), "mobile drag must not depend on handle-scoped onPointerMove");
 assert(app.includes("onKeyDown={(event) => onHandleKeyDown(event, id)}"), "keyboard sorting fallback missing");
-assert(app.includes("Mobile: drag from the grip handle"), "mobile drag guidance missing");
+assert(!app.includes("ordering-mode-hint") && !css.includes("ordering-mode-hint"), "ordering drag guidance should not be visible in the ordering UI");
 
 assert(css.includes("V61 ordering rebuild"), "V61 ordering CSS block missing");
 assert(css.includes('data-ordering-mode="desktop"'), "desktop-specific ordering CSS missing");

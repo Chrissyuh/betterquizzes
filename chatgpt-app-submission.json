@@ -1,0 +1,216 @@
+{
+  "$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "BetterQuizzes",
+    "subtitle": "Interactive quizzes",
+    "description": "BetterQuizzes lets ChatGPT build mixed-format practice quizzes, open them in an interactive widget, collect answers with confidence and timing, and return a structured submission for grading and feedback.",
+    "category": "EDUCATION"
+  },
+  "tools": {
+    "start_quiz": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Creates an in-memory quiz draft for the current BetterQuizzes session.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "add_question": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Adds one question to an in-memory BetterQuizzes draft.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "repair_question": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Repairs or replaces one question in an in-memory BetterQuizzes draft.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, revoke access, or perform irreversible actions."
+      }
+    },
+    "finalize_quiz": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Validates and stores the current quiz in server memory, then opens the BetterQuizzes widget.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "create_quiz": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Stores a complete quiz packet in server memory and opens the BetterQuizzes widget.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "submit_answers": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Processes submitted answers for the current BetterQuizzes session and returns a submission packet.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "record_submission": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Alias for submit_answers that processes submitted answers for the current BetterQuizzes session.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "record_grade": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Stores grade feedback for the current BetterQuizzes session in server memory.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "get_grade": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only retrieves recorded grade feedback for a quiz or session.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "inspect_quiz": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only retrieves a summary and render diagnostics for a stored quiz.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Create a short assistant-authored mixed-format practice quiz.",
+      "user_prompt": "Make me a 4-question practice quiz about photosynthesis with a mix of question types.",
+      "file_attachment_urls": null,
+      "tools_triggered": "start_quiz, add_question, finalize_quiz",
+      "expected_output": "Launches one BetterQuizzes activity with a mixed-format quiz ready for the user to answer.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Create an ordering question and launch it through the builder flow.",
+      "user_prompt": "Make a one-question quiz where I drag these app release steps into the right order.",
+      "file_attachment_urls": null,
+      "tools_triggered": "start_quiz, add_question, finalize_quiz",
+      "expected_output": "Launches an ordering quiz whose items can be rearranged in the widget.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Repair an invalid draft question without restarting the quiz.",
+      "user_prompt": "Create a quiz with an ordering question, and if the question needs repair, fix just that question.",
+      "file_attachment_urls": null,
+      "tools_triggered": "start_quiz, add_question, repair_question, finalize_quiz",
+      "expected_output": "Repairs the invalid question and launches the corrected quiz once.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Submit completed answers from the widget for grading.",
+      "user_prompt": "I finished the BetterQuizzes activity. Grade my submitted answers.",
+      "file_attachment_urls": null,
+      "tools_triggered": "submit_answers",
+      "expected_output": "Returns a SubmissionCapsule that ChatGPT can grade without recreating the quiz.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Record and retrieve grade feedback for the widget.",
+      "user_prompt": "Record this quiz grade so the widget can show my feedback, then check that it was saved.",
+      "file_attachment_urls": null,
+      "tools_triggered": "record_grade, get_grade",
+      "expected_output": "Stores grade feedback for the quiz session and retrieves the saved grade state.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Open a complete user-supplied legacy quiz packet.",
+      "user_prompt": "Open this complete BetterQuizzes QuizSpec v2 packet as a quiz.",
+      "file_attachment_urls": null,
+      "tools_triggered": "create_quiz",
+      "expected_output": "Validates the complete quiz packet and launches it in the BetterQuizzes widget.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Inspect a stored quiz for render diagnostics.",
+      "user_prompt": "Inspect the BetterQuizzes quiz I just created and tell me whether every question is renderable.",
+      "file_attachment_urls": null,
+      "tools_triggered": "inspect_quiz",
+      "expected_output": "Returns a concise quiz summary with render diagnostics and question counts.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not trigger for ordinary homework explanations without an interactive quiz request.",
+      "user_prompt": "Explain photosynthesis to me in simple terms.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because the user asked for a text explanation, not an interactive quiz.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for unrelated calendar or scheduling tasks.",
+      "user_prompt": "Schedule a study session for tomorrow afternoon.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because BetterQuizzes does not manage calendars.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for requests to publish or send quiz results externally.",
+      "user_prompt": "Email my quiz score to my teacher and post it online.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked for sending email or publishing results because it has no external messaging or posting capability.",
+      "expected_output_url": null
+    }
+  ]
+}

@@ -2685,15 +2685,6 @@ button.drag-handle:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.bq-ordering-rebuilt .ordering-mode-hint {
-  margin: -.05rem 0 .35rem;
-  color: #5b6678;
-  font-size: .86rem;
-  font-weight: 750;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
 .bq-ordering-rebuilt .drag-order-list {
   gap: .65rem;
   max-width: 100%;
@@ -2914,11 +2905,6 @@ button.drag-handle:focus-visible {
 }
 
 @media (max-width: 720px), (hover: none), (pointer: coarse) {
-  .bq-ordering-rebuilt .ordering-mode-hint {
-    font-size: .82rem;
-    max-width: calc(100vw - 5rem);
-  }
-
   .bq-ordering-rebuilt .draggable-order-item {
     grid-template-columns: minmax(0, 1fr) 2.85rem;
     gap: .38rem;

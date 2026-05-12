@@ -33,6 +33,7 @@ assert(app.includes("function OrderingInput") && app.includes("bqV61OrderingRebu
 assert(!app.includes("Question {currentIndex + 1} of"), "question count label must stay removed");
 assert(app.includes("quiz.questions.length > 1 ? <QuestionNav"), "one-question quizzes must not show question navigation");
 assert(app.includes("single-question-actions"), "one-question quizzes must not show prev/next controls");
+assert(app.includes("const submitLooksReady = allQuestionsDone || isLastQuestion"), "submit button must highlight on the last question even when earlier optional questions are unfinished");
 assert(app.includes("function RichInline"), "titles and prompts must support light formatting");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
 assert(app.includes("function formatPlainText"), "format buttons must not insert raw markdown/html tags into student answers");

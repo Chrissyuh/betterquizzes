@@ -640,6 +640,8 @@ function QuizRunner({
   const requiredQuestions = quiz.questions.filter((question) => isQuestionRequired(question, activityPolicy));
   const completeQuestionCount = quiz.questions.filter((question) => isQuestionDoneForNavigation(question, drafts[question.id], displayPolicy)).length;
   const allQuestionsDone = quiz.questions.length > 0 && completeQuestionCount === quiz.questions.length;
+  const isLastQuestion = quiz.questions.length > 0 && currentIndex === quiz.questions.length - 1;
+  const submitLooksReady = allQuestionsDone || isLastQuestion;
   const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
   const canSubmit = !activityPolicy.submitRequiresRequiredAnswers || !submitIssue;
   const progressPercent = quiz.questions.length ? Math.round((completeQuestionCount / quiz.questions.length) * 100) : 100;
@@ -905,7 +907,7 @@ function QuizRunner({
             </div>
           ) : null}
           <div className="submit-column">
-            <button className={allQuestionsDone ? "primary submit-ready" : "submit-not-ready"} type="button" disabled={submitting || !canSubmit} title={submitIssue ?? (!allQuestionsDone ? "You can submit, but unfinished questions remain." : undefined)} onClick={() => void finish()}>{submitting ? "Submitting…" : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
+            <button className={submitLooksReady ? "primary submit-ready" : "submit-not-ready"} type="button" disabled={submitting || !canSubmit} title={submitIssue ?? (!allQuestionsDone ? "You can submit, but unfinished questions remain." : undefined)} onClick={() => void finish()}>{submitting ? "Submitting…" : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
           </div>
         </div>
       </section>
@@ -2264,9 +2266,6 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   return (
     <div className="order-shell drag-order-shell bq-ordering-rebuilt" data-ordering-mode={inputMode} aria-label="Ordering answer">
       <div className="order-end-label top-label"><strong>Top</strong> = {behavior.topLabel}</div>
-      <p className="compact-status ordering-mode-hint">
-        {inputMode === "desktop" ? "Desktop: drag a row with your mouse, or focus the grip and press ArrowUp, ArrowDown, Home, or End." : "Mobile: drag from the grip handle, or focus it and press ArrowUp, ArrowDown, Home, or End."}
-      </p>
       <div ref={listRef} className="order-list drag-order-list" aria-live="polite">
         {order.map((id, index) => {
           const item = itemById.get(id);

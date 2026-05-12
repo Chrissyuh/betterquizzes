@@ -2312,7 +2312,7 @@ function connectorCard(url) {
     connectorSetup: {
       connectorName: "BetterQuizzes",
       connectorUrl: origin + "/mcp",
-      instructions: "Use this HTTPS /mcp URL when creating a connector in ChatGPT developer mode. After connecting, the model should call create_quiz with a complete QuizSpec v2, then grade from the SubmissionCapsule returned by submit_answers."
+      instructions: "Use this HTTPS /mcp URL when creating a connector in ChatGPT developer mode. For assistant-authored quizzes, the model should use start_quiz, add_question once per question, and finalize_quiz to launch the widget. Use create_quiz only for an already complete user-supplied QuizSpec v2 packet, then grade from the SubmissionCapsule returned by submit_answers."
     }
   };
 }

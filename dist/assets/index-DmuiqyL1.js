@@ -12165,6 +12165,8 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 	quiz.questions.filter((question) => isQuestionRequired(question, activityPolicy));
 	const completeQuestionCount = quiz.questions.filter((question) => isQuestionDoneForNavigation(question, drafts[question.id], displayPolicy)).length;
 	const allQuestionsDone = quiz.questions.length > 0 && completeQuestionCount === quiz.questions.length;
+	const isLastQuestion = quiz.questions.length > 0 && currentIndex === quiz.questions.length - 1;
+	const submitLooksReady = allQuestionsDone || isLastQuestion;
 	const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
 	const canSubmit = !activityPolicy.submitRequiresRequiredAnswers || !submitIssue;
 	const progressPercent = quiz.questions.length ? Math.round(completeQuestionCount / quiz.questions.length * 100) : 100;
@@ -12495,7 +12497,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 						}) : null, /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 							className: "submit-column",
 							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-								className: allQuestionsDone ? "primary submit-ready" : "submit-not-ready",
+								className: submitLooksReady ? "primary submit-ready" : "submit-not-ready",
 								type: "button",
 								disabled: submitting || !canSubmit,
 								title: submitIssue ?? (!allQuestionsDone ? "You can submit, but unfinished questions remain." : void 0),
@@ -13989,10 +13991,6 @@ function OrderingInput({ question, response, onChange }) {
 					" = ",
 					behavior.topLabel
 				]
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "compact-status ordering-mode-hint",
-				children: inputMode === "desktop" ? "Desktop: drag a row with your mouse, or focus the grip and press ArrowUp, ArrowDown, Home, or End." : "Mobile: drag from the grip handle, or focus it and press ArrowUp, ArrowDown, Home, or End."
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				ref: listRef,

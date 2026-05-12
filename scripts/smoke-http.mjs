@@ -43,7 +43,8 @@ child.stdout.on("data", async (chunk) => {
 
 child.on("exit", (code) => {
   if (passed) {
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
   if (!baseUrl) {
     clearTimeout(timeout);
@@ -190,7 +191,11 @@ function assert(value, message) {
 
 function cleanup() {
   clearTimeout(timeout);
-  if (!child.killed) child.kill("SIGTERM");
+  child.stdout?.removeAllListeners("data");
+  child.stderr?.removeAllListeners("data");
+  child.stdout?.destroy();
+  child.stderr?.destroy();
+  if (!child.killed) child.kill("SIGKILL");
 }
 
 function fail(message) {
