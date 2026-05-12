@@ -14040,7 +14040,7 @@ function OrderingInput({ question, response, onChange }) {
 							onKeyDown: (event) => onHandleKeyDown(event, id),
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								"aria-hidden": "true",
-								className: "drag-dot-grid"
+								className: "drag-bar-grip"
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "drag-label",
 								children: "Drag"

@@ -2858,18 +2858,22 @@ button.drag-handle:focus-visible {
   color: #2947d3;
 }
 
-.bq-ordering-rebuilt .drag-dot-grid {
-  width: .82rem;
-  height: 1.08rem;
+.bq-ordering-rebuilt .drag-handle::before,
+.bq-ordering-rebuilt .drag-handle::after {
+  content: none;
+  display: none;
+}
+
+.bq-ordering-rebuilt .drag-bar-grip {
+  width: 1.12rem;
+  height: .86rem;
   display: block;
   background:
-    radial-gradient(circle at 25% 20%, currentColor 1.65px, transparent 2.15px),
-    radial-gradient(circle at 75% 20%, currentColor 1.65px, transparent 2.15px),
-    radial-gradient(circle at 25% 50%, currentColor 1.65px, transparent 2.15px),
-    radial-gradient(circle at 75% 50%, currentColor 1.65px, transparent 2.15px),
-    radial-gradient(circle at 25% 80%, currentColor 1.65px, transparent 2.15px),
-    radial-gradient(circle at 75% 80%, currentColor 1.65px, transparent 2.15px);
-  opacity: .68;
+    linear-gradient(currentColor, currentColor) 50% 16% / 100% 2px no-repeat,
+    linear-gradient(currentColor, currentColor) 50% 50% / 100% 2px no-repeat,
+    linear-gradient(currentColor, currentColor) 50% 84% / 100% 2px no-repeat;
+  border-radius: 999px;
+  opacity: .76;
 }
 
 .bq-ordering-rebuilt .drag-label {

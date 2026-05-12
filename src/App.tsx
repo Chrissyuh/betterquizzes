@@ -2306,7 +2306,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
                 onTouchStart={inputMode === "mobile" ? (event) => beginTouchDrag(event, id) : undefined}
                 onKeyDown={(event) => onHandleKeyDown(event, id)}
               >
-                <span aria-hidden="true" className="drag-dot-grid" />
+                <span aria-hidden="true" className="drag-bar-grip" />
                 <span className="drag-label">Drag</span>
               </span>
             </div>
