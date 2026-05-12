@@ -76,6 +76,11 @@ async function runSmoke() {
   }
   const finalizeTool = listed.result.tools.find((tool) => tool.name === "finalize_quiz");
   assert(finalizeTool._meta?.["openai/outputTemplate"], "finalize_quiz missing widget output template");
+  const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
+  assert(startTool?.inputSchema?.properties?.questions?.type === "array", "start_quiz schema missing bulk questions array");
+  const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
+  assert(repairTool?.inputSchema?.properties?.repairedQuestion, "repair_question schema missing repairedQuestion");
+  assert(repairTool?.inputSchema?.required?.includes("repairedQuestion"), "repair_question schema should require repairedQuestion");
 
   const resources = await rpc("resources/list", {});
   assert(resources.result.resources[0].uri.startsWith("ui://widget/"), "widget resource missing");
@@ -101,6 +106,63 @@ async function runSmoke() {
   assert(created.result.structuredContent.quizId === "smoke-quiz", "create_quiz returned wrong quizId");
   assert(created.result._meta.quiz.questions.length === 2, "create_quiz did not include private quiz metadata");
   assert(created.result.structuredContent.quiz.questions.length === 2, "create_quiz did not include model-visible quiz payload for widget hydration");
+
+  const bulkStarted = await rpc("tools/call", {
+    name: "start_quiz",
+    arguments: {
+      title: "Bulk Builder Smoke",
+      topic: "QA",
+      expectedQuestionCount: 3,
+      questions: [
+        {
+          id: "bulk-choice",
+          type: "multiple_choice",
+          prompt: "Pick the checked path.",
+          choices: ["Builder", "Legacy"],
+          answer: 0
+        },
+        {
+          id: "bulk-text-select",
+          type: "text_select",
+          prompt: "Select the sentence that says the app validates before launch.",
+          segments: [
+            { id: "s1", text: "The draft stores each question." },
+            { id: "s2", text: "The app validates before launch." },
+            { id: "s3", text: "The result is shown after finalization." }
+          ],
+          selectionPolicy: { mode: "exact_count", count: 1 },
+          answer: ["s2"]
+        },
+        {
+          id: "bulk-match",
+          type: "matching",
+          prompt: "Match each builder step to its role.",
+          left: [
+            { id: "l1", text: "start_quiz" },
+            { id: "l2", text: "finalize_quiz" }
+          ],
+          right: [
+            { id: "r1", text: "Create draft" },
+            { id: "r2", text: "Launch widget" }
+          ],
+          answer: [
+            { leftId: "l1", rightId: "r1" },
+            { leftId: "l2", rightId: "r2" }
+          ]
+        }
+      ]
+    }
+  });
+  assert(bulkStarted.result.structuredContent.questionCount === 3, "start_quiz bulk questions were not accepted");
+  assert(bulkStarted.result.structuredContent.rejectedQuestionCount === 0, "start_quiz bulk questions should not be rejected");
+
+  const bulkFinalized = await rpc("tools/call", {
+    name: "finalize_quiz",
+    arguments: { draftId: bulkStarted.result.structuredContent.draftId, quizId: "bulk-builder-smoke" }
+  });
+  assert(bulkFinalized.result.structuredContent.kind === "betterquizzer.launch", "bulk finalize did not return launch packet");
+  assert(bulkFinalized.result.structuredContent.questionCount === 3, "bulk finalize should launch all questions");
+  assert(bulkFinalized.result.structuredContent.quiz.questions[1].type === "text_select", "bulk text_select question was not preserved");
 
   const started = await rpc("tools/call", {
     name: "start_quiz",

@@ -45,6 +45,9 @@ assert(remote.includes("LaTeX math using only \\\\(...\\\\)") && remote.includes
 assert(render.includes("COMPACT_CHOICE_TEXT_WARN_CHARS") && render.includes("compact display text"), "render contract must warn about long compact labels");
 assert(remote.includes("v23NormalizeMatchingQuestion") && remote.includes("Matching canonical shape") && remote.includes("left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]"), "builder tools must accept and describe canonical matching schema");
 assert(render.includes("normalizeMatchingQuestion") && render.includes("normalized legacy matching pairs to left/right/answer"), "render contract must normalize legacy matching pairs before finalization");
+assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('required: ["draftId", "repairedQuestion"]'), "repair_question must expose repairedQuestion in its input schema");
+assert(remote.includes("start_quiz with a complete questions array") && remote.includes("rejectedQuestionCount"), "start_quiz must support bulk builder authoring");
+assert(remote.includes('type !== "text_select"') && remote.includes("Text-select questions need segments") && remote.includes("Do not use choices for text_select"), "draft validator must not reject text_select as a choice question");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
 assert(app.includes("function formatPlainText"), "format buttons must not insert raw markdown/html tags into student answers");
 assert(app.includes("stripTextFormatting"), "format buttons must be reversible and able to clear plain-text formatting");
