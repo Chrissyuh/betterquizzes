@@ -259,6 +259,30 @@ export default function App(): ReactElement {
     return () => { cancelled = true; };
   }, [widgetMode, quiz]);
 
+  useEffect(() => {
+    if (!widgetMode || !quiz || !isIncrementalQuizBuilding(quiz)) return;
+    let cancelled = false;
+    const quizId = getQuizId(quiz);
+    const poll = async () => {
+      const serverQuiz = await fetchQuizFromServer(quizId).catch(() => null);
+      if (cancelled || !serverQuiz || !shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
+      const progress = getIncrementalGenerationStatus(serverQuiz);
+      setHydrationProgress({
+        expectedQuestions: progress?.expected ?? serverQuiz.questions.length,
+        receivedQuestions: serverQuiz.questions.length,
+        renderableQuestions: serverQuiz.questions.length,
+        complete: progress === null,
+      });
+      setQuiz(serverQuiz);
+    };
+    const interval = window.setInterval(() => void poll(), 1500);
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [widgetMode, quiz]);
+
   if (screen === "import") {
     if (widgetMode) return <WidgetLoading progress={hydrationProgress} />;
     return <ImportScreen error={importError} onLoadQuiz={loadQuiz} />;

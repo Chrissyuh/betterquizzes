@@ -38189,6 +38189,29 @@ function App() {
 			cancelled = true;
 		};
 	}, [widgetMode, quiz]);
+	(0, import_react.useEffect)(() => {
+		if (!widgetMode || !quiz || !isIncrementalQuizBuilding(quiz)) return;
+		let cancelled = false;
+		const quizId = getQuizId(quiz);
+		const poll = async () => {
+			const serverQuiz = await fetchQuizFromServer(quizId).catch(() => null);
+			if (cancelled || !serverQuiz || !shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
+			const progress = getIncrementalGenerationStatus(serverQuiz);
+			setHydrationProgress({
+				expectedQuestions: progress?.expected ?? serverQuiz.questions.length,
+				receivedQuestions: serverQuiz.questions.length,
+				renderableQuestions: serverQuiz.questions.length,
+				complete: progress === null
+			});
+			setQuiz(serverQuiz);
+		};
+		const interval = window.setInterval(() => void poll(), 1500);
+		poll();
+		return () => {
+			cancelled = true;
+			window.clearInterval(interval);
+		};
+	}, [widgetMode, quiz]);
 	if (screen === "import") {
 		if (widgetMode) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, { progress: hydrationProgress });
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ImportScreen, {
@@ -38521,6 +38544,9 @@ function ImportScreen({ error, onLoadQuiz }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(BetterQuizzesHomeLegalLinks, {})
 		]
 	});
+}
+function isIncrementalQuizBuilding(quiz) {
+	return getIncrementalGenerationStatus(quiz) !== null;
 }
 function getIncrementalGenerationStatus(quiz) {
 	const record = quiz;

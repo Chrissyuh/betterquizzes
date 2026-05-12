@@ -11,7 +11,7 @@ assert(server.includes('outputSchema: LAUNCH_OUTPUT_SCHEMA'), "create_quiz must 
 assert(server.includes('outputSchema: BUILDER_OUTPUT_SCHEMA'), "builder tools must expose output schemas");
 assert(server.includes('name: "finalize_quiz"'), "finalize_quiz must be registered");
 assert(server.includes('"openai/toolInvocation/invoking": "Finalizing quiz..."'), "finalize_quiz must attach widget launch metadata");
-assert(server.includes("finalize_quiz is the launch/update step"), "model instructions must make finalize_quiz the launch/update step");
+assert(server.includes("finalize_quiz is the UI launch step"), "model instructions must make finalize_quiz the UI launch step");
 assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");
 assert(server.includes('outputSchema: GRADE_OUTPUT_SCHEMA'), "grade tools must expose output schemas");

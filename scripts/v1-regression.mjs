@@ -48,6 +48,8 @@ assert(render.includes("normalizeMatchingQuestion") && render.includes("normaliz
 assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('required: ["draftId", "repairedQuestion"]'), "repair_question must expose repairedQuestion in its input schema");
 assert(remote.includes("start_quiz with expectedQuestionCount") && remote.includes("Do not send chat progress/check-in messages while authoring"), "model instructions must prefer quiet staged authoring");
 assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Omit to finalize the latest draft"), "finalize_quiz must be able to avoid draftId sharing");
+assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("do not call finalize_quiz again"), "staged authoring must update stored quizzes without duplicate widget launches");
+assert(app.includes("fetchQuizFromServer(quizId)") && app.includes("isIncrementalQuizBuilding(quiz)") && app.includes("setQuiz(serverQuiz)"), "widget must poll stored quiz updates while questions are still generating");
 assert(remote.includes('type !== "text_select"') && remote.includes("Text-select questions need segments") && remote.includes("Do not use choices for text_select"), "draft validator must not reject text_select as a choice question");
 assert(remote.includes("Do not use text_select for a single obvious sentence") && remote.includes("at least three plausible selectable segments"), "text_select quality guardrails must reject one-obvious-phrase questions");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");

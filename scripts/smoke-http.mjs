@@ -182,13 +182,9 @@ async function runSmoke() {
     }
   });
 
-  const stagedFinalized = await rpc("tools/call", {
-    name: "finalize_quiz",
-    arguments: { quizId: "staged-builder-smoke" }
-  });
-  assert(stagedFinalized.result.structuredContent.questionCount === 3, "staged finalize should launch all questions");
-  assert(stagedFinalized.result.structuredContent.packetProgress.complete === true, "staged finalize should be complete after expected count");
-  assert(stagedFinalized.result.structuredContent.quiz.questions[1].type === "text_select", "staged text_select question was not preserved");
+  const stagedStored = await getJson("/api/quiz/staged-builder-smoke");
+  assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
+  assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
 
   const badTextSelect = await rpc("tools/call", {
     name: "add_question",
