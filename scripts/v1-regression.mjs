@@ -34,7 +34,15 @@ assert(!app.includes("Question {currentIndex + 1} of"), "question count label mu
 assert(app.includes("quiz.questions.length > 1 ? <QuestionNav"), "one-question quizzes must not show question navigation");
 assert(app.includes("single-question-actions"), "one-question quizzes must not show prev/next controls");
 assert(app.includes("const submitLooksReady = allQuestionsDone || isLastQuestion"), "submit button must highlight on the last question even when earlier optional questions are unfinished");
+assert(app.includes("generation-status-strip") && app.includes("Generating more questions..."), "incremental generation must use a compact status strip");
+assert(!app.includes("className=\"card question-card build-next-card\""), "incremental generation must not render the old end-card");
+assert(app.includes("const [submitAttempted, setSubmitAttempted]") && app.includes("revealRequiredStatus={submitAttempted}"), "required validation styling must wait until submit is attempted");
+assert(app.includes("disabled={submitting}") && !app.includes("disabled={submitting || !canSubmit}"), "submit must remain clickable so missing required items can show delayed feedback");
 assert(app.includes("function RichInline"), "titles and prompts must support light formatting");
+assert(app.includes("katex.renderToString") && app.includes("dangerouslySetInnerHTML"), "quiz display text must render LaTeX math safely through KaTeX");
+assert(styles.includes("katex/dist/katex.min.css") || readFileSync("src/main.tsx", "utf8").includes("katex/dist/katex.min.css"), "KaTeX CSS must be loaded");
+assert(remote.includes("LaTeX math using only \\\\(...\\\\)") && remote.includes("Do not use dollar-sign math delimiters"), "model instructions must allow explicit LaTeX delimiters and reject dollar delimiters");
+assert(render.includes("COMPACT_CHOICE_TEXT_WARN_CHARS") && render.includes("compact display text"), "render contract must warn about long compact labels");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
 assert(app.includes("function formatPlainText"), "format buttons must not insert raw markdown/html tags into student answers");
 assert(app.includes("stripTextFormatting"), "format buttons must be reversible and able to clear plain-text formatting");

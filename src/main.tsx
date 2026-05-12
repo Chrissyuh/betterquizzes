@@ -1,6 +1,7 @@
 import React, { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import "katex/dist/katex.min.css";
 import "./styles.css";
 import { BETTERQUIZZER_VERSION } from "./shared/version";
 

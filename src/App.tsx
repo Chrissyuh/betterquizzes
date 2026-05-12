@@ -1,11 +1,10 @@
+import katex from "katex";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode, type PointerEvent, type TouchEvent as ReactTouchEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
-  buildCompactReturnPrompt,
   buildCompletionSummary,
   buildLlmReturnPrompt,
   createSession,
   createSubmissionCapsule,
-  encodeCompactSubmission,
   getQuizId,
   normalizeActivityPolicy,
   normalizeDisplayPolicy,
@@ -598,10 +597,15 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
 }
 
 function isIncrementalQuizBuilding(quiz: QuizSpec): boolean {
+  return getIncrementalGenerationStatus(quiz) !== null;
+}
+
+function getIncrementalGenerationStatus(quiz: QuizSpec): { expected: number; ready: number } | null {
   const record = quiz as unknown as Record<string, unknown>;
   const metadata = record.metadata && typeof record.metadata === "object" ? record.metadata as Record<string, unknown> : {};
   const expected = Number(record.expectedQuestionCount ?? metadata.expectedQuestionCount ?? metadata.declaredQuestionCount ?? quiz.questions.length);
-  return Number.isFinite(expected) && expected > quiz.questions.length;
+  if (!Number.isFinite(expected) || expected <= quiz.questions.length) return null;
+  return { expected: Math.max(1, Math.floor(expected)), ready: quiz.questions.length };
 }
 
 function QuizRunner({
@@ -623,6 +627,7 @@ function QuizRunner({
   const [currentIndex, setCurrentIndex] = useState(() => clampIndex(restoredDraftState?.currentIndex ?? 0, quiz.questions.length));
   const [drafts, setDrafts] = useState<Record<string, DraftAnswer>>(() => sanitizeRestoredDrafts(restoredDraftState?.drafts, quiz));
   const [submitting, setSubmitting] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [skipMode, setSkipMode] = useState<"prompt" | "skipped" | null>(null);
   const displayPolicy = normalizeDisplayPolicy(quiz.displayPolicy);
@@ -643,7 +648,7 @@ function QuizRunner({
   const isLastQuestion = quiz.questions.length > 0 && currentIndex === quiz.questions.length - 1;
   const submitLooksReady = allQuestionsDone || isLastQuestion;
   const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
-  const canSubmit = !activityPolicy.submitRequiresRequiredAnswers || !submitIssue;
+  const generationStatus = getIncrementalGenerationStatus(quiz);
   const progressPercent = quiz.questions.length ? Math.round((completeQuestionCount / quiz.questions.length) * 100) : 100;
   const answeredCount = quiz.questions.filter((question) => hasResponse(drafts[question.id])).length;
 
@@ -726,6 +731,7 @@ function QuizRunner({
 
   async function finish(options: { allowIncomplete?: boolean } = {}): Promise<void> {
     if (submitting) return;
+    setSubmitAttempted(true);
     const records = makeAnswerRecords(quiz, drafts, startedAt);
     const completion = buildCompletionSummary(quiz, records, displayPolicy, activityPolicy);
     if (activityPolicy.submitRequiresRequiredAnswers && !completion.isComplete && !options.allowIncomplete) {
@@ -882,23 +888,19 @@ function QuizRunner({
           {activityPolicy.allowSkipQuiz ? <button className="skip-quiz-button" type="button" onClick={() => skipQuiz()}>Skip</button> : null}
         </div>
         <div className="progress-shell" aria-label="Quiz progress"><span style={{ width: `${progressPercent}%` }} /></div>
+        {generationStatus ? (
+          <div className="generation-status-strip" aria-live="polite">
+            <span className="generation-status-spinner" aria-hidden="true" />
+            <span>Generating more questions... {generationStatus.ready} of {generationStatus.expected} ready</span>
+          </div>
+        ) : null}
       </section>
 
-      {quiz.questions.length > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} displayPolicy={displayPolicy} activityPolicy={activityPolicy} onSelect={setCurrentIndex} /> : null}
+      {quiz.questions.length > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={setCurrentIndex} /> : null}
 
       <section className="main-column">
-        <QuestionCard question={current} draft={drafts[current.id]} displayPolicy={displayPolicy} activityPolicy={activityPolicy} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
-        {typeof isIncrementalQuizBuilding === "function" && isIncrementalQuizBuilding(quiz) && currentIndex === quiz.questions.length - 1 ? (
-          <section className="card question-card build-next-card" aria-live="polite">
-            <div className="build-spinner" aria-hidden="true" />
-            <div>
-              <p className="eyebrow">Still generating</p>
-              <h2>More questions are on the way<span className="ai-ellipsis" aria-hidden="true"></span></h2>
-              <p className="muted">You can start the questions that are ready. BetterQuizzes will add the next question when ChatGPT finishes it.</p>
-            </div>
-          </section>
-        ) : null}
-        {error ? <div className="notice-box" role="status">{error}</div> : null}
+        <QuestionCard question={current} draft={drafts[current.id]} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
+        {submitAttempted && error ? <div className="notice-box" role="status">{error}</div> : null}
         <div className={`actions split compact-actions ${quiz.questions.length <= 1 ? "single-question-actions" : ""}`}>
           {quiz.questions.length > 1 ? (
             <div className="actions">
@@ -907,7 +909,7 @@ function QuizRunner({
             </div>
           ) : null}
           <div className="submit-column">
-            <button className={submitLooksReady ? "primary submit-ready" : "submit-not-ready"} type="button" disabled={submitting || !canSubmit} title={submitIssue ?? (!allQuestionsDone ? "You can submit, but unfinished questions remain." : undefined)} onClick={() => void finish()}>{submitting ? "Submitting…" : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
+            <button className={submitLooksReady ? "primary submit-ready" : "submit-not-ready"} type="button" disabled={submitting} title={submitAttempted && submitIssue ? submitIssue : !allQuestionsDone ? "You can submit, but unfinished questions remain." : undefined} onClick={() => void finish()}>{submitting ? "Submitting..." : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
           </div>
         </div>
       </section>
@@ -982,6 +984,7 @@ function QuestionNav({
   currentIndex,
   displayPolicy,
   activityPolicy,
+  revealRequiredStatus,
   onSelect,
 }: {
   questions: Question[];
@@ -989,6 +992,7 @@ function QuestionNav({
   currentIndex: number;
   displayPolicy: DisplayPolicy;
   activityPolicy: ActivityPolicy;
+  revealRequiredStatus: boolean;
   onSelect: (index: number) => void;
 }): ReactElement {
   return (
@@ -996,7 +1000,7 @@ function QuestionNav({
       <p className="eyebrow">Questions</p>
       <div className="question-dots">
         {questions.map((question, index) => {
-          const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy);
+          const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy, revealRequiredStatus);
           return <button key={question.id} type="button" className={`dot ${index === currentIndex ? "active" : ""} ${status}`} onClick={() => onSelect(index)}>{index + 1}</button>;
         })}
       </div>
@@ -1004,8 +1008,8 @@ function QuestionNav({
   );
 }
 
-function QuestionCard({ question, draft, displayPolicy, activityPolicy, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
-  const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy);
+function QuestionCard({ question, draft, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+  const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy, revealRequiredStatus);
   const required = isQuestionRequired(question, activityPolicy);
   const answerComplete = isQuestionAnswerComplete(question, draft);
   const confidenceRequired = isConfidenceRequiredForQuestion(question, displayPolicy);
@@ -1019,7 +1023,7 @@ function QuestionCard({ question, draft, displayPolicy, activityPolicy, quizChoi
       <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onChange={onChange} />
       {confidenceRequired ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
         <div><p className="confidence-heading">Confidence</p></div>
-        <ConfidencePicker value={confidenceValue} required={confidenceRequired} disabled={!answerComplete} onChange={(confidence) => onChange({ confidence })} />
+        <ConfidencePicker value={confidenceValue} required={confidenceRequired && revealRequiredStatus} disabled={!answerComplete} onChange={(confidence) => onChange({ confidence })} />
       </section> : null}
     </section>
   );
@@ -1109,14 +1113,16 @@ function RichBlock({ text }: { text: unknown }): ReactElement {
 
 function renderInlineMarkup(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const tokenPattern = /(\*\*[^*]+\*\*|<u>[\s\S]*?<\/u>|<sub>[\s\S]*?<\/sub>|<sup>[\s\S]*?<\/sup>|`[^`]+`|\*[^*]+\*)/gi;
+  const tokenPattern = /(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\*\*[^*]+\*\*|<u>[\s\S]*?<\/u>|<sub>[\s\S]*?<\/sub>|<sup>[\s\S]*?<\/sup>|`[^`]+`|\*[^*]+\*)/gi;
   let cursor = 0;
   let match: RegExpExecArray | null;
   while ((match = tokenPattern.exec(text)) !== null) {
     if (match.index > cursor) appendTextWithBreaks(nodes, text.slice(cursor, match.index), `${keyPrefix}-t-${cursor}`);
     const token = match[0];
     const key = `${keyPrefix}-m-${match.index}`;
-    if (token.startsWith("**") && token.endsWith("**")) nodes.push(<strong key={key}>{renderInlineMarkup(token.slice(2, -2), `${key}-b`)}</strong>);
+    if (token.startsWith("\\(") && token.endsWith("\\)")) nodes.push(<MathNode key={key} value={token.slice(2, -2)} displayMode={false} fallback={token} />);
+    else if (token.startsWith("\\[") && token.endsWith("\\]")) nodes.push(<MathNode key={key} value={token.slice(2, -2)} displayMode fallback={token} />);
+    else if (token.startsWith("**") && token.endsWith("**")) nodes.push(<strong key={key}>{renderInlineMarkup(token.slice(2, -2), `${key}-b`)}</strong>);
     else if (/^<u>/i.test(token)) nodes.push(<u key={key}>{renderInlineMarkup(token.slice(3, -4), `${key}-u`)}</u>);
     else if (/^<sub>/i.test(token)) nodes.push(<sub key={key}>{renderInlineMarkup(token.slice(5, -6), `${key}-sub`)}</sub>);
     else if (/^<sup>/i.test(token)) nodes.push(<sup key={key}>{renderInlineMarkup(token.slice(5, -6), `${key}-sup`)}</sup>);
@@ -1127,6 +1133,20 @@ function renderInlineMarkup(text: string, keyPrefix: string): ReactNode[] {
   }
   if (cursor < text.length) appendTextWithBreaks(nodes, text.slice(cursor), `${keyPrefix}-t-${cursor}`);
   return nodes.length ? nodes : [text];
+}
+
+function MathNode({ value, displayMode, fallback }: { value: string; displayMode: boolean; fallback: string }): ReactElement {
+  try {
+    const html = katex.renderToString(value, {
+      displayMode,
+      throwOnError: false,
+      strict: "warn",
+      trust: false,
+    });
+    return <span className={displayMode ? "math-node math-display" : "math-node math-inline"} dangerouslySetInnerHTML={{ __html: html }} />;
+  } catch {
+    return <span>{fallback}</span>;
+  }
 }
 
 function appendTextWithBreaks(nodes: ReactNode[], text: string, keyPrefix: string): void {
@@ -1766,7 +1786,7 @@ function TextSelectInput({ question, response, onChange }: { question: Extract<Q
     const selectable = segment.selectable !== false;
     const isSelected = selected.includes(segment.id);
     const label = labelText ?? segment.text;
-    if (!selectable) return <span key={segment.id} className="text-segment static-segment">{label}</span>;
+    if (!selectable) return <span key={segment.id} className="text-segment static-segment"><RichInline text={label} /></span>;
     return (
       <button
         key={segment.id}
@@ -1775,7 +1795,7 @@ function TextSelectInput({ question, response, onChange }: { question: Extract<Q
         disabled={!isSelected && maxReached}
         onClick={() => toggleSegment(segment.id)}
       >
-        {label}
+        <RichInline text={label} />
       </button>
     );
   }
@@ -1815,13 +1835,13 @@ function buildTextSelectInlineParts(text: string, segments: TextSelectSegmentRen
   let cursor = 0;
   for (const match of rawMatches) {
     if (renderedSegmentIds.has(match.segment.id) || match.index < cursor) continue;
-    if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
+    if (match.index > cursor) nodes.push(<RichInline key={`text-${cursor}`} text={text.slice(cursor, match.index)} />);
     const label = text.slice(match.index, match.index + match.length);
     nodes.push(renderSegment(match.segment, label));
     renderedSegmentIds.add(match.segment.id);
     cursor = match.index + match.length;
   }
-  if (cursor < text.length) nodes.push(text.slice(cursor));
+  if (cursor < text.length) nodes.push(<RichInline key={`text-${cursor}`} text={text.slice(cursor)} />);
   return { nodes, renderedSegmentIds };
 }
 
@@ -2327,7 +2347,7 @@ function MatchingInput({ question, response, onChange }: { question: Extract<Que
   if (!leftItems.length || !rightItems.length) {
     return <QuestionRenderWarning question={question} detail="This matching question needs valid left and right item lists." />;
   }
-  return <div className="match-list">{leftItems.map((left) => <label key={left.id} className="match-row"><span>{left.text}</span><select value={response.find((pair) => pair.leftId === left.id)?.rightId ?? ""} onChange={(event) => setPair(left.id, event.currentTarget.value)}><option value="">Choose match...</option>{rightItems.map((right) => <option key={right.id} value={right.id}>{right.text}</option>)}</select></label>)}</div>;
+  return <div className="match-list">{leftItems.map((left) => <label key={left.id} className="match-row"><span><RichInline text={left.text} /></span><select value={response.find((pair) => pair.leftId === left.id)?.rightId ?? ""} onChange={(event) => setPair(left.id, event.currentTarget.value)}><option value="">Choose match...</option>{rightItems.map((right) => <option key={right.id} value={right.id}>{right.text}</option>)}</select></label>)}</div>;
 }
 
 function getStableShuffledItems<T extends { id: string }>(items: T[], seed: string): T[] {
@@ -2372,13 +2392,7 @@ function ConfidencePicker({ value, required, disabled, onChange }: { value: Answ
 }
 
 function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: FinishedSubmission; widgetMode: boolean; onNewQuiz: () => void }): ReactElement {
-  const { submission, session, hostSubmitted } = finished;
-  const [copied, setCopied] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const [showReview, setShowReview] = useState(false);
-  const compact = encodeCompactSubmission(submission);
-  const prompt = buildLlmReturnPrompt(submission);
+  const { submission, hostSubmitted } = finished;
   const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
   const [recordedGrade, setRecordedGrade] = useState<GradePayload | null>(null);
   const [gradePollingDone, setGradePollingDone] = useState(false);
@@ -2412,11 +2426,6 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
     };
   }, [widgetMode, submission.quizId, submission.sessionId]);
 
-  async function copy(name: string, text: string): Promise<void> {
-    await copyText(text);
-    setCopied(name);
-  }
-
   return (
     <main className="shell narrow result-shell">
       <section className="card result-hero">
@@ -2425,26 +2434,24 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
         <p>{getSubmissionMessage(gradeStatus, hostSubmitted)}</p>
 
         <div className="submission-status-grid user-status-grid">
-          <span>Answers saved ✓</span>
-          {submission.completion.requiredTotal > 0 ? <span>Required questions complete ✓</span> : null}
+          <span>Answers saved</span>
+          {submission.completion.requiredTotal > 0 ? <span>Required questions complete</span> : null}
           <span>{getGradeStatusLabel(gradeStatus)}</span>
         </div>
 
+        {recordedGrade ? <GradeSummaryCard grade={recordedGrade} /> : widgetMode && !gradePollingDone ? <p className="muted compact-status">Waiting for feedback to appear...</p> : null}
+
         {finished.followUpAttempts && gradeStatus !== "grade_requested" ? (
-          <p className="muted compact-status">Attempt {finished.followUpAttempts}: {finished.followUpMessage ?? "Still trying to ask ChatGPT to grade."}</p>
+          <p className="muted compact-status">{finished.followUpMessage ?? "Still trying to send your answers for feedback."}</p>
         ) : null}
 
         <div className="actions wrap">
           {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
-          
         </div>
-        {copied ? <p className="copied">Copied {copied}.</p> : null}
       </section>
-
     </main>
   );
 }
-
 
 function GradeSummaryCard({ grade }: { grade: GradePayload }): ReactElement {
   const percent = getGradePercent(grade);
@@ -2493,7 +2500,7 @@ function SubmissionReview({ submission }: { submission: SubmissionCapsule }): Re
           return (
             <article className="review-item" key={question.id}>
               <div className="question-header"><span className="badge">Question {index + 1}</span><span className="badge subtle-badge">{formatQuestionType(question.type)}</span></div>
-              <h3>{question.prompt}</h3>
+              <h3><RichInline text={question.prompt} /></h3>
               {question.multiTypingFields ? <p className="muted compact-status">Fields: {question.multiTypingFields.map((field) => field.label).join(", ")}</p> : null}
               <p><strong>Your answer:</strong> {formatAnswerForReview(answer?.response)}</p>
               {answer?.confidence ? <p className="muted compact-status">Confidence: {answer.confidence} ({confidenceLabel(answer.confidence)})</p> : null}
@@ -2551,10 +2558,10 @@ function getFinishedGradeStatus(finished: FinishedSubmission, widgetMode: boolea
 function getSubmissionHeadline(status: SubmissionDeliveryStatus): string {
   switch (status) {
     case "grade_requested":
-      return "Submitted — return to chat";
+      return "Submitted. Return to chat";
     case "requesting_grade":
     case "retrying_grade_request":
-      return "Submitting answers…";
+      return "Sending your answers...";
     case "grade_request_unavailable":
       return "Answers saved";
     case "grade_request_failed":
@@ -2565,27 +2572,27 @@ function getSubmissionHeadline(status: SubmissionDeliveryStatus): string {
 }
 
 function getSubmissionMessage(status: SubmissionDeliveryStatus, hostSubmitted: boolean): string {
-  if (status === "grade_requested") return "Your answers were submitted. ChatGPT has the grading packet; return to the chat for concise feedback.";
-  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers are saved. BetterQuizzes is sending a short grading request to ChatGPT.";
+  if (status === "grade_requested") return "Your answers are saved and ChatGPT has what it needs. Return to the chat for feedback.";
+  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers are saved. Feedback should appear in the chat shortly.";
   if (status === "grade_request_unavailable") return hostSubmitted
-    ? "Your answers were submitted, but this host session did not expose automatic chat follow-up."
-    : "Your answers were saved locally, but this host session did not expose the automatic grading bridge.";
-  if (status === "grade_request_failed") return "Your answers were saved. The automatic grading request did not complete. Your submission is not lost.";
+    ? "Your answers were submitted. Return to the chat if feedback does not appear automatically."
+    : "Your answers are saved here. Return to the chat to continue.";
+  if (status === "grade_request_failed") return "Your answers were saved, but the feedback request did not finish. Your work is not lost.";
   return "Your answers were saved.";
 }
 
 function getGradeStatusLabel(status: SubmissionDeliveryStatus): string {
   switch (status) {
     case "grade_requested":
-      return "Grade request sent ✓";
+      return "Feedback requested";
     case "requesting_grade":
-      return "Submitting answers…";
+      return "Sending to ChatGPT";
     case "retrying_grade_request":
-      return "Still trying to request grading…";
+      return "Still sending";
     case "grade_request_unavailable":
-      return "Automatic grading unavailable";
+      return "Saved for review";
     case "grade_request_failed":
-      return "ChatGPT request did not complete";
+      return "Feedback request incomplete";
     default:
       return "Saved";
   }
@@ -2950,11 +2957,11 @@ function isQuestionRequired(question: Question, activityPolicy: ActivityPolicy):
   return question.answerRequired ?? question.required ?? activityPolicy.defaultAnswerRequired;
 }
 
-function getQuestionStatus(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): "ready" | "draft" | "empty" | "incomplete" | "optional" {
+function getQuestionStatus(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy, revealRequiredStatus = true): "ready" | "draft" | "empty" | "incomplete" | "optional" {
   const required = isQuestionRequired(question, activityPolicy);
   if (isQuestionDoneForNavigation(question, draft, displayPolicy)) return "ready";
-  if (hasResponse(draft)) return required ? "incomplete" : "draft";
-  return required ? "empty" : "optional";
+  if (hasResponse(draft)) return required && revealRequiredStatus ? "incomplete" : "draft";
+  return required && revealRequiredStatus ? "empty" : "optional";
 }
 
 function isReady(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): boolean {
@@ -3067,21 +3074,5 @@ function downloadJson(filename: string, value: unknown): void {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
-}
-
-async function copyText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  textarea.remove();
 }
 

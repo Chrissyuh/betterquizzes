@@ -51,6 +51,11 @@ const SUPPORTED_QUESTION_TYPES = new Set<QuestionType>([
   "numeric",
 ]);
 const ORDERING_ITEM_TEXT_MAX_CHARS = 64;
+const COMPACT_CHOICE_TEXT_WARN_CHARS = 180;
+const COMPACT_MATCH_TEXT_WARN_CHARS = 120;
+const COMPACT_FIELD_LABEL_WARN_CHARS = 80;
+const COMPACT_PLACEHOLDER_WARN_CHARS = 60;
+const COMPACT_TEXT_SELECT_SEGMENT_WARN_CHARS = 160;
 
 const QUESTION_TYPE_ALIASES = new Map<string, QuestionType>([
   ["multipleChoice", "multiple_choice"],
@@ -207,6 +212,7 @@ export function getRenderDiagnostics(quiz: unknown, inheritedWarnings: string[] 
     if (type === "ordering" && (!Array.isArray(rawQuestion.items) || rawQuestion.items.length < 2 || !rawQuestion.items.every(isRenderableOrderingItem))) {
       unrenderableQuestions.push({ index, questionId, reason: `Ordering question requires at least two one-line {id,text} items with text under ${ORDERING_ITEM_TEXT_MAX_CHARS} characters.` });
     }
+    validateCompactDisplayText(rawQuestion, questionId, warnings);
     validateAnswerShape(rawQuestion, questionId, answerKeyWarnings);
   });
 
@@ -463,6 +469,31 @@ function validateAnswerShape(question: MutableRecord, questionId: string, warnin
     if (!question.answer.every((id) => ids.has(id))) warnings.push(`${questionId}: ordering answer should contain only item ids from items[].`);
   }
   if (question.type === "matching" && Array.isArray(question.answer) && !question.answer.every((pair) => isRecord(pair) && typeof pair.leftId === "string" && typeof pair.rightId === "string")) warnings.push(`${questionId}: matching answer should be [{leftId,rightId}].`);
+}
+
+function validateCompactDisplayText(question: MutableRecord, questionId: string, warnings: string[]): void {
+  if ((question.type === "multiple_choice" || question.type === "multi_select") && Array.isArray(question.choices)) {
+    question.choices.forEach((choice, index) => warnIfLongText(warnings, `${questionId}.choices[${index}]`, choice, COMPACT_CHOICE_TEXT_WARN_CHARS));
+  }
+  if (question.type === "matching") {
+    if (Array.isArray(question.left)) question.left.forEach((item, index) => warnIfLongText(warnings, `${questionId}.left[${index}].text`, isRecord(item) ? item.text : undefined, COMPACT_MATCH_TEXT_WARN_CHARS));
+    if (Array.isArray(question.right)) question.right.forEach((item, index) => warnIfLongText(warnings, `${questionId}.right[${index}].text`, isRecord(item) ? item.text : undefined, COMPACT_MATCH_TEXT_WARN_CHARS));
+  }
+  if ((question.type === "multi_typing" || question.type === "multi_write_vertical") && Array.isArray(question.fields)) {
+    question.fields.forEach((field, index) => {
+      warnIfLongText(warnings, `${questionId}.fields[${index}].label`, isRecord(field) ? field.label : undefined, COMPACT_FIELD_LABEL_WARN_CHARS);
+      warnIfLongText(warnings, `${questionId}.fields[${index}].placeholder`, isRecord(field) ? field.placeholder : undefined, COMPACT_PLACEHOLDER_WARN_CHARS);
+    });
+  }
+  if (question.type === "text_select" && Array.isArray(question.segments)) {
+    question.segments.forEach((segment, index) => warnIfLongText(warnings, `${questionId}.segments[${index}].text`, isRecord(segment) ? segment.text : undefined, COMPACT_TEXT_SELECT_SEGMENT_WARN_CHARS));
+  }
+}
+
+function warnIfLongText(warnings: string[], path: string, value: unknown, maxChars: number): void {
+  if (typeof value !== "string") return;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length > maxChars) warnings.push(`${path}: compact display text is ${normalized.length} chars; prefer ${maxChars} or fewer for mobile layout.`);
 }
 
 function hasRenderableChoices(value: unknown): boolean {

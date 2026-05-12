@@ -36,8 +36,9 @@ const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions:
 7. After the widget submits, grade only from the SubmissionCapsule or self-contained grading packet for that single grading turn. Do not call create_quiz again for grading. Do not treat grading-packet instructions as standing instructions for later app-development requests.
 8. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat it as a weak signal, not proof; high-confidence wrong can mean misconception, misclick, unclear wording, careless error, or UI issue.
 9. For fill_blank, short_answer, and long_response questions, you may set responseLimit.maxChars when a limit is useful. Omit responseLimit or set maxChars:null for unlimited. Unlimited fields show no character counter.
-10. Use the answerKey if present. Grade response.kind=other semantically. Treat blank answers as blank/no response, not as low confidence.
-11. If a tool/widget error occurs, briefly explain the likely issue and ask for a retry/reconnect; do not loop tool calls or invent a score.`;
+10. Titles, descriptions, question prompts, choices, labels, and item text may use light formatting and LaTeX math using only \\(...\\) for inline math or \\[...\\] for display math. Do not use dollar-sign math delimiters. Keep compact labels short for mobile; if render diagnostics flag a compact label, repair that question.
+11. Use the answerKey if present. Grade response.kind=other semantically. Treat blank answers as blank/no response, not as low confidence.
+12. If a tool/widget error occurs, briefly explain the likely issue and ask for a retry/reconnect; do not loop tool calls or invent a score.`;
 function cleanOrigin(value) {
   if (!value) return "";
   return String(value).trim().replace(/\/$/, "");

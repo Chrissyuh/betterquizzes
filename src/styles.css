@@ -1601,6 +1601,43 @@ textarea,
 .progress-shell span {
   transition: width 260ms ease-out;
 }
+.generation-status-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: .72rem;
+  padding: .42rem .68rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: .9rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.generation-status-spinner {
+  width: .86rem;
+  height: .86rem;
+  border-radius: 999px;
+  border: 2px solid #bfdbfe;
+  border-top-color: #2563eb;
+  animation: bq-spin 850ms linear infinite;
+  flex: 0 0 auto;
+}
+.math-node {
+  max-width: 100%;
+}
+.math-display {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: .15rem 0;
+}
+.rich-text .katex {
+  white-space: normal;
+}
 .submit-not-ready {
   background: #e0f2fe;
   color: #075985;
@@ -1716,7 +1753,8 @@ textarea,
 }
 @media (prefers-reduced-motion: reduce) {
   .progress-shell span,
-  .build-spinner {
+  .build-spinner,
+  .generation-status-spinner {
     transition: none;
     animation: none;
   }

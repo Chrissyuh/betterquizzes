@@ -1365,7 +1365,7 @@ BetterQuizzes model instructions V1 renderer-certified contract:
 9. After finalize_quiz or create_quiz succeeds, stop and let the user complete the widget. Do not grade from the original quiz.
 10. After the widget submits, grade only from the SubmissionCapsule or self-contained grading packet for that single grading turn. Do not call create_quiz again for grading. Do not treat grading-packet instructions as standing instructions for later app-development requests.
 11. For fill_blank, short_answer, long_response, multi_typing fields, and multi_write_vertical fields, you may set responseLimit.maxChars when a limit is useful. Omit responseLimit or set maxChars:null for unlimited. Unlimited fields show no character counter.
-12. Titles, descriptions, question prompts, choices, labels, and item text may use light formatting: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, and line breaks. Keep formatting useful rather than decorative.
+12. Titles, descriptions, question prompts, choices, labels, and item text may use light formatting: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, line breaks, and LaTeX math using only \\(...\\) for inline math or \\[...\\] for display math. Do not use dollar-sign math delimiters. Keep formatting useful rather than decorative, and keep compact labels short for mobile. If renderDiagnostics rejects or warns about a compact label, repair that specific question instead of restarting the whole quiz.
 13. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat it as a weak signal, not proof. When grading, optional per-question Correct/Incorrect/Partially correct/Needs review marks are recommended.`;
 
 
@@ -1417,7 +1417,7 @@ const QUESTION_SCHEMA = { oneOf: [
 const QUIZ_SPEC_SCHEMA = { type: "object", title: "BetterQuizzesQuizSpecV2", description: "Exact renderable BetterQuizzes QuizSpec v2. Canonical renderer fields are id/type/prompt/choices/answer/answerRequired.", properties: { schema: { const: "betterquizzer.quiz" }, version: { const: 2 }, quizId: { type: "string" }, title: { type: "string", minLength: 1 }, description: { type: "string" }, subject: { type: "string" }, mode: { enum: ["practice", "test", "survey"] }, displayPolicy: { type: "object", properties: { showCorrectAnswers: { enum: ["instant", "after_submit", "never"] }, showExplanations: { enum: ["llm_after_submit", "never"] }, requireConfidence: { type: "boolean" } }, additionalProperties: false }, gradingPolicy: { type: "object", properties: { preferredGrader: { enum: ["llm", "local", "hybrid"] }, includeAnswerKeyInSubmission: { type: "boolean" }, requestCorrectnessMarks: { type: "boolean" } }, additionalProperties: false }, activityPolicy: { type: "object", description: "Canonical fields: allowSkipQuiz, allowSkipQuestions, defaultAnswerRequired, submitRequiresRequiredAnswers. Legacy aliases are accepted but not preferred.", properties: { allowSkipQuiz: { type: "boolean", description: "Canonical. Show a top-right Skip quiz control." }, allowSkipQuestions: { type: "boolean" }, defaultAnswerRequired: { type: "boolean", description: "Canonical. Default for question.answerRequired." }, submitRequiresRequiredAnswers: { type: "boolean", description: "Canonical. Disable final submit until required questions are answered." }, allowCancel: { type: "boolean", deprecated: true, description: "Deprecated alias for allowSkipQuiz." }, defaultQuestionRequired: { type: "boolean", deprecated: true, description: "Deprecated alias for defaultAnswerRequired." }, submitRequiresAllRequired: { type: "boolean", deprecated: true, description: "Deprecated alias for submitRequiresRequiredAnswers." } }, additionalProperties: false }, choiceBehavior: { type: "object", properties: { allowOther: { type: "boolean" }, otherLabel: { type: "string" } }, additionalProperties: false }, questions: { type: "array", minItems: 1, items: QUESTION_SCHEMA }, metadata: { type: "object", additionalProperties: true } }, required: ["schema", "version", "title", "mode", "questions"], additionalProperties: false };
 const CREATE_QUIZ_INPUT_SCHEMA = { type: "object", properties: { quiz: QUIZ_SPEC_SCHEMA }, required: ["quiz"], additionalProperties: false };
 const SUBMIT_ANSWERS_INPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" }, submission: { type: "object" }, answers: { type: "array", items: { type: "object", properties: { questionId: { type: "string" }, response: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "object" }] } }, { type: "object", additionalProperties: true }, { type: "null" }] }, confidence: { type: "integer", enum: [1, 2, 3], description: "Confidence must be an integer: 1=low, 2=medium, 3=high. Do not use decimals or percentages." }, timeMs: { type: "number", minimum: 0 } }, required: ["questionId", "response"], additionalProperties: true } } }, required: ["quizId", "answers"], additionalProperties: false };
-const QUESTION_TYPE_GUIDE = "Use variety unless the user asks for one format. Supported types: multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, numeric. Answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes and can have any number of correct answers; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; multi_typing uses fields:[{id,label}] and answer/response objects keyed by field id; multi_write_vertical uses 1+ fields for stacked written responses and may have any number of answers; text_select uses segments:[{id,text,selectable?}], selectionPolicy, and answer:string[] selected segment ids; ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when conceptual order matters; direction itself must still be top_to_bottom; matching answer=[{leftId,rightId}]. Light formatting is allowed in title, description, prompts, choices, labels, and item text: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, and line breaks.";
+const QUESTION_TYPE_GUIDE = "Use variety unless the user asks for one format. Supported types: multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, numeric. Answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes and can have any number of correct answers; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; multi_typing uses fields:[{id,label}] and answer/response objects keyed by field id; multi_write_vertical uses 1+ fields for stacked written responses and may have any number of answers; text_select uses segments:[{id,text,selectable?}], selectionPolicy, and answer:string[] of selected segment ids; ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when conceptual order matters; direction itself must still be top_to_bottom; matching answer=[{leftId,rightId}]. Light formatting is allowed in title, description, prompts, choices, labels, and item text: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, line breaks, and LaTeX math using \\(...\\) or \\[...\\]. Do not use dollar-sign math delimiters. Keep compact labels short for mobile; if renderDiagnostics flags a compact label, repair that question.";
 const CREATE_QUIZ_DESCRIPTION = "Compatibility opener for an existing complete BetterQuizzes packet. Use only when the user supplied a complete validated top-level {\"quiz\": BetterQuizzesQuizSpecV2} object. For new assistant-authored quizzes, use start_quiz, add_question once per question, repair_question for rejected questions, then finalize_quiz as the launch step; do not use create_quiz as the first draft-building step. Do not call any quiz creation or launch tool more than once for one user request unless explicitly asked. Use canonical policy names allowSkipQuiz/defaultAnswerRequired/submitRequiresRequiredAnswers. Quiz design guidance: do not default to all multiple-choice; mix appropriate question types and use any number of choices, fields, segments, matches, or correct answers when useful. Required questions should be rare in practice activities; defaultAnswerRequired=false is preferred unless the user asks for a strict test. Avoid leaking earlier answers in later questions. Shuffle matching answer options. Formatting is opt-in per question and should be used mainly for math/chemistry notation. " + QUESTION_TYPE_GUIDE + " " + V13_UX_INSTRUCTIONS + " Canonical minimal example: " + JSON.stringify(CANONICAL_QUIZ_EXAMPLE) + ". The server returns renderDiagnostics, including componentByQuestion, normalizedFields, and rendererCertified.";
 
 
@@ -2074,6 +2074,12 @@ function prepareQuizForRender(input) {
   return { ok: errors.length === 0, quiz, errors, warnings: diagnostics.warnings, diagnostics };
 }
 const SUPPORTED_QUESTION_TYPES = new Set(["multiple_choice", "multi_select", "true_false", "fill_blank", "short_answer", "long_response", "multi_typing", "multi_write_vertical", "text_select", "matching", "ordering", "numeric"]);
+const ORDERING_ITEM_TEXT_MAX_CHARS_RENDER = 64;
+const COMPACT_CHOICE_TEXT_WARN_CHARS = 180;
+const COMPACT_MATCH_TEXT_WARN_CHARS = 120;
+const COMPACT_FIELD_LABEL_WARN_CHARS = 80;
+const COMPACT_PLACEHOLDER_WARN_CHARS = 60;
+const COMPACT_TEXT_SELECT_SEGMENT_WARN_CHARS = 160;
 const QUESTION_TYPE_ALIASES = new Map([["multipleChoice", "multiple_choice"], ["multiple-choice", "multiple_choice"], ["mcq", "multiple_choice"], ["multiSelect", "multi_select"], ["multi-select", "multi_select"], ["trueFalse", "true_false"], ["true-false", "true_false"], ["fillBlank", "fill_blank"], ["fill-in-the-blank", "fill_blank"], ["shortAnswer", "short_answer"], ["short-answer", "short_answer"], ["longResponse", "long_response"], ["long-response", "long_response"], ["multiTyping", "multi_typing"], ["multi-typing", "multi_typing"], ["multi_input", "multi_typing"], ["multi-input", "multi_typing"], ["multiWriteVertical", "multi_write_vertical"], ["multi-write-vertical", "multi_write_vertical"], ["multi_write", "multi_write_vertical"], ["multi-write", "multi_write_vertical"], ["multiWrite", "multi_write_vertical"], ["textSelect", "text_select"], ["text-select", "text_select"], ["select_text", "text_select"], ["select-text", "text_select"]]);
 function normalizeQuestion(raw, index, warnings, normalizedFields = []) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
@@ -2183,7 +2189,8 @@ function getRenderDiagnostics(quiz, inheritedWarnings = [], normalizedFields = [
     if (q.type === "multi_write_vertical" && (!Array.isArray(q.fields) || q.fields.length < 1 || !q.fields.every(isRenderableTypingField))) unrenderableQuestions.push({ index, questionId, reason: "Multi-write vertical question requires fields: {id,label}[] with at least one valid field." });
     if (q.type === "text_select" && (!Array.isArray(q.segments) || q.segments.length < 1 || !q.segments.every(isRenderableTextSelectSegment))) unrenderableQuestions.push({ index, questionId, reason: "Text-select question requires segments: {id,text}[] with at least one valid segment." });
     if (q.type === "matching" && (!Array.isArray(q.left) || !Array.isArray(q.right) || q.left.length < 1 || q.right.length < 1 || !q.left.every(isRenderableItem) || !q.right.every(isRenderableItem))) unrenderableQuestions.push({ index, questionId, reason: "Matching question requires left and right arrays of {id,text} items." });
-    if (q.type === "ordering" && (!Array.isArray(q.items) || q.items.length < 2 || !q.items.every(isRenderableItem))) unrenderableQuestions.push({ index, questionId, reason: "Ordering question requires items: {id,text}[] with at least two valid items." });
+    if (q.type === "ordering" && (!Array.isArray(q.items) || q.items.length < 2 || !q.items.every(isRenderableOrderingItem))) unrenderableQuestions.push({ index, questionId, reason: `Ordering question requires at least two one-line {id,text} items with text under ${ORDERING_ITEM_TEXT_MAX_CHARS_RENDER} characters.` });
+    validateCompactDisplayText(q, questionId, warnings);
     validateAnswerShape(q, questionId, answerKeyWarnings);
   });
   const rendererCertified = unrenderableQuestions.length === 0;
@@ -2195,11 +2202,37 @@ function rendererComponentForType(type) {
 function isRenderableItem(item) {
   return Boolean(item) && typeof item === "object" && isNonEmptyString(item.id) && isNonEmptyString(item.text);
 }
+function isRenderableOrderingItem(item) {
+  return isRenderableItem(item) && typeof item.text === "string" && isOneLineOrderingItemText(item.text);
+}
+function isOneLineOrderingItemText(text) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 0 && normalized.length <= ORDERING_ITEM_TEXT_MAX_CHARS_RENDER && !/[\r\n]/.test(text);
+}
 function isRenderableTypingField(item) {
   return Boolean(item) && typeof item === "object" && isNonEmptyString(item.id) && isNonEmptyString(item.label);
 }
 function isRenderableTextSelectSegment(item) {
   return Boolean(item) && typeof item === "object" && isNonEmptyString(item.id) && isNonEmptyString(item.text);
+}
+function validateCompactDisplayText(q, questionId, warnings) {
+  if ((q.type === "multiple_choice" || q.type === "multi_select") && Array.isArray(q.choices)) q.choices.forEach((choice, index) => warnIfLongText(warnings, `${questionId}.choices[${index}]`, choice, COMPACT_CHOICE_TEXT_WARN_CHARS));
+  if (q.type === "matching") {
+    if (Array.isArray(q.left)) q.left.forEach((item, index) => warnIfLongText(warnings, `${questionId}.left[${index}].text`, item?.text, COMPACT_MATCH_TEXT_WARN_CHARS));
+    if (Array.isArray(q.right)) q.right.forEach((item, index) => warnIfLongText(warnings, `${questionId}.right[${index}].text`, item?.text, COMPACT_MATCH_TEXT_WARN_CHARS));
+  }
+  if ((q.type === "multi_typing" || q.type === "multi_write_vertical") && Array.isArray(q.fields)) {
+    q.fields.forEach((field, index) => {
+      warnIfLongText(warnings, `${questionId}.fields[${index}].label`, field?.label, COMPACT_FIELD_LABEL_WARN_CHARS);
+      warnIfLongText(warnings, `${questionId}.fields[${index}].placeholder`, field?.placeholder, COMPACT_PLACEHOLDER_WARN_CHARS);
+    });
+  }
+  if (q.type === "text_select" && Array.isArray(q.segments)) q.segments.forEach((segment, index) => warnIfLongText(warnings, `${questionId}.segments[${index}].text`, segment?.text, COMPACT_TEXT_SELECT_SEGMENT_WARN_CHARS));
+}
+function warnIfLongText(warnings, path, value, maxChars) {
+  if (typeof value !== "string") return;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length > maxChars) warnings.push(`${path}: compact display text is ${normalized.length} chars; prefer ${maxChars} or fewer for mobile layout.`);
 }
 function validateAnswerShape(q, questionId, warnings) {
   if (q.answer === undefined) { warnings.push(`${questionId}: no answer key provided; LLM can still grade open-ended answers if appropriate.`); return; }
@@ -2402,6 +2435,9 @@ function contentType(filePath) {
     ".json": "application/json; charset=utf-8",
     ".svg": "image/svg+xml",
     ".png": "image/png",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".ttf": "font/ttf",
     ".ico": "image/x-icon"
   }[ext] || "application/octet-stream";
 }
