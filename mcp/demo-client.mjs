@@ -62,12 +62,10 @@ async function main() {
     }
   });
   const draftId = started.result.structuredContent.draftId;
-  const firstAdd = await request("tools/call", { name: "add_question", arguments: { draftId, question: quiz.questions[0] } });
-  if (firstAdd.result.structuredContent.questionCount !== 1) throw new Error("First add_question did not store exactly one question.");
-  const created = await request("tools/call", { name: "open_quiz", arguments: {} });
-  for (const question of quiz.questions.slice(1)) {
+  for (const question of quiz.questions) {
     await request("tools/call", { name: "add_question", arguments: { draftId, question } });
   }
+  const created = await request("tools/call", { name: "finalize_quiz", arguments: { draftId } });
   console.log(created.result.structuredContent);
   console.log("-> submit_answers");
   const submitted = await request("tools/call", {

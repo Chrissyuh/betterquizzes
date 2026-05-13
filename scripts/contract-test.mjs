@@ -17,17 +17,16 @@ assert(server.includes('ui://widget/betterquizzes-v1-build-bqv1p1.html'), "widge
 assert(server.includes('CREATE_QUIZ_INPUT_SCHEMA'), "create_quiz must use a named input schema");
 assert(server.includes('outputSchema: LAUNCH_OUTPUT_SCHEMA'), "create_quiz must expose an output schema");
 assert(server.includes('outputSchema: BUILDER_OUTPUT_SCHEMA'), "builder tools must expose output schemas");
-assert(!server.includes('name: "finalize_quiz"'), "finalize_quiz must not be advertised as a normal tool");
-assert(server.includes('name: "open_quiz"'), "open_quiz must be registered");
-assert(server.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "open_quiz must attach widget launch metadata");
-assert(server.includes("Do not call finalize_quiz for assistant-authored quizzes"), "model instructions must remove finalize_quiz from the normal creation path");
-assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input);'), "hidden finalize_quiz compatibility handler must remain for cached old tool callers");
+assert(server.includes('name: "finalize_quiz"'), "finalize_quiz must be advertised as the normal staged launch tool");
+assert(server.includes('"openai/toolInvocation/invoking": "Preparing quiz..."'), "finalize_quiz must attach widget launch metadata");
+assert(server.includes("Do not call open_quiz for new assistant-authored quizzes"), "model instructions must remove open_quiz from the normal creation path");
+assert(server.includes('if (name === "open_quiz") return openQuiz(input);'), "hidden open_quiz compatibility handler must remain for cached old tool callers");
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "remote server must use shared builder guidance");
 assert(stableServer.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "stable stdio server must use shared builder guidance");
-assert(sharedGuidance.includes("call add_question exactly once for question 1"), "shared builder guidance must add the first question before launch");
-assert(sharedGuidance.includes("call open_quiz once to show the widget"), "shared builder guidance must open the widget immediately after the first question");
-assert(sharedGuidance.includes("do not call open_quiz again"), "shared builder guidance must avoid duplicate staged widgets");
+assert(sharedGuidance.includes("call add_question or repair_question once per question"), "shared builder guidance must add staged questions one at a time before launch");
+assert(sharedGuidance.includes("then call finalize_quiz once"), "shared builder guidance must finalize only after the staged draft is complete");
+assert(sharedGuidance.includes("Do not call open_quiz for new assistant-authored quizzes"), "shared builder guidance must avoid the broken open_quiz polling path");
 assert(sharedGuidance.includes("Do not send question batches in start_quiz"), "shared builder guidance must reject start_quiz question batches");
 for (const [label, text] of [["remote server", server], ["stable stdio server", stableServer], ["SDK stdio server", sdkServer]]) {
   assert(text.includes('orderingBehavior.direction') && text.includes('"top_to_bottom"'), `${label} must instruct top_to_bottom ordering direction`);
@@ -78,20 +77,20 @@ assert(stage12Contract.includes("`create_quiz` remains a compact legacy compatib
 assert(!stage12Contract.includes("create_quiz now exposes the exact nested QuizSpec v2 schema"), "Stage 12 docs must not restore stale full-schema create_quiz guidance");
 assert(!stage12Contract.includes("Complete create_quiz.inputSchema instead of quiz: object / any."), "Stage 12 docs must not claim create_quiz exposes the full contract");
 
-assert(appSubmission.tools?.open_quiz?.annotations?.readOnlyHint === true, "submission metadata must mark open_quiz read-only");
-assert(appSubmission.tools?.open_quiz?.annotations?.destructiveHint === false, "submission metadata must mark open_quiz non-destructive");
-assert(appSubmission.tools?.open_quiz?.annotations?.openWorldHint === false, "submission metadata must mark open_quiz non-open-world");
-assert(appSubmission.tools?.open_quiz?.annotations?.idempotentHint === true, "submission metadata must mark open_quiz idempotent");
+assert(appSubmission.tools?.finalize_quiz?.annotations?.readOnlyHint === true, "submission metadata must mark finalize_quiz read-only");
+assert(appSubmission.tools?.finalize_quiz?.annotations?.destructiveHint === false, "submission metadata must mark finalize_quiz non-destructive");
+assert(appSubmission.tools?.finalize_quiz?.annotations?.openWorldHint === false, "submission metadata must mark finalize_quiz non-open-world");
+assert(appSubmission.tools?.finalize_quiz?.annotations?.idempotentHint === true, "submission metadata must mark finalize_quiz idempotent");
 
 assert(demoClient.includes("resources.result.resources[0].uri"), "demo client must read the advertised widget resource URI");
-assert(demoClient.includes('name: "open_quiz"'), "demo client must open the widget after first add_question");
+assert(demoClient.includes('name: "finalize_quiz"'), "demo client must launch with finalize_quiz after staged questions");
 assert(!demoClient.includes("betterquizzer-stage12-1.html"), "demo client must not hardcode stale widget resource aliases");
 
 assert(trialProbe.includes('callTool("add_question"'), "host trial probe must exercise add_question staged launch path");
-assert(trialProbe.includes('callTool("open_quiz"'), "host trial probe must open after first staged question");
-assert(trialProbe.includes("quiz.questions.slice(1)"), "host trial probe must launch before adding all staged questions");
-assert(trialProbe.includes("packetProgress?.complete === false"), "host trial probe must assert early launch is partial");
-assert(trialProbe.includes("updatedStoredQuiz = await fetchQuizFromServerForTrial"), "host trial probe must verify the already-open widget polling API can see later questions");
+assert(trialProbe.includes('callTool("finalize_quiz"'), "host trial probe must launch with finalize_quiz after staged questions");
+assert(trialProbe.includes("for (const question of quiz.questions)"), "host trial probe must add all staged questions before finalize");
+assert(!trialProbe.includes("packetProgress?.complete === false"), "host trial probe must not assert the removed early partial launch path");
+assert(trialProbe.includes("questionCount === quiz.questions.length"), "host trial probe must verify finalize_quiz launches the complete staged quiz");
 assert(trialProbe.includes("launchId: opened.result.structuredContent.launchId"), "host trial submission must preserve launch identity");
 assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "local host trial wrapper must preserve probe CLI flags");
 assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");

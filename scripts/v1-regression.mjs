@@ -50,9 +50,9 @@ assert(render.includes("normalizeMatchingQuestion") && render.includes("normaliz
 assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('required: ["draftId", "repairedQuestion"]'), "repair_question must expose repairedQuestion in its input schema");
 assert(remote.includes("start_quiz with expectedQuestionCount") && remote.includes("Do not send chat progress/check-in messages while authoring"), "model instructions must prefer quiet staged authoring");
 assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Accepted question stored"), "add_question must store accepted questions continuously");
-assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");
-assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("do not call open_quiz again"), "staged authoring must open once and avoid duplicate widget launches");
-assert(!remote.includes('name: "finalize_quiz"') && remote.includes("Do not call finalize_quiz for assistant-authored quizzes"), "finalize_quiz must not be advertised in the normal model tool path");
+assert(remote.includes('name: "finalize_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "finalize_quiz must be the stable staged launch tool");
+assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("then call finalize_quiz once"), "staged authoring must add questions one at a time before final launch");
+assert(remote.includes("Do not call open_quiz for new assistant-authored quizzes"), "open_quiz must not be the normal model tool path");
 assert(app.includes("fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken ?? launchId)") && app.includes("shouldPollForServerQuizUpdates(quiz, hydrationProgress)") && app.includes("setQuiz(serverQuiz)"), "widget must poll stored quiz updates while questions are still generating");
 assert(app.includes("callHostOpenQuizForUpdates(quizId)") && bridge.includes("getHostQuizPayloadFromToolResult"), "widget must fall back to host open_quiz when recovery token metadata is unavailable");
 assert(app.includes("nextRevision > currentRevision") && app.includes("setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId)"), "widget must accept newer stored quiz revisions while answering");
