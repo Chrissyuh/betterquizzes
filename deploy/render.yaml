@@ -3,7 +3,7 @@ services:
     name: betterquizzes
     env: node
     plan: free
-    buildCommand: npm install --no-audit --no-fund && npm run build
+    buildCommand: npm ci --no-audit --no-fund && npm run build
     startCommand: npm run serve:prod
     healthCheckPath: /healthz
     envVars:

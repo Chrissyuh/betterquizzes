@@ -17,9 +17,13 @@ const requiredFiles = [
 
 const checks = requiredFiles.map((file) => [existsSync(file), `${file} exists`]);
 const remote = readFileSync("mcp/remote-server.mjs", "utf8");
+const dockerfile = readFileSync("Dockerfile", "utf8");
+const renderYaml = readFileSync("deploy/render.yaml", "utf8");
 checks.push([remote.includes("/connector-card.json"), "remote server serves connector-card.json"]);
 checks.push([remote.includes("PUBLIC_BASE_URL") || remote.includes("PUBLIC_ORIGIN"), "remote server supports public origin override"]);
 checks.push([readFileSync(".env.example", "utf8").includes("PUBLIC_BASE_URL"), ".env.example documents PUBLIC_BASE_URL"]);
+checks.push([dockerfile.includes("package-lock.json") && dockerfile.includes("npm ci"), "Docker build uses package-lock.json with npm ci"]);
+checks.push([renderYaml.includes("npm ci --no-audit --no-fund && npm run build"), "Render build uses package-lock.json with npm ci"]);
 
 for (const [ok, label] of checks) console.log(`${ok ? "✓" : "✗"} ${label}`);
 const failures = checks.filter(([ok]) => !ok);
