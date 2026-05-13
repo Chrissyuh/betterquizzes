@@ -44,6 +44,20 @@ function cleanOrigin(value) {
   return String(value).trim().replace(/\/$/, "");
 }
 
+const DEFAULT_WIDGET_DOMAIN = "https://app.betterquizzes.com";
+
+function publicOrigin() {
+  return cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL);
+}
+
+function widgetDomain() {
+  return cleanOrigin(process.env.WIDGET_DOMAIN) || publicOrigin() || DEFAULT_WIDGET_DOMAIN;
+}
+
+function uniqueDomains(...domains) {
+  return [...new Set(domains.map((domain) => cleanOrigin(domain)).filter(Boolean))];
+}
+
 const quizzes = new Map();
 const grades = new Map();
 let lastQuizId = null;
@@ -272,11 +286,16 @@ function buildWidgetResource() {
 }
 
 function widgetMeta() {
+  const origin = publicOrigin();
+  const domain = widgetDomain();
+  const connectDomains = uniqueDomains(origin || domain);
+  const resourceDomains = uniqueDomains(domain, origin);
   return {
-    ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } },
+    ui: { prefersBorder: true, domain, csp: { connectDomains, resourceDomains } },
     "openai/widgetDescription": "BetterQuizzes V1 displays an LLM-created quiz, collects answers and confidence, then submits a structured capsule back for LLM grading.",
+    "openai/widgetDomain": domain,
     "openai/widgetPrefersBorder": true,
-    "openai/widgetCSP": { connect_domains: [], resource_domains: [] },
+    "openai/widgetCSP": { connect_domains: connectDomains, resource_domains: resourceDomains },
     "betterquizzer/widgetVersion": VERSION
   };
 }

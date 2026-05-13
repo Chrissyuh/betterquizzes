@@ -1646,8 +1646,22 @@ function cleanOrigin(value) {
   return String(value).trim().replace(/\/$/, "");
 }
 
+const DEFAULT_WIDGET_DOMAIN = "https://app.betterquizzes.com";
+
+function publicOrigin() {
+  return cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL);
+}
+
+function widgetDomain() {
+  return cleanOrigin(process.env.WIDGET_DOMAIN) || publicOrigin() || DEFAULT_WIDGET_DOMAIN;
+}
+
+function uniqueDomains(...domains) {
+  return [...new Set(domains.map((domain) => cleanOrigin(domain)).filter(Boolean))];
+}
+
 function publicOriginFrom(url) {
-  return cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL) || (url.protocol + "//" + url.host);
+  return publicOrigin() || (url.protocol + "//" + url.host);
 }
 
 const GRADE_INPUT_SCHEMA = {
@@ -2051,20 +2065,23 @@ function inspectQuiz(id, quizId) {
 }
 
 function buildWidgetResource(requestedUri = RESOURCE_URI) {
-  const origin = cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL);
-  const connectDomains = origin ? [origin] : [];
+  const origin = publicOrigin();
+  const domain = widgetDomain();
+  const connectDomains = uniqueDomains(origin || domain);
+  const resourceDomains = uniqueDomains(domain, origin);
   return {
     uri: RESOURCE_URI,
     mimeType: RESOURCE_MIME_TYPE,
     text: widgetHtml(),
     _meta: {
-      ui: { prefersBorder: true, csp: { connectDomains, resourceDomains: connectDomains } },
+      ui: { prefersBorder: true, domain, csp: { connectDomains, resourceDomains } },
       "openai/widgetDescription": "BetterQuizzes V1 displays an LLM-created quiz, collects answers and confidence, then submits a structured capsule back for LLM grading.",
+      "openai/widgetDomain": domain,
       "betterquizzer/widgetVersion": VERSION,
       "betterquizzer/requestedResourceUri": requestedUri,
       "betterquizzer/canonicalResourceUri": RESOURCE_URI,
       "openai/widgetPrefersBorder": true,
-      "openai/widgetCSP": { connect_domains: connectDomains, resource_domains: connectDomains }
+      "openai/widgetCSP": { connect_domains: connectDomains, resource_domains: resourceDomains }
     }
   };
 }

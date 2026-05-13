@@ -31,16 +31,19 @@ Set one of these environment variables on the host:
 PUBLIC_BASE_URL=https://your-domain.example
 # or
 PUBLIC_ORIGIN=https://your-domain.example
+
+# Required for app submission widget templates.
+WIDGET_DOMAIN=https://app.betterquizzes.com
 ```
 
-Then verify that the server logs show the public MCP endpoint correctly.
+Then verify that the server logs show the public MCP endpoint correctly. For submission, `WIDGET_DOMAIN` must be a stable HTTPS origin that you control. Do not use a temporary tunnel for this value.
 
 ## 3. Rebuild before every hosted release
 
 After source changes:
 
 ```bash
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run build
 npm run serve:prod
 ```
@@ -77,6 +80,8 @@ Check that the MCP tool metadata includes:
 - `openai/outputTemplate`
 - `openai/widgetAccessible`
 - a current `ui://widget/...` resource URI
+- `openai/widgetDomain`
+- `_meta.ui.domain`
 - `text/html;profile=mcp-app` resource MIME type
 - an accurate widget description
 - current version/build strings

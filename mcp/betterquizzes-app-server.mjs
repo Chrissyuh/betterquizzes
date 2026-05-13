@@ -775,6 +775,20 @@ function cleanOrigin(value) {
   return String(value).trim().replace(/\/$/, "");
 }
 
+const DEFAULT_WIDGET_DOMAIN = "https://app.betterquizzes.com";
+
+function publicOrigin() {
+  return cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL);
+}
+
+function widgetDomain() {
+  return cleanOrigin(process.env.WIDGET_DOMAIN) || publicOrigin() || DEFAULT_WIDGET_DOMAIN;
+}
+
+function uniqueDomains(...domains) {
+  return [...new Set(domains.map((domain) => cleanOrigin(domain)).filter(Boolean))];
+}
+
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
 2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount, add 1-3 strong questions, then call open_quiz once without args so the widget appears immediately with a generation status. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted questions are stored continuously and the launched widget refreshes from the stored draft. Do not call finalize_quiz for assistant-authored quizzes. Do not call open_quiz again for the same quiz unless the first launch failed. Do not send chat progress/check-in messages while authoring; only speak if blocked by an unrepaired error. Bulk questions in start_quiz are allowed for smoke tests and reliability fallbacks. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
@@ -1156,8 +1170,10 @@ function inspectQuiz(id, quizId) {
 }
 
 function buildWidgetResource(requestedUri = RESOURCE_URI) {
-  const origin = cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL);
-  const connectDomains = origin ? [origin] : [];
+  const origin = publicOrigin();
+  const domain = widgetDomain();
+  const connectDomains = uniqueDomains(origin || domain);
+  const resourceDomains = uniqueDomains(domain, origin);
   return {
     uri: RESOURCE_URI,
     mimeType: RESOURCE_MIME_TYPE,
@@ -1165,14 +1181,16 @@ function buildWidgetResource(requestedUri = RESOURCE_URI) {
     _meta: {
       ui: {
         prefersBorder: true,
-        csp: { connectDomains, resourceDomains: connectDomains }
+        domain,
+        csp: { connectDomains, resourceDomains }
       },
       "openai/widgetDescription": "BetterQuizzes V1 displays an LLM-created quiz, collects answers and confidence, then submits a structured capsule back for LLM grading.",
+      "openai/widgetDomain": domain,
       "betterquizzer/widgetVersion": VERSION,
       "betterquizzer/requestedResourceUri": requestedUri,
       "betterquizzer/canonicalResourceUri": RESOURCE_URI,
       "openai/widgetPrefersBorder": true,
-      "openai/widgetCSP": { connect_domains: connectDomains, resource_domains: connectDomains }
+      "openai/widgetCSP": { connect_domains: connectDomains, resource_domains: resourceDomains }
     }
   };
 }

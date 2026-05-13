@@ -19,9 +19,15 @@ const checks = requiredFiles.map((file) => [existsSync(file), `${file} exists`])
 const remote = readFileSync("mcp/remote-server.mjs", "utf8");
 const dockerfile = readFileSync("Dockerfile", "utf8");
 const renderYaml = readFileSync("deploy/render.yaml", "utf8");
+const flyToml = readFileSync("deploy/fly.toml", "utf8");
+const envExample = readFileSync(".env.example", "utf8");
 checks.push([remote.includes("/connector-card.json"), "remote server serves connector-card.json"]);
 checks.push([remote.includes("PUBLIC_BASE_URL") || remote.includes("PUBLIC_ORIGIN"), "remote server supports public origin override"]);
-checks.push([readFileSync(".env.example", "utf8").includes("PUBLIC_BASE_URL"), ".env.example documents PUBLIC_BASE_URL"]);
+checks.push([envExample.includes("PUBLIC_BASE_URL"), ".env.example documents PUBLIC_BASE_URL"]);
+checks.push([envExample.includes("WIDGET_DOMAIN"), ".env.example documents WIDGET_DOMAIN"]);
+checks.push([remote.includes('"openai/widgetDomain": domain') && remote.includes("DEFAULT_WIDGET_DOMAIN"), "remote server advertises widget domain metadata"]);
+checks.push([renderYaml.includes("WIDGET_DOMAIN") && renderYaml.includes("https://app.betterquizzes.com"), "Render env config sets submission widget domain"]);
+checks.push([flyToml.includes("WIDGET_DOMAIN") && flyToml.includes("https://app.betterquizzes.com"), "Fly env config sets submission widget domain"]);
 checks.push([dockerfile.includes("package-lock.json") && dockerfile.includes("npm ci"), "Docker build uses package-lock.json with npm ci"]);
 checks.push([renderYaml.includes("npm ci --no-audit --no-fund && npm run build"), "Render build uses package-lock.json with npm ci"]);
 

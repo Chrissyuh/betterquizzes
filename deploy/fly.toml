@@ -7,6 +7,9 @@ primary_region = "iad"
   HOST = "0.0.0.0"
   PORT = "8787"
   NODE_ENV = "production"
+  PUBLIC_BASE_URL = "https://app.betterquizzes.com"
+  PUBLIC_ORIGIN = "https://app.betterquizzes.com"
+  WIDGET_DOMAIN = "https://app.betterquizzes.com"
 
 [http_service]
   internal_port = 8787

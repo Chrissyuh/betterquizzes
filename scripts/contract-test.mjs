@@ -25,6 +25,10 @@ assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answer
 assert(server.includes('anyOf: [{ required: ["quizId", "answers"] }, { required: ["submission"] }]'), "submit_answers schema must accept fallback submission packets without top-level answers");
 assert(server.includes('outputSchema: GRADE_OUTPUT_SCHEMA'), "grade tools must expose output schemas");
 assert(server.includes('outputSchema: INSPECT_QUIZ_OUTPUT_SCHEMA'), "inspect_quiz must expose an output schema");
+assert(server.includes('DEFAULT_WIDGET_DOMAIN = "https://app.betterquizzes.com"'), "widget domain must have a submission-ready default");
+assert(server.includes('"openai/widgetDomain": domain'), "widget resource must advertise openai/widgetDomain");
+assert(server.includes("ui: { prefersBorder: true, domain, csp:"), "widget resource must expose ui.domain metadata");
+assert(server.includes("resource_domains: resourceDomains"), "legacy widget CSP metadata must use explicit resource domains");
 assert(server.includes('DRAFT_TOOL_ANNOTATIONS'), "builder tools must declare non-destructive annotations");
 assert(server.includes('destructiveHint: false'), "tool metadata must mark non-destructive tools correctly");
 assert(server.includes('QUIZ_SPEC_SCHEMA'), "server must expose a QuizSpec schema");
@@ -73,6 +77,7 @@ assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "loca
 assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");
 
 const sdkServer = readFileSync("mcp/sdk-stdio-server.mjs", "utf8");
+assert(sdkServer.includes('"openai/widgetDomain": domain'), "SDK widget resource must advertise openai/widgetDomain");
 assert(sdkServer.includes("quizId: z.string().optional()"), "SDK submit schema must allow fallback submissions without top-level quizId");
 assert(sdkServer.includes("}).passthrough()).optional()"), "SDK submit schema must allow fallback submissions without top-level answers");
 assert(sdkServer.includes("const effectiveAnswers = Array.isArray(args.answers) ? args.answers : providedSubmission?.answers"), "SDK submit runtime must read fallback submission answers");
