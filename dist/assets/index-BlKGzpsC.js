@@ -38282,7 +38282,7 @@ function App() {
 		let cancelled = false;
 		const quizId = getQuizId(quiz);
 		const poll = async () => {
-			const update = await fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken).catch(() => null);
+			const update = await fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken ?? launchId).catch(() => null);
 			if (cancelled || !update) return;
 			const prepared = prepareQuizForRender(update.quiz);
 			if (!prepared.ok) return;
@@ -38311,7 +38311,8 @@ function App() {
 		quiz,
 		finished,
 		hydrationProgress,
-		recoveryToken
+		recoveryToken,
+		launchId
 	]);
 	if (screen === "import") {
 		if (widgetMode) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, { progress: hydrationProgress });

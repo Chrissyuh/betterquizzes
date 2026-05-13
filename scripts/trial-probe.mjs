@@ -74,6 +74,8 @@ async function runTrial() {
   const recoveryToken = opened.result.structuredContent.recoveryToken || opened.result._meta?.recoveryToken;
   const updatedStoredQuiz = await fetchQuizFromServerForTrial(quiz.quizId, recoveryToken);
   assert(updatedStoredQuiz.questions.length === quiz.questions.length, "stored staged quiz must expose later questions through the polling API");
+  const updatedStoredQuizViaLaunchId = await fetchQuizFromServerForTrial(quiz.quizId, opened.result.structuredContent.launchId, "launchId");
+  assert(updatedStoredQuizViaLaunchId.questions.length === quiz.questions.length, "stored staged quiz must expose later questions through the launchId polling fallback");
 
   const inspected = await check("MCP tools/call inspect_quiz", () => callTool("inspect_quiz", { quizId: quiz.quizId }), (value) => value.result?.structuredContent?.questionCount === quiz.questions.length);
 
@@ -105,9 +107,9 @@ async function getJson(pathname) {
   return response.json();
 }
 
-async function fetchQuizFromServerForTrial(quizId, recoveryToken) {
-  assert(typeof recoveryToken === "string" && recoveryToken.length > 0, "open_quiz must expose a recovery token for widget polling");
-  const payload = await getJson(`/api/quiz/${encodeURIComponent(quizId)}?recoveryToken=${encodeURIComponent(recoveryToken)}`);
+async function fetchQuizFromServerForTrial(quizId, accessToken, queryKey = "recoveryToken") {
+  assert(typeof accessToken === "string" && accessToken.length > 0, "open_quiz must expose a recovery token or launchId for widget polling");
+  const payload = await getJson(`/api/quiz/${encodeURIComponent(quizId)}?${queryKey}=${encodeURIComponent(accessToken)}`);
   assert(payload?.quiz, "polling API response must include quiz");
   return payload.quiz;
 }

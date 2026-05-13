@@ -307,7 +307,7 @@ export default function App(): ReactElement {
     let cancelled = false;
     const quizId = getQuizId(quiz);
     const poll = async () => {
-      const update = await fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken).catch(() => null);
+      const update = await fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken ?? launchId).catch(() => null);
       if (cancelled || !update) return;
       const prepared = prepareQuizForRender(update.quiz);
       if (!prepared.ok) return;
@@ -331,7 +331,7 @@ export default function App(): ReactElement {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [widgetMode, quiz, finished, hydrationProgress, recoveryToken]);
+  }, [widgetMode, quiz, finished, hydrationProgress, recoveryToken, launchId]);
 
   if (screen === "import") {
     if (widgetMode) return <WidgetLoading progress={hydrationProgress} />;

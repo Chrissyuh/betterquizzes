@@ -170,6 +170,8 @@ async function runSmoke() {
   const stagedAfterOpen = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedAfterOpen.quizId === "staged-builder-smoke", "token-scoped quiz endpoint should expose the opened staged quiz");
   assert(stagedAfterOpen.quiz.questions.length === 1, "token-scoped quiz endpoint should expose the current staged revision");
+  const stagedViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(opened.result.structuredContent.launchId));
+  assert(stagedViaLaunchId.quiz.questions.length === 1, "launchId-scoped quiz endpoint should expose the opened staged quiz when recoveryToken metadata is unavailable");
   const replayedOpen = await rpc("tools/call", {
     name: "open_quiz",
     arguments: {}
@@ -231,6 +233,8 @@ async function runSmoke() {
   const stagedStored = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
   assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
+  const stagedStoredViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(opened.result.structuredContent.launchId));
+  assert(stagedStoredViaLaunchId.quiz.questions.length === 3, "original launchId should authorize polling newer quiz revisions after later add_question calls");
   const stagedAfterUpdates = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedAfterUpdates.quiz.questions.length === 3, "token-scoped quiz endpoint should update as staged questions are added");
 

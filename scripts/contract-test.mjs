@@ -56,6 +56,7 @@ assert(server.includes('prepareQuizForRender'), "server must normalize and valid
 assert(server.includes('getRenderDiagnostics'), "server must return render diagnostics");
 assert(server.includes('buildLaunchToolResult') && server.includes('function openQuiz'), "open_quiz and create_quiz should share launch storage/result logic");
 assert(server.includes("quizRecoveryTokens") && server.includes("requireQuizRecoveryAccess(url, quizId)"), "public recovery endpoints must require quiz recovery tokens");
+assert(server.includes("quizLaunchAccessTokens") && server.includes('url.searchParams.get("launchId")'), "public recovery endpoints must accept scoped launchId fallback tokens for staged widget polling");
 assert(server.includes('"/api/quiz/latest"') && server.includes("disabled for privacy"), "global latest quiz recovery must stay disabled");
 assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must not expose created quiz ids");
 assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");

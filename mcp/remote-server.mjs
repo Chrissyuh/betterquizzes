@@ -1615,6 +1615,7 @@ const CREATE_QUIZ_DESCRIPTION = "Use only when the user supplied a complete, val
 const quizzes = new Map();
 const grades = new Map();
 const quizRecoveryTokens = new Map();
+const quizLaunchAccessTokens = new Map();
 let lastQuizId = null;
 const builtInQuizzes = loadBuiltInQuizzes();
 for (const quiz of builtInQuizzes) quizzes.set(getQuizId(quiz), quiz);
@@ -1647,7 +1648,7 @@ function normalizeRecoveryToken(value) {
 }
 
 function getRecoveryTokenFromUrl(url) {
-  return normalizeRecoveryToken(url.searchParams.get("recoveryToken") || url.searchParams.get("token") || url.searchParams.get("accessToken"));
+  return normalizeRecoveryToken(url.searchParams.get("recoveryToken") || url.searchParams.get("token") || url.searchParams.get("accessToken") || url.searchParams.get("launchId"));
 }
 
 function getOrCreateQuizRecoveryToken(quizId, options = {}) {
@@ -1666,14 +1667,23 @@ function isBuiltInQuizId(quizId) {
   return builtInQuizzes.some((sample) => getQuizId(sample) === quizId);
 }
 
+function rememberQuizLaunchAccessToken(quizId, token) {
+  const normalized = normalizeRecoveryToken(token);
+  if (!normalized) return;
+  const tokens = quizLaunchAccessTokens.get(quizId) ?? new Set();
+  tokens.add(normalized);
+  quizLaunchAccessTokens.set(quizId, tokens);
+}
+
 function requireQuizRecoveryAccess(url, quizId) {
   if (isBuiltInQuizId(quizId)) return null;
   const expected = quizRecoveryTokens.get(quizId);
   const actual = getRecoveryTokenFromUrl(url);
-  if (!expected || !actual || actual !== expected) {
+  const launchTokens = quizLaunchAccessTokens.get(quizId);
+  if (!expected || !actual || (actual !== expected && !launchTokens?.has(actual))) {
     return {
       error: "Recovery token required for this quiz.",
-      hint: "Use the recoveryToken from the BetterQuizzes launch metadata."
+      hint: "Use the recoveryToken or launchId from the BetterQuizzes launch metadata."
     };
   }
   return null;
@@ -1952,7 +1962,10 @@ function storePreparedQuiz(prepared, options = {}) {
   quiz.metadata = { ...(quiz.metadata ?? {}), expectedQuestionCount, quizRevision };
   quizzes.set(quizId, quiz);
   lastQuizId = quizId;
-  return { quiz, quizId, quizRevision, launchId: `${quizId}:r${quizRevision}`, recoveryToken, expectedQuestionCount, complete };
+  const launchId = `${quizId}:r${quizRevision}`;
+  rememberQuizLaunchAccessToken(quizId, recoveryToken);
+  rememberQuizLaunchAccessToken(quizId, launchId);
+  return { quiz, quizId, quizRevision, launchId, recoveryToken, expectedQuestionCount, complete };
 }
 
 function quizRevisionFingerprint(quiz) {
