@@ -279,6 +279,8 @@ const SUBMISSION_OUTPUT_SCHEMA = {
     complete: { type: "boolean" },
     quizId: { type: "string" },
     sessionId: { type: "string" },
+    launchId: { type: "string" },
+    quizRevision: { type: "integer", minimum: 0 },
     submission: GENERIC_OBJECT_SCHEMA
   },
   required: ["kind", "quizId", "submission"],
@@ -1947,6 +1949,8 @@ function submitAnswers(id, args) {
     complete: true,
     quizId: submission.quizId,
     sessionId: submission.sessionId,
+    ...(typeof submission.launchId === "string" && submission.launchId ? { launchId: submission.launchId } : {}),
+    ...(Number.isInteger(submission.quizRevision) ? { quizRevision: submission.quizRevision } : {}),
     submission
   };
   return okResponse(id, {
@@ -2132,7 +2136,13 @@ function validateConfidenceValues(answers) {
 function normalizeProvidedSubmission(value, args = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   if (value.schema !== "betterquizzer.submission" || value.version !== 2 || !Array.isArray(value.answers)) return null;
-  return { ...value, quizId: value.quizId || args.quizId, sessionId: value.sessionId || args.sessionId || "session-" + Date.now().toString(36) };
+  return {
+    ...value,
+    quizId: value.quizId || args.quizId,
+    sessionId: value.sessionId || args.sessionId || "session-" + Date.now().toString(36),
+    launchId: value.launchId || args.launchId,
+    quizRevision: Number.isInteger(value.quizRevision) ? value.quizRevision : args.quizRevision
+  };
 }
 
 function makeSubmission(quiz, args) {

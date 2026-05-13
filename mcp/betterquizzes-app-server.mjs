@@ -112,7 +112,7 @@ const BUILDER_OUTPUT_SCHEMA = {
   additionalProperties: true
 };
 const LAUNCH_OUTPUT_SCHEMA = { type: "object", properties: { kind: { const: "betterquizzer.launch" }, launchId: { type: "string" }, quizId: { type: "string" }, title: { type: "string" }, questionCount: { type: "integer", minimum: 0 }, renderableQuestionCount: { type: "integer", minimum: 0 }, rendererCertified: { type: "boolean" }, complete: { type: "boolean" }, renderDiagnostics: GENERIC_OBJECT_SCHEMA, quiz: GENERIC_OBJECT_SCHEMA }, additionalProperties: true };
-const SUBMISSION_OUTPUT_SCHEMA = { type: "object", properties: { kind: { const: "betterquizzer.submission" }, complete: { type: "boolean" }, quizId: { type: "string" }, sessionId: { type: "string" }, submission: GENERIC_OBJECT_SCHEMA }, required: ["kind", "quizId", "submission"], additionalProperties: true };
+const SUBMISSION_OUTPUT_SCHEMA = { type: "object", properties: { kind: { const: "betterquizzer.submission" }, complete: { type: "boolean" }, quizId: { type: "string" }, sessionId: { type: "string" }, launchId: { type: "string" }, quizRevision: { type: "integer", minimum: 0 }, submission: GENERIC_OBJECT_SCHEMA }, required: ["kind", "quizId", "submission"], additionalProperties: true };
 const GRADE_OUTPUT_SCHEMA = { type: "object", properties: { ok: { type: "boolean" }, grade: { anyOf: [GENERIC_OBJECT_SCHEMA, { type: "null" }] } }, additionalProperties: true };
 const INSPECT_QUIZ_OUTPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, title: { type: "string" }, questionCount: { type: "integer", minimum: 0 }, renderableQuestionCount: { type: "integer", minimum: 0 }, unrenderableQuestions: { type: "array", items: GENERIC_OBJECT_SCHEMA }, warnings: { type: "array", items: { type: "string" } }, renderDiagnostics: GENERIC_OBJECT_SCHEMA, types: { type: "array", items: { type: "string" } } }, additionalProperties: true };
 const DRAFT_TOOL_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: false };
@@ -1054,6 +1054,8 @@ function submitAnswers(id, args) {
     complete: true,
     quizId: submission.quizId,
     sessionId: submission.sessionId,
+    ...(typeof submission.launchId === "string" && submission.launchId ? { launchId: submission.launchId } : {}),
+    ...(Number.isInteger(submission.quizRevision) ? { quizRevision: submission.quizRevision } : {}),
     submission
   };
   ok(id, {
@@ -1244,7 +1246,13 @@ function validateConfidenceValues(answers) {
 function normalizeProvidedSubmission(value, args = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   if (value.schema !== "betterquizzer.submission" || value.version !== 2 || !Array.isArray(value.answers)) return null;
-  return { ...value, quizId: value.quizId || args.quizId, sessionId: value.sessionId || args.sessionId || "session-" + Date.now().toString(36) };
+  return {
+    ...value,
+    quizId: value.quizId || args.quizId,
+    sessionId: value.sessionId || args.sessionId || "session-" + Date.now().toString(36),
+    launchId: value.launchId || args.launchId,
+    quizRevision: Number.isInteger(value.quizRevision) ? value.quizRevision : args.quizRevision
+  };
 }
 
 function makeSubmission(quiz, args) {

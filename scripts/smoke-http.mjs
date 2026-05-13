@@ -376,6 +376,38 @@ async function runSmoke() {
   assert(Array.isArray(submission.answerKey), "submission missing answer key");
   assert(submission.launchId === "smoke-quiz:r1", "submission should preserve launch identity");
   assert(submission.quizRevision === 1, "submission should preserve quiz revision identity");
+  assert(submitted.result.structuredContent.launchId === "smoke-quiz:r1", "submission packet should expose launch identity");
+  assert(submitted.result.structuredContent.quizRevision === 1, "submission packet should expose quiz revision identity");
+
+  const fallbackSubmitted = await rpc("tools/call", {
+    name: "submit_answers",
+    arguments: {
+      quizId: "missing-stored-quiz",
+      sessionId: "fallback-session",
+      launchId: "fallback-quiz:r7",
+      quizRevision: 7,
+      submission: {
+        schema: "betterquizzer.submission",
+        version: 2,
+        quizId: "fallback-quiz",
+        sessionId: "fallback-session",
+        title: "Fallback Quiz",
+        mode: "practice",
+        submittedAt: new Date(0).toISOString(),
+        displayPolicy: { showCorrectAnswers: "after_submit", showExplanations: "llm_after_submit", requireConfidence: false },
+        gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: true },
+        activityPolicy: { allowSkipQuiz: true, allowSkipQuestions: true, defaultAnswerRequired: false, submitRequiresRequiredAnswers: true },
+        completion: { requiredTotal: 0, requiredAnswered: 0, optionalTotal: 1, optionalAnswered: 1, missingRequiredQuestionIds: [], missingRequiredConfidenceIds: [], isComplete: true },
+        questions: [],
+        answers: [{ questionId: "q1", response: "fallback", confidence: 3, timeMs: 250 }],
+        llmInstructions: "Grade from this fallback submission only."
+      }
+    }
+  });
+  assert(fallbackSubmitted.result.structuredContent.submission.launchId === "fallback-quiz:r7", "fallback submission should preserve top-level launch identity");
+  assert(fallbackSubmitted.result.structuredContent.submission.quizRevision === 7, "fallback submission should preserve top-level revision identity");
+  assert(fallbackSubmitted.result.structuredContent.launchId === "fallback-quiz:r7", "fallback packet should expose launch identity");
+  assert(fallbackSubmitted.result.structuredContent.quizRevision === 7, "fallback packet should expose revision identity");
 }
 
 async function getJson(pathname) {

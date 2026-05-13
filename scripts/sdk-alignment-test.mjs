@@ -22,7 +22,7 @@ for (const required of [
 ]) {
   if (!sdkServer.includes(required)) throw new Error(`SDK server missing expected pattern: ${required}`);
 }
-if (!sdkServer.includes('...(typeof args.launchId === "string"') || !sdkServer.includes("Number.isInteger(args.quizRevision)")) {
+if (!sdkServer.includes('...(typeof args.launchId === "string"') || !sdkServer.includes("Number.isInteger(args.quizRevision)") || !sdkServer.includes("launchId: value.launchId || args.launchId")) {
   throw new Error("SDK submit path must preserve launchId and quizRevision in SubmissionCapsule output.");
 }
 

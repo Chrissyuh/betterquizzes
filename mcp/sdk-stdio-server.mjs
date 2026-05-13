@@ -76,6 +76,8 @@ const SUBMISSION_OUTPUT_SCHEMA = {
   complete: z.boolean(),
   quizId: z.string(),
   sessionId: z.string(),
+  launchId: z.string().optional(),
+  quizRevision: z.number().int().min(0).optional(),
   submission: z.any()
 };
 const INSPECT_QUIZ_OUTPUT_SCHEMA = {
@@ -236,6 +238,8 @@ function submitAnswersResult(args) {
     complete: true,
     quizId: submission.quizId,
     sessionId: submission.sessionId,
+    ...(typeof submission.launchId === "string" && submission.launchId ? { launchId: submission.launchId } : {}),
+    ...(Number.isInteger(submission.quizRevision) ? { quizRevision: submission.quizRevision } : {}),
     submission
   };
   return {
@@ -323,7 +327,13 @@ function validateConfidenceValues(answers) {
 function normalizeProvidedSubmission(value, args = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   if (value.schema !== "betterquizzer.submission" || value.version !== 2 || !Array.isArray(value.answers)) return null;
-  return { ...value, quizId: value.quizId || args.quizId, sessionId: value.sessionId || args.sessionId || "session-" + Date.now().toString(36) };
+  return {
+    ...value,
+    quizId: value.quizId || args.quizId,
+    sessionId: value.sessionId || args.sessionId || "session-" + Date.now().toString(36),
+    launchId: value.launchId || args.launchId,
+    quizRevision: Number.isInteger(value.quizRevision) ? value.quizRevision : args.quizRevision
+  };
 }
 
 function makeSubmission(quiz, args) {
