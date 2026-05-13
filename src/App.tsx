@@ -22,6 +22,7 @@ import {
   type SubmissionCapsule,
 } from "./shared";
 import {
+  describeHostBridgeState,
   getHostQuizPayload,
   getPersistedDraftState,
   getPersistedSubmissionState,
@@ -142,15 +143,17 @@ type PendingLaunch = {
   firstSeenAt: number;
 };
 
-type HydrationProgress = { expectedQuestions: number; receivedQuestions: number; renderableQuestions?: number; complete?: boolean };
+type HydrationProgress = { expectedQuestions: number; receivedQuestions: number; renderableQuestions?: number; complete?: boolean; message?: string; source?: string };
 
 const SAMPLE_QUIZZES = [tinyDemo as QuizSpec, aphgDemo as QuizSpec, mixedTypesDemo as QuizSpec];
 const WIDGET_VERSION = BETTERQUIZZER_VERSION;
 const WIDGET_VERSION_LABEL = formatWidgetVersion(WIDGET_VERSION);
 const STABLE_LAUNCH_MS = 450;
-const HYDRATION_ERROR_DELAY_MS = 5000;
+const HYDRATION_ERROR_DELAY_MS = 30000;
 const TOOL_INPUT_FALLBACK_DELAY_MS = 2500;
 const HYDRATION_INTERRUPTED_MS = 12000;
+const SERVER_RECOVERY_POLL_MS = 1500;
+const SERVER_RECOVERY_TIMEOUT_MS = 30000;
 
 export default function App(): ReactElement {
   const routeWidgetMode = useMemo(() => isWidgetRoute(), []);
@@ -168,13 +171,13 @@ export default function App(): ReactElement {
   const pendingLaunchRef = useRef<PendingLaunch | null>(null);
   const hydrationStartedAtRef = useRef(Date.now());
 
-  function applyQuiz(rawQuiz: unknown): void {
+  function applyQuiz(rawQuiz: unknown, nextLaunchId?: string): void {
     const prepared = prepareQuizForRender(rawQuiz);
     if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
     const nextQuiz = prepared.quiz;
-    const restored = widgetMode ? buildFinishedFromPersistedSubmission(nextQuiz) : null;
+    const restored = widgetMode ? buildFinishedFromPersistedSubmission(nextQuiz, nextLaunchId) : null;
     setQuiz(nextQuiz);
-    setLaunchId(undefined);
+    setLaunchId(nextLaunchId);
     setStartedAt(restored?.session.startedAt ?? new Date().toISOString());
     setFinished(restored);
     setImportError(null);
@@ -233,7 +236,16 @@ export default function App(): ReactElement {
         }
       }
       if (!nextPayload && !quiz && elapsedMs >= HYDRATION_INTERRUPTED_MS) {
-        setHydrationError("The quiz launch did not finish. ChatGPT may have stopped generating before it sent BetterQuizzes a complete quiz packet.");
+        setHydrationProgress((progress) => progress ?? {
+          expectedQuestions: 0,
+          receivedQuestions: 0,
+          complete: false,
+          source: "server-recovery",
+          message: "Still waiting for the quiz from ChatGPT...",
+        });
+      }
+      if (!nextPayload && !quiz && elapsedMs >= SERVER_RECOVERY_TIMEOUT_MS) {
+        setHydrationError(buildHydrationFailureDetails("The quiz launch did not finish before the recovery timeout."));
         setHydrationErrorVisible(true);
       }
     }, 250);
@@ -243,20 +255,44 @@ export default function App(): ReactElement {
   useEffect(() => {
     if (!widgetMode || quiz) return;
     const requestedQuizId = getRequestedQuizId();
-    if (!requestedQuizId) return;
     let cancelled = false;
-    void fetchQuizFromServer(requestedQuizId)
-      .then((serverQuiz) => {
+    const poll = async () => {
+      try {
+        setHydrationProgress((progress) => progress ?? {
+          expectedQuestions: 0,
+          receivedQuestions: 0,
+          complete: false,
+          source: "server-recovery",
+          message: "Still waiting for the quiz from ChatGPT...",
+        });
+        const serverQuiz = await fetchQuizFromServer(requestedQuizId);
         if (cancelled) return;
-        setHydrationProgress({ expectedQuestions: serverQuiz.questions.length, receivedQuestions: serverQuiz.questions.length, renderableQuestions: serverQuiz.questions.length, complete: true });
-        applyQuiz(serverQuiz);
-      })
-      .catch((error) => {
+        const prepared = prepareQuizForRender(serverQuiz);
+        if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
+        const diagnostics = prepared.diagnostics;
+        if (!diagnostics.rendererCertified || diagnostics.renderableQuestionCount !== prepared.quiz.questions.length) {
+          throw new Error("Recovered quiz is not render-certified yet.");
+        }
+        setHydrationProgress({
+          expectedQuestions: prepared.quiz.questions.length,
+          receivedQuestions: prepared.quiz.questions.length,
+          renderableQuestions: diagnostics.renderableQuestionCount,
+          complete: true,
+          source: requestedQuizId ? "server-quiz-id" : "server-latest",
+        });
+        applyQuiz(prepared.quiz, getRecoveredLaunchId(prepared.quiz));
+      } catch (error) {
         if (cancelled) return;
-        setHydrationError(error instanceof Error ? error.message : String(error));
+        setHydrationError(buildHydrationFailureDetails(error instanceof Error ? error.message : String(error)));
         setScreen("loading");
-      });
-    return () => { cancelled = true; };
+      }
+    };
+    void poll();
+    const interval = window.setInterval(() => void poll(), SERVER_RECOVERY_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
   }, [widgetMode, quiz]);
 
   useEffect(() => {
@@ -333,6 +369,7 @@ function WidgetLoading({ progress }: { progress?: HydrationProgress | null } = {
       <section className="card stack center-card loading-card">
         <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
         <h1>Loading quiz…</h1>
+        <p>{progress?.message ?? "Still waiting for the quiz from ChatGPT..."}</p>
         <div className="loading-progress-note" aria-live="polite">
           <div className={progressClass} aria-label="Loading quiz packet" aria-busy={!complete}>
             <span style={expected > 0 ? { width: `${percent}%` } : undefined} />
@@ -357,7 +394,7 @@ function QuizSetupIssue({ message }: { message: string }): ReactElement {
       <section className="card stack">
         <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
         <h1>Quiz did not finish loading</h1>
-        <p>The quiz did not arrive completely. Ask ChatGPT to send it again, and BetterQuizzes will reopen it when the full quiz is available.</p>
+        <p>Still waiting for the quiz from ChatGPT. The app tried to recover from the latest stored quiz, but a complete quiz was not available yet.</p>
         <details>
           <summary>Technical details</summary>
           <pre className="error-box">{message}</pre>
@@ -392,9 +429,9 @@ function getServerBase(): string {
   return window.location.origin && window.location.origin !== "null" ? window.location.origin : "";
 }
 
-async function fetchQuizFromServer(quizId: string): Promise<QuizSpec> {
+async function fetchQuizFromServer(quizId?: string | null): Promise<QuizSpec> {
   const base = getServerBase();
-  const path = "/api/quiz/" + encodeURIComponent(quizId);
+  const path = quizId ? "/api/quiz/" + encodeURIComponent(quizId) : "/api/quiz/latest";
   const url = base ? base + path : path;
   const response = await fetch(url, { headers: { accept: "application/json" } });
   const body = await response.json().catch(() => ({}));
@@ -405,6 +442,22 @@ async function fetchQuizFromServer(quizId: string): Promise<QuizSpec> {
   const record = body as { quiz?: QuizSpec };
   if (!record.quiz) throw new Error("Server response did not include a quiz.");
   return record.quiz;
+}
+
+function buildHydrationFailureDetails(reason: string): string {
+  return [
+    reason,
+    "",
+    "Server base: " + (getServerBase() || "(none)"),
+    "Requested quiz id: " + (getRequestedQuizId() || "(latest)"),
+    "Host bridge:",
+    describeHostBridgeState(),
+  ].join("\n");
+}
+
+function getRecoveredLaunchId(quiz: QuizSpec): string | undefined {
+  const revision = quiz.metadata?.quizRevision;
+  return typeof revision === "number" && Number.isFinite(revision) ? `${getQuizId(quiz)}:r${revision}` : undefined;
 }
 
 

@@ -152,6 +152,9 @@ async function runSmoke() {
   assert(opened.result.structuredContent.declaredQuestionCount === 3, "open_quiz should preserve expected question count");
   assert(opened.result.structuredContent.questionCount === 1, "open_quiz should launch available questions");
   assert(opened.result.structuredContent.packetProgress.complete === false, "open_quiz partial launch should not be complete");
+  const stagedLatestAfterOpen = await getJson("/api/quiz/latest");
+  assert(stagedLatestAfterOpen.quizId === "staged-builder-smoke", "latest quiz endpoint should expose the opened staged quiz");
+  assert(stagedLatestAfterOpen.quiz.questions.length === 1, "latest quiz endpoint should expose the current staged revision");
   const replayedOpen = await rpc("tools/call", {
     name: "open_quiz",
     arguments: {}
@@ -204,6 +207,8 @@ async function runSmoke() {
   const stagedStored = await getJson("/api/quiz/staged-builder-smoke");
   assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
   assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
+  const stagedLatestAfterUpdates = await getJson("/api/quiz/latest");
+  assert(stagedLatestAfterUpdates.quiz.questions.length === 3, "latest quiz endpoint should update as staged questions are added");
 
   const badTextSelect = await rpc("tools/call", {
     name: "add_question",

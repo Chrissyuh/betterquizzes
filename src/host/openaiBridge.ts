@@ -112,6 +112,35 @@ export function getHostQuizPayload(options: HostQuizPayloadOptions = {}): HostQu
   return null;
 }
 
+export function describeHostBridgeState(): string {
+  const bridge = getOpenAiBridge();
+  const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : undefined);
+  const candidates = bridge ? getBridgeQuizCandidates(bridge) : [];
+  return JSON.stringify(
+    {
+      hasOpenAiBridge: Boolean(bridge),
+      surfaces: {
+        toolInput: Boolean(bridge?.toolInput),
+        toolOutput: Boolean(bridge?.toolOutput),
+        toolResponseMetadata: Boolean(bridge?.toolResponseMetadata),
+        widgetState: Boolean(bridge?.widgetState),
+        bootstrap: Boolean(bootstrap),
+      },
+      candidateCount: candidates.length,
+      candidates: candidates.map((candidate) => {
+        const summary = asRecord(candidate.summary);
+        return {
+          surface: candidate.surface ?? "sealed",
+          kind: typeof summary?.kind === "string" ? summary.kind : null,
+          hasQuiz: Boolean(findQuizDeep(candidate.value)),
+        };
+      }),
+    },
+    null,
+    2
+  );
+}
+
 export function persistWidgetState(state: unknown): void {
   const bridge = getOpenAiBridge();
   try {

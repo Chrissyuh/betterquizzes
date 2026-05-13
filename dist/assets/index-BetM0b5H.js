@@ -37321,6 +37321,30 @@ function getHostQuizPayload(options = {}) {
 	}
 	return null;
 }
+function describeHostBridgeState() {
+	const bridge = getOpenAiBridge();
+	const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : void 0);
+	const candidates = bridge ? getBridgeQuizCandidates(bridge) : [];
+	return JSON.stringify({
+		hasOpenAiBridge: Boolean(bridge),
+		surfaces: {
+			toolInput: Boolean(bridge?.toolInput),
+			toolOutput: Boolean(bridge?.toolOutput),
+			toolResponseMetadata: Boolean(bridge?.toolResponseMetadata),
+			widgetState: Boolean(bridge?.widgetState),
+			bootstrap: Boolean(bootstrap)
+		},
+		candidateCount: candidates.length,
+		candidates: candidates.map((candidate) => {
+			const summary = asRecord(candidate.summary);
+			return {
+				surface: candidate.surface ?? "sealed",
+				kind: typeof summary?.kind === "string" ? summary.kind : null,
+				hasQuiz: Boolean(findQuizDeep(candidate.value))
+			};
+		})
+	}, null, 2);
+}
 function persistWidgetState(state) {
 	const bridge = getOpenAiBridge();
 	try {
@@ -38077,9 +38101,11 @@ var SAMPLE_QUIZZES = [
 var WIDGET_VERSION = "V1";
 var WIDGET_VERSION_LABEL = formatWidgetVersion(WIDGET_VERSION);
 var STABLE_LAUNCH_MS = 450;
-var HYDRATION_ERROR_DELAY_MS = 5e3;
+var HYDRATION_ERROR_DELAY_MS = 3e4;
 var TOOL_INPUT_FALLBACK_DELAY_MS = 2500;
 var HYDRATION_INTERRUPTED_MS = 12e3;
+var SERVER_RECOVERY_POLL_MS = 1500;
+var SERVER_RECOVERY_TIMEOUT_MS = 3e4;
 function App() {
 	const routeWidgetMode = (0, import_react.useMemo)(() => isWidgetRoute(), []);
 	const bootstrapWidgetMode = (0, import_react.useMemo)(() => hasBetterQuizzesBootstrap(), []);
@@ -38095,13 +38121,13 @@ function App() {
 	const [hydrationProgress, setHydrationProgress] = (0, import_react.useState)(null);
 	const pendingLaunchRef = (0, import_react.useRef)(null);
 	const hydrationStartedAtRef = (0, import_react.useRef)(Date.now());
-	function applyQuiz(rawQuiz) {
+	function applyQuiz(rawQuiz, nextLaunchId) {
 		const prepared = prepareQuizForRender(rawQuiz);
 		if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
 		const nextQuiz = prepared.quiz;
-		const restored = widgetMode ? buildFinishedFromPersistedSubmission(nextQuiz) : null;
+		const restored = widgetMode ? buildFinishedFromPersistedSubmission(nextQuiz, nextLaunchId) : null;
 		setQuiz(nextQuiz);
-		setLaunchId(void 0);
+		setLaunchId(nextLaunchId);
 		setStartedAt(restored?.session.startedAt ?? (/* @__PURE__ */ new Date()).toISOString());
 		setFinished(restored);
 		setImportError(null);
@@ -38158,8 +38184,15 @@ function App() {
 				setHydrationError(error instanceof Error ? error.message : String(error));
 				if (!quiz) setScreen("loading");
 			}
-			if (!nextPayload && !quiz && elapsedMs >= HYDRATION_INTERRUPTED_MS) {
-				setHydrationError("The quiz launch did not finish. ChatGPT may have stopped generating before it sent BetterQuizzes a complete quiz packet.");
+			if (!nextPayload && !quiz && elapsedMs >= HYDRATION_INTERRUPTED_MS) setHydrationProgress((progress) => progress ?? {
+				expectedQuestions: 0,
+				receivedQuestions: 0,
+				complete: false,
+				source: "server-recovery",
+				message: "Still waiting for the quiz from ChatGPT..."
+			});
+			if (!nextPayload && !quiz && elapsedMs >= SERVER_RECOVERY_TIMEOUT_MS) {
+				setHydrationError(buildHydrationFailureDetails("The quiz launch did not finish before the recovery timeout."));
 				setHydrationErrorVisible(true);
 			}
 		}, 250);
@@ -38168,24 +38201,41 @@ function App() {
 	(0, import_react.useEffect)(() => {
 		if (!widgetMode || quiz) return;
 		const requestedQuizId = getRequestedQuizId();
-		if (!requestedQuizId) return;
 		let cancelled = false;
-		fetchQuizFromServer(requestedQuizId).then((serverQuiz) => {
-			if (cancelled) return;
-			setHydrationProgress({
-				expectedQuestions: serverQuiz.questions.length,
-				receivedQuestions: serverQuiz.questions.length,
-				renderableQuestions: serverQuiz.questions.length,
-				complete: true
-			});
-			applyQuiz(serverQuiz);
-		}).catch((error) => {
-			if (cancelled) return;
-			setHydrationError(error instanceof Error ? error.message : String(error));
-			setScreen("loading");
-		});
+		const poll = async () => {
+			try {
+				setHydrationProgress((progress) => progress ?? {
+					expectedQuestions: 0,
+					receivedQuestions: 0,
+					complete: false,
+					source: "server-recovery",
+					message: "Still waiting for the quiz from ChatGPT..."
+				});
+				const serverQuiz = await fetchQuizFromServer(requestedQuizId);
+				if (cancelled) return;
+				const prepared = prepareQuizForRender(serverQuiz);
+				if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
+				const diagnostics = prepared.diagnostics;
+				if (!diagnostics.rendererCertified || diagnostics.renderableQuestionCount !== prepared.quiz.questions.length) throw new Error("Recovered quiz is not render-certified yet.");
+				setHydrationProgress({
+					expectedQuestions: prepared.quiz.questions.length,
+					receivedQuestions: prepared.quiz.questions.length,
+					renderableQuestions: diagnostics.renderableQuestionCount,
+					complete: true,
+					source: requestedQuizId ? "server-quiz-id" : "server-latest"
+				});
+				applyQuiz(prepared.quiz, getRecoveredLaunchId(prepared.quiz));
+			} catch (error) {
+				if (cancelled) return;
+				setHydrationError(buildHydrationFailureDetails(error instanceof Error ? error.message : String(error)));
+				setScreen("loading");
+			}
+		};
+		poll();
+		const interval = window.setInterval(() => void poll(), SERVER_RECOVERY_POLL_MS);
 		return () => {
 			cancelled = true;
+			window.clearInterval(interval);
 		};
 	}, [widgetMode, quiz]);
 	(0, import_react.useEffect)(() => {
@@ -38250,6 +38300,7 @@ function WidgetLoading({ progress } = {}) {
 	const received = progress?.receivedQuestions ?? 0;
 	const complete = Boolean(progress?.complete || expected > 0 && received >= expected);
 	const percent = expected > 0 ? Math.min(100, Math.round(Math.max(0, received) / expected * 100)) : 0;
+	const progressClass = expected > 0 ? "progress-shell loading-progress determinate" : "progress-shell loading-progress indeterminate";
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "shell narrow",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
@@ -38263,11 +38314,12 @@ function WidgetLoading({ progress } = {}) {
 					})]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Loading quiz…" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: progress?.message ?? "Still waiting for the quiz from ChatGPT..." }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					className: "loading-progress-note",
 					"aria-live": "polite",
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: expected > 0 ? "progress-shell loading-progress determinate" : "progress-shell loading-progress indeterminate",
+						className: progressClass,
 						"aria-label": "Loading quiz packet",
 						"aria-busy": !complete,
 						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: expected > 0 ? { width: `${percent}%` } : void 0 })
@@ -38306,7 +38358,7 @@ function QuizSetupIssue({ message }) {
 					})]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Quiz did not finish loading" }),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "The quiz did not arrive completely. Ask ChatGPT to send it again, and BetterQuizzes will reopen it when the full quiz is available." }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "Still waiting for the quiz from ChatGPT. The app tried to recover from the latest stored quiz, but a complete quiz was not available yet." }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("details", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("summary", { children: "Technical details" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
 					className: "error-box",
 					children: message
@@ -38338,7 +38390,7 @@ function getServerBase() {
 }
 async function fetchQuizFromServer(quizId) {
 	const base = getServerBase();
-	const path = "/api/quiz/" + encodeURIComponent(quizId);
+	const path = quizId ? "/api/quiz/" + encodeURIComponent(quizId) : "/api/quiz/latest";
 	const url = base ? base + path : path;
 	const response = await fetch(url, { headers: { accept: "application/json" } });
 	const body = await response.json().catch(() => ({}));
@@ -38349,6 +38401,20 @@ async function fetchQuizFromServer(quizId) {
 	const record = body;
 	if (!record.quiz) throw new Error("Server response did not include a quiz.");
 	return record.quiz;
+}
+function buildHydrationFailureDetails(reason) {
+	return [
+		reason,
+		"",
+		"Server base: " + (getServerBase() || "(none)"),
+		"Requested quiz id: " + (getRequestedQuizId() || "(latest)"),
+		"Host bridge:",
+		describeHostBridgeState()
+	].join("\n");
+}
+function getRecoveredLaunchId(quiz) {
+	const revision = quiz.metadata?.quizRevision;
+	return typeof revision === "number" && Number.isFinite(revision) ? `${getQuizId(quiz)}:r${revision}` : void 0;
 }
 async function fetchGradeFromServer(quizId, sessionId) {
 	const base = getServerBase();

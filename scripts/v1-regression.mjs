@@ -53,6 +53,9 @@ assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("do not call o
 assert(app.includes("fetchQuizFromServer(quizId)") && app.includes("isIncrementalQuizBuilding(quiz)") && app.includes("setQuiz(serverQuiz)"), "widget must poll stored quiz updates while questions are still generating");
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
 assert(app.includes("submission.launchId = launchId") && app.includes("submission.quizRevision = quiz.metadata.quizRevision"), "submissions must carry stable launch/revision identity");
+assert(app.includes('"/api/quiz/latest"') && app.includes("SERVER_RECOVERY_TIMEOUT_MS") && app.includes("Still waiting for the quiz from ChatGPT"), "widget must recover payload-less ChatGPT cards from latest stored quiz state");
+assert(app.includes("describeHostBridgeState()") && app.includes("Server base:"), "widget hydration failures must include useful technical recovery details");
+assert(remote.includes("window.__BETTERQUIZZER_SERVER_BASE__=") && remote.includes("connectDomains"), "production widget bootstrap must include server base and CSP connect domains");
 assert(remote.includes('type !== "text_select"') && remote.includes("Text-select questions need segments") && remote.includes("Do not use choices for text_select"), "draft validator must not reject text_select as a choice question");
 assert(remote.includes("Do not use text_select for a single obvious sentence") && remote.includes("at least three plausible selectable segments"), "text_select quality guardrails must reject one-obvious-phrase questions");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
