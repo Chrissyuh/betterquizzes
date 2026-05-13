@@ -93,11 +93,14 @@ async function runSmoke() {
   assert(submitSchema.anyOf.some((entry) => entry.required?.includes("submission")), "submit_answers schema should accept a complete fallback submission");
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(!startTool?.inputSchema?.properties?.questions, "start_quiz should not advertise bulk questions");
+  assert(startTool?.annotations?.readOnlyHint === true, "start_quiz should be read-only to avoid confirmation prompts");
   const addTool = listed.result.tools.find((tool) => tool.name === "add_question");
   assert(!addTool?._meta?.["openai/outputTemplate"], "add_question should not advertise widget output template");
+  assert(addTool?.annotations?.readOnlyHint === true, "add_question should be read-only to avoid confirmation prompts");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
   assert(repairTool?.inputSchema?.properties?.repairedQuestion, "repair_question schema missing repairedQuestion");
   assert(repairTool?.inputSchema?.required?.includes("repairedQuestion"), "repair_question schema should require repairedQuestion");
+  assert(repairTool?.annotations?.readOnlyHint === true, "repair_question should be read-only to avoid confirmation prompts");
 
   const resources = await rpc("resources/list", {});
   assert(resources.result.resources[0].uri.startsWith("ui://widget/"), "widget resource missing");

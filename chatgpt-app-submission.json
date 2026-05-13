@@ -10,36 +10,36 @@
   "tools": {
     "start_quiz": {
       "annotations": {
-        "readOnlyHint": false,
+        "readOnlyHint": true,
         "openWorldHint": false,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Creates an in-memory quiz draft for the current BetterQuizzes session.",
+        "read_only_justification": "Creates only an in-memory quiz draft for the current BetterQuizzes app session; it does not publish, persist, or modify external user data.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
     },
     "add_question": {
       "annotations": {
-        "readOnlyHint": false,
+        "readOnlyHint": true,
         "openWorldHint": false,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Adds one question to an in-memory BetterQuizzes draft.",
+        "read_only_justification": "Adds one question only to an in-memory BetterQuizzes draft for the current app session; it does not publish, persist, or modify external user data.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
     },
     "repair_question": {
       "annotations": {
-        "readOnlyHint": false,
+        "readOnlyHint": true,
         "openWorldHint": false,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Repairs or replaces one question in an in-memory BetterQuizzes draft.",
+        "read_only_justification": "Repairs or replaces one question only in an in-memory BetterQuizzes draft for the current app session; it does not publish, persist, or modify external user data.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, revoke access, or perform irreversible actions."
       }

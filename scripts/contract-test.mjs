@@ -82,6 +82,12 @@ assert(appSubmission.tools?.open_quiz?.annotations?.readOnlyHint === true, "subm
 assert(appSubmission.tools?.open_quiz?.annotations?.destructiveHint === false, "submission metadata must mark open_quiz non-destructive");
 assert(appSubmission.tools?.open_quiz?.annotations?.openWorldHint === false, "submission metadata must mark open_quiz non-open-world");
 assert(appSubmission.tools?.open_quiz?.annotations?.idempotentHint === true, "submission metadata must mark open_quiz idempotent");
+for (const toolName of ["start_quiz", "add_question", "repair_question"]) {
+  const annotations = appSubmission.tools?.[toolName]?.annotations;
+  assert(annotations?.readOnlyHint === true, `submission metadata must mark ${toolName} read-only`);
+  assert(annotations?.destructiveHint === false, `submission metadata must mark ${toolName} non-destructive`);
+  assert(annotations?.openWorldHint === false, `submission metadata must mark ${toolName} non-open-world`);
+}
 
 assert(demoClient.includes("resources.result.resources[0].uri"), "demo client must read the advertised widget resource URI");
 assert(demoClient.includes('name: "open_quiz"'), "demo client must open the widget after first add_question");
