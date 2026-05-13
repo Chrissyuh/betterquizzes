@@ -361,6 +361,8 @@ async function runSmoke() {
     arguments: {
       quizId: "smoke-quiz",
       sessionId: "smoke-session",
+      launchId: "smoke-quiz:r1",
+      quizRevision: 1,
       answers: [
         { questionId: "q1", response: 0, confidence: 3, timeMs: 1000 },
         { questionId: "q2", response: "brief answer", confidence: 3, timeMs: 2000 }
@@ -372,6 +374,8 @@ async function runSmoke() {
   assert(submission.schema === "betterquizzer.submission", "submit_answers did not return a submission capsule");
   assert(submission.answers.length === 2, "submission answer count mismatch");
   assert(Array.isArray(submission.answerKey), "submission missing answer key");
+  assert(submission.launchId === "smoke-quiz:r1", "submission should preserve launch identity");
+  assert(submission.quizRevision === 1, "submission should preserve quiz revision identity");
 }
 
 async function getJson(pathname) {
