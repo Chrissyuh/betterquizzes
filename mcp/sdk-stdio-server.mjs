@@ -127,7 +127,7 @@ server.registerTool(
     title: "Submit BetterQuizzes Answers",
     description: "Receive user answers from the BetterQuizzes widget and return a SubmissionCapsule for LLM grading and feedback. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.",
     inputSchema: {
-      quizId: z.string(),
+      quizId: z.string().optional(),
       sessionId: z.string().optional(),
       launchId: z.string().optional(),
       quizRevision: z.number().int().min(0).optional(),
@@ -137,7 +137,7 @@ server.registerTool(
         response: z.any(),
         confidence: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         timeMs: z.number().min(0).optional()
-      }).passthrough())
+      }).passthrough()).optional()
     },
     outputSchema: SUBMISSION_OUTPUT_SCHEMA,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false },
@@ -157,7 +157,7 @@ server.registerTool(
     title: "Record BetterQuizzes Submission",
     description: "Alias for submit_answers. Receives user answers from the BetterQuizzes widget and returns a SubmissionCapsule for LLM grading and feedback. Confidence must be an integer: 1=low, 2=medium, 3=high; do not use decimals or percentages.",
     inputSchema: {
-      quizId: z.string(),
+      quizId: z.string().optional(),
       sessionId: z.string().optional(),
       launchId: z.string().optional(),
       quizRevision: z.number().int().min(0).optional(),
@@ -167,7 +167,7 @@ server.registerTool(
         response: z.any(),
         confidence: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
         timeMs: z.number().min(0).optional()
-      }).passthrough())
+      }).passthrough()).optional()
     },
     outputSchema: SUBMISSION_OUTPUT_SCHEMA,
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false },
@@ -227,12 +227,16 @@ function createQuizResult(quiz) {
 }
 
 function submitAnswersResult(args) {
-  const quiz = quizzes.get(args.quizId);
-  if (!Array.isArray(args.answers)) throw new Error("answers must be an array.");
-  const confidenceError = validateConfidenceValues(args.answers);
+  const providedSubmission = normalizeProvidedSubmission(args.submission, args);
+  const effectiveQuizId = args.quizId || providedSubmission?.quizId;
+  const effectiveAnswers = Array.isArray(args.answers) ? args.answers : providedSubmission?.answers;
+  const quiz = quizzes.get(effectiveQuizId);
+  if (!Array.isArray(effectiveAnswers)) throw new Error("answers must be an array, or submission.answers must be provided.");
+  const confidenceError = validateConfidenceValues(effectiveAnswers);
   if (confidenceError) throw new Error(confidenceError);
-  const submission = quiz ? makeSubmission(quiz, args) : normalizeProvidedSubmission(args.submission, args);
-  if (!submission) throw new Error(`No stored quiz with id ${args.quizId}, and no valid fallback submission was provided.`);
+  const normalizedArgs = { ...args, quizId: effectiveQuizId, answers: effectiveAnswers };
+  const submission = quiz ? makeSubmission(quiz, normalizedArgs) : providedSubmission;
+  if (!submission) throw new Error(`No stored quiz with id ${effectiveQuizId}, and no valid fallback submission was provided.`);
   const packet = {
     kind: "betterquizzer.submission",
     complete: true,

@@ -86,6 +86,11 @@ async function runSmoke() {
   assert(!createSchemaJson.includes('"oneOf"'), "create_quiz input schema should stay compact");
   assert((createTool?.description || "").length < 500, "create_quiz description should stay compact");
   assert(!(createTool?.description || "").includes("Canonical minimal example"), "create_quiz description should not advertise legacy examples");
+  const submitTool = listed.result.tools.find((tool) => tool.name === "submit_answers");
+  const submitSchema = submitTool?.inputSchema || {};
+  assert(Array.isArray(submitSchema.anyOf), "submit_answers schema should allow fallback submission packets");
+  assert(!submitSchema.required?.includes("answers"), "submit_answers schema should not always require top-level answers");
+  assert(submitSchema.anyOf.some((entry) => entry.required?.includes("submission")), "submit_answers schema should accept a complete fallback submission");
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(startTool?.inputSchema?.properties?.questions?.type === "array", "start_quiz schema missing bulk questions array");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
@@ -382,8 +387,6 @@ async function runSmoke() {
   const fallbackSubmitted = await rpc("tools/call", {
     name: "submit_answers",
     arguments: {
-      quizId: "missing-stored-quiz",
-      sessionId: "fallback-session",
       launchId: "fallback-quiz:r7",
       quizRevision: 7,
       submission: {

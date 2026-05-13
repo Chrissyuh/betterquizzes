@@ -22,6 +22,7 @@ assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input)
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");
+assert(server.includes('anyOf: [{ required: ["quizId", "answers"] }, { required: ["submission"] }]'), "submit_answers schema must accept fallback submission packets without top-level answers");
 assert(server.includes('outputSchema: GRADE_OUTPUT_SCHEMA'), "grade tools must expose output schemas");
 assert(server.includes('outputSchema: INSPECT_QUIZ_OUTPUT_SCHEMA'), "inspect_quiz must expose an output schema");
 assert(server.includes('DRAFT_TOOL_ANNOTATIONS'), "builder tools must declare non-destructive annotations");
@@ -70,5 +71,10 @@ assert(trialProbe.includes("launchId: opened.result.structuredContent.launchId")
 assert(!trialProbe.includes('callTool("open_quiz", { quizId: quiz.quizId })'), "host trial probe must not teach explicit quizId launch args for normal staged authoring");
 assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "local host trial wrapper must preserve probe CLI flags");
 assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");
+
+const sdkServer = readFileSync("mcp/sdk-stdio-server.mjs", "utf8");
+assert(sdkServer.includes("quizId: z.string().optional()"), "SDK submit schema must allow fallback submissions without top-level quizId");
+assert(sdkServer.includes("}).passthrough()).optional()"), "SDK submit schema must allow fallback submissions without top-level answers");
+assert(sdkServer.includes("const effectiveAnswers = Array.isArray(args.answers) ? args.answers : providedSubmission?.answers"), "SDK submit runtime must read fallback submission answers");
 
 console.log("V1 MCP/App contract static checks passed.");
