@@ -2,6 +2,9 @@
 import { readFileSync } from "node:fs";
 
 const server = readFileSync("mcp/remote-server.mjs", "utf8");
+const stableServer = readFileSync("mcp/betterquizzes-app-server.mjs", "utf8");
+const sdkServer = readFileSync("mcp/sdk-stdio-server.mjs", "utf8");
+const sharedGuidance = readFileSync("mcp/shared-authoring-guidance.mjs", "utf8");
 const stage12Contract = readFileSync("docs/stage-12-ai-schema-contract.md", "utf8");
 const appSubmission = JSON.parse(readFileSync("chatgpt-app-submission.json", "utf8"));
 const demoClient = readFileSync("mcp/demo-client.mjs", "utf8");
@@ -20,6 +23,13 @@ assert(server.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "
 assert(server.includes("Do not call finalize_quiz for assistant-authored quizzes"), "model instructions must remove finalize_quiz from the normal creation path");
 assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input);'), "hidden finalize_quiz compatibility handler must remain for cached old tool callers");
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
+assert(server.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "remote server must use shared builder guidance");
+assert(stableServer.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "stable stdio server must use shared builder guidance");
+assert(sharedGuidance.includes("Bulk questions in start_quiz are available for reliability or smoke tests"), "shared builder guidance must preserve staged authoring instructions");
+for (const [label, text] of [["remote server", server], ["stable stdio server", stableServer], ["SDK stdio server", sdkServer]]) {
+  assert(text.includes('orderingBehavior.direction') && text.includes('"top_to_bottom"'), `${label} must instruct top_to_bottom ordering direction`);
+  assert(text.includes("topLabel") && text.includes("bottomLabel"), `${label} must put ordering meaning in top/bottom labels`);
+}
 assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");
 assert(server.includes('anyOf: [{ required: ["quizId", "answers"] }, { required: ["submission"] }]'), "submit_answers schema must accept fallback submission packets without top-level answers");
@@ -42,6 +52,10 @@ assert(server.includes('ShortAnswerQuestion'), "schema must include short answer
 assert(server.includes('prepareQuizForRender'), "server must normalize and validate quizzes before rendering");
 assert(server.includes('getRenderDiagnostics'), "server must return render diagnostics");
 assert(server.includes('buildLaunchToolResult') && server.includes('function openQuiz'), "open_quiz and create_quiz should share launch storage/result logic");
+assert(server.includes("quizRecoveryTokens") && server.includes("requireQuizRecoveryAccess(url, quizId)"), "public recovery endpoints must require quiz recovery tokens");
+assert(server.includes('"/api/quiz/latest"') && server.includes("disabled for privacy"), "global latest quiz recovery must stay disabled");
+assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must not expose created quiz ids");
+assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");
 assert(server.includes('renderableQuestionCount'), "create_quiz must report renderable question count");
 assert(server.includes('componentByQuestion'), "render diagnostics must include componentByQuestion");
 assert(server.includes('normalizedFields'), "render diagnostics must include normalizedFields");
@@ -76,7 +90,6 @@ assert(!trialProbe.includes('callTool("open_quiz", { quizId: quiz.quizId })'), "
 assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "local host trial wrapper must preserve probe CLI flags");
 assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");
 
-const sdkServer = readFileSync("mcp/sdk-stdio-server.mjs", "utf8");
 assert(sdkServer.includes('"openai/widgetDomain": domain'), "SDK widget resource must advertise openai/widgetDomain");
 assert(sdkServer.includes("quizId: z.string().optional()"), "SDK submit schema must allow fallback submissions without top-level quizId");
 assert(sdkServer.includes("}).passthrough()).optional()"), "SDK submit schema must allow fallback submissions without top-level answers");

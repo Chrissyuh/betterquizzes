@@ -12,6 +12,7 @@ export type SubmissionBridgeState = {
   status: "draft" | "submitting" | "submitted" | "requesting_grade" | "retrying_grade_request" | "grade_requested" | "fallback_ready" | "skipped" | "failed";
   quizId: string;
   launchId?: string;
+  recoveryToken?: string;
   currentIndex?: number;
   drafts?: unknown;
   session?: QuizSession;
@@ -26,6 +27,7 @@ export type DraftBridgeState = {
   status: "answering";
   quizId: string;
   launchId?: string;
+  recoveryToken?: string;
   currentIndex?: number;
   drafts?: unknown;
   updatedAt: string;
@@ -60,6 +62,7 @@ export type HostQuizPayload = {
   quiz: QuizSpec;
   source: "chatgpt-widget" | "server-bootstrap" | "standalone";
   launchId?: string;
+  recoveryToken?: string;
   quizRevision?: number;
   questionCount?: number;
   declaredQuestionCount?: number;
@@ -155,12 +158,13 @@ function getPersistedWidgetStateRecord(): Record<string, unknown> | null {
   return asRecord(getOpenAiBridge()?.widgetState);
 }
 
-export function getPersistedDraftState(quizId: string): DraftBridgeState | null {
+export function getPersistedDraftState(quizId: string, launchId?: string): DraftBridgeState | null {
   const state = getPersistedWidgetStateRecord();
   if (!state) return null;
   const kind = state.kind;
   if (kind !== "betterquizzer.answer_state" && kind !== "betterquizzer.draft_state" && kind !== "betterquizzer.submission_state") return null;
   if (state.quizId !== quizId) return null;
+  if (launchId && typeof state.launchId === "string" && state.launchId !== launchId) return null;
 
   // Terminal submissions must not be reinterpreted as editable drafts.
   // That was the cause of a submitted quiz reopening as "unsubmitted" after returning to the widget.
@@ -171,6 +175,7 @@ export function getPersistedDraftState(quizId: string): DraftBridgeState | null 
     status: "answering",
     quizId,
     launchId: typeof state.launchId === "string" ? state.launchId : undefined,
+    recoveryToken: typeof state.recoveryToken === "string" ? state.recoveryToken : undefined,
     currentIndex: typeof state.currentIndex === "number" && Number.isFinite(state.currentIndex) ? state.currentIndex : undefined,
     drafts: state.drafts,
     updatedAt: typeof state.updatedAt === "string" ? state.updatedAt : new Date().toISOString(),
@@ -194,6 +199,7 @@ export function getPersistedSubmissionState(quizId: string, launchId?: string): 
     status,
     quizId,
     launchId: typeof state.launchId === "string" ? state.launchId : undefined,
+    recoveryToken: typeof state.recoveryToken === "string" ? state.recoveryToken : undefined,
     currentIndex: typeof state.currentIndex === "number" && Number.isFinite(state.currentIndex) ? state.currentIndex : undefined,
     drafts: state.drafts,
     session: asQuizSession(state.session),
@@ -399,6 +405,7 @@ function toHostQuizPayload(candidate: HostCandidate, source: HostQuizPayload["so
     quiz: normalized,
     source,
     launchId: typeof launchSummary?.launchId === "string" ? launchSummary.launchId : undefined,
+    recoveryToken: typeof launchSummary?.recoveryToken === "string" ? launchSummary.recoveryToken : undefined,
     quizRevision: typeof launchSummary?.quizRevision === "number" ? launchSummary.quizRevision : undefined,
     questionCount: typeof launchSummary?.questionCount === "number" ? launchSummary.questionCount : normalized.questions.length,
     declaredQuestionCount: typeof launchSummary?.declaredQuestionCount === "number" ? launchSummary.declaredQuestionCount : getExpectedQuestionCount(launchSummary ?? null) ?? normalized.questions.length,

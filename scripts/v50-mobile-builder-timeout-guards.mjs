@@ -12,9 +12,11 @@ function assert(value, message) {
 }
 
 const remote = read("mcp/remote-server.mjs");
+const sharedGuidance = read("mcp/shared-authoring-guidance.mjs");
+const guidanceSurface = remote + "\n" + sharedGuidance;
 
-assert(remote.includes("Bulk questions in start_quiz are available for reliability or smoke tests"), "bulk-builder guidance missing");
-assert(remote.includes("Do not send chat progress/check-in messages while authoring"), "quiet model instructions missing");
+assert(guidanceSurface.includes("Bulk questions in start_quiz are available for reliability or smoke tests"), "bulk-builder guidance missing");
+assert(guidanceSurface.includes("Do not send chat progress/check-in messages while authoring"), "quiet model instructions missing");
 assert(remote.includes("Optional bulk question list"), "start_quiz questions preload schema missing");
 assert(remote.includes("const rawQuestions = Array.isArray(input.questions)"), "start_quiz preload logic missing");
 assert(remote.includes("questionCount: questions.length"), "start_quiz tiny response missing questionCount");

@@ -51,10 +51,10 @@ assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.i
 assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");
 assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("do not call open_quiz again"), "staged authoring must update stored quizzes without duplicate widget launches");
 assert(!remote.includes('name: "finalize_quiz"') && remote.includes("Do not call finalize_quiz for assistant-authored quizzes"), "finalize_quiz must not be advertised in the normal model tool path");
-assert(app.includes("fetchQuizFromServer(quizId)") && app.includes("isIncrementalQuizBuilding(quiz)") && app.includes("setQuiz(serverQuiz)"), "widget must poll stored quiz updates while questions are still generating");
+assert(app.includes("fetchQuizFromServer(quizId, recoveryToken)") && app.includes("isIncrementalQuizBuilding(quiz)") && app.includes("setQuiz(serverQuiz)"), "widget must poll token-scoped stored quiz updates while questions are still generating");
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
 assert(app.includes("submission.launchId = launchId") && app.includes("submission.quizRevision = quiz.metadata.quizRevision"), "submissions must carry stable launch/revision identity");
-assert(app.includes('"/api/quiz/latest"') && app.includes("SERVER_RECOVERY_TIMEOUT_MS") && app.includes("Still waiting for the quiz from ChatGPT"), "widget must recover payload-less ChatGPT cards from latest stored quiz state");
+assert(!app.includes('"/api/quiz/latest"') && app.includes("getRequestedRecoveryToken") && app.includes("SERVER_RECOVERY_TIMEOUT_MS"), "widget must not use global latest quiz recovery; explicit recovery needs quizId and token");
 assert(app.includes("describeHostBridgeState()") && app.includes("Server base:"), "widget hydration failures must include useful technical recovery details");
 assert(remote.includes("window.__BETTERQUIZZER_SERVER_BASE__=") && remote.includes("connectDomains"), "production widget bootstrap must include server base and CSP connect domains");
 assert(remote.includes('type !== "text_select"') && remote.includes("Text-select questions need segments") && remote.includes("Do not use choices for text_select"), "draft validator must not reject text_select as a choice question");
@@ -106,7 +106,7 @@ assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis anim
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");
-assert(remote.includes('url.pathname.startsWith("/api/grade/")'), "server must expose grade polling endpoint");
+assert(remote.includes('url.pathname.startsWith("/api/grade/")') && remote.includes("requireQuizRecoveryAccess(url, quizId)"), "server must expose token-scoped grade polling endpoint");
 assert(app.includes("fetchGradeFromServer"), "widget must poll for recorded grades");
 assert(app.includes("GradeSummaryCard"), "widget must display recorded grades");
 assert(styles.includes("V20: grade writeback"), "grade writeback CSS must be present");

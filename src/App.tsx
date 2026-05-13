@@ -117,6 +117,7 @@ type FinishedSubmission = {
   submission: SubmissionCapsule;
   session: ReturnType<typeof createSession>;
   hostSubmitted: boolean;
+  recoveryToken?: string;
   followUpRequested?: boolean;
   followUpStatus?: SubmissionDeliveryStatus;
   followUpAttempts?: number;
@@ -162,6 +163,7 @@ export default function App(): ReactElement {
   const [screen, setScreen] = useState<Screen>(widgetMode ? "loading" : "import");
   const [quiz, setQuiz] = useState<QuizSpec | null>(null);
   const [launchId, setLaunchId] = useState<string | undefined>(undefined);
+  const [recoveryToken, setRecoveryToken] = useState<string | undefined>(undefined);
   const [startedAt, setStartedAt] = useState(() => new Date().toISOString());
   const [finished, setFinished] = useState<FinishedSubmission | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -171,13 +173,14 @@ export default function App(): ReactElement {
   const pendingLaunchRef = useRef<PendingLaunch | null>(null);
   const hydrationStartedAtRef = useRef(Date.now());
 
-  function applyQuiz(rawQuiz: unknown, nextLaunchId?: string): void {
+  function applyQuiz(rawQuiz: unknown, nextLaunchId?: string, nextRecoveryToken?: string): void {
     const prepared = prepareQuizForRender(rawQuiz);
     if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
     const nextQuiz = prepared.quiz;
     const restored = widgetMode ? buildFinishedFromPersistedSubmission(nextQuiz, nextLaunchId) : null;
     setQuiz(nextQuiz);
     setLaunchId(nextLaunchId);
+    setRecoveryToken(nextRecoveryToken ?? restored?.recoveryToken);
     setStartedAt(restored?.session.startedAt ?? new Date().toISOString());
     setFinished(restored);
     setImportError(null);
@@ -222,6 +225,7 @@ export default function App(): ReactElement {
 
           const restored = buildFinishedFromPersistedSubmission(currentPending.quiz, currentPending.payload.launchId);
           setLaunchId(currentPending.payload.launchId);
+          setRecoveryToken(currentPending.payload.recoveryToken ?? restored?.recoveryToken);
           setStartedAt(restored?.session.startedAt ?? new Date().toISOString());
           setFinished(restored);
           setImportError(null);
@@ -255,6 +259,8 @@ export default function App(): ReactElement {
   useEffect(() => {
     if (!widgetMode || quiz) return;
     const requestedQuizId = getRequestedQuizId();
+    const requestedRecoveryToken = getRequestedRecoveryToken();
+    if (!requestedQuizId) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -265,7 +271,7 @@ export default function App(): ReactElement {
           source: "server-recovery",
           message: "Still waiting for the quiz from ChatGPT...",
         });
-        const serverQuiz = await fetchQuizFromServer(requestedQuizId);
+        const serverQuiz = await fetchQuizFromServer(requestedQuizId, requestedRecoveryToken);
         if (cancelled) return;
         const prepared = prepareQuizForRender(serverQuiz);
         if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
@@ -278,9 +284,9 @@ export default function App(): ReactElement {
           receivedQuestions: prepared.quiz.questions.length,
           renderableQuestions: diagnostics.renderableQuestionCount,
           complete: true,
-          source: requestedQuizId ? "server-quiz-id" : "server-latest",
+          source: "server-quiz-id",
         });
-        applyQuiz(prepared.quiz, getRecoveredLaunchId(prepared.quiz));
+        applyQuiz(prepared.quiz, getRecoveredLaunchId(prepared.quiz), requestedRecoveryToken ?? undefined);
       } catch (error) {
         if (cancelled) return;
         setHydrationError(buildHydrationFailureDetails(error instanceof Error ? error.message : String(error)));
@@ -300,7 +306,7 @@ export default function App(): ReactElement {
     let cancelled = false;
     const quizId = getQuizId(quiz);
     const poll = async () => {
-      const serverQuiz = await fetchQuizFromServer(quizId).catch(() => null);
+      const serverQuiz = await fetchQuizFromServer(quizId, recoveryToken).catch(() => null);
       if (cancelled || !serverQuiz || !shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
       const progress = getIncrementalGenerationStatus(serverQuiz);
       setHydrationProgress({
@@ -317,7 +323,7 @@ export default function App(): ReactElement {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [widgetMode, quiz]);
+  }, [widgetMode, quiz, recoveryToken]);
 
   if (screen === "import") {
     if (widgetMode) return <WidgetLoading progress={hydrationProgress} />;
@@ -329,7 +335,10 @@ export default function App(): ReactElement {
   }
 
   if (screen === "submission" && finished) {
-    return <SubmissionScreen finished={finished} widgetMode={widgetMode} onNewQuiz={() => setScreen(widgetMode ? "submission" : "import")} />;
+    return <SubmissionScreen finished={finished} widgetMode={widgetMode} onNewQuiz={() => {
+      setRecoveryToken(undefined);
+      setScreen(widgetMode ? "submission" : "import");
+    }} />;
   }
 
   if (!quiz) {
@@ -342,6 +351,7 @@ export default function App(): ReactElement {
       quiz={quiz}
       startedAt={startedAt}
       launchId={launchId}
+      recoveryToken={recoveryToken}
       widgetMode={widgetMode}
       onReset={() => setScreen("import")}
       onFinish={(result) => {
@@ -422,6 +432,12 @@ function getRequestedQuizId(): string | null {
   return params.get("quizId") || params.get("quiz") || null;
 }
 
+function getRequestedRecoveryToken(): string | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("recoveryToken") || params.get("token") || params.get("accessToken") || null;
+}
+
 function getServerBase(): string {
   if (typeof window === "undefined") return "";
   const injected = window.__BETTERQUIZZER_SERVER_BASE__?.trim().replace(/\/$/, "");
@@ -429,9 +445,10 @@ function getServerBase(): string {
   return window.location.origin && window.location.origin !== "null" ? window.location.origin : "";
 }
 
-async function fetchQuizFromServer(quizId?: string | null): Promise<QuizSpec> {
+async function fetchQuizFromServer(quizId: string, recoveryToken?: string | null): Promise<QuizSpec> {
   const base = getServerBase();
-  const path = quizId ? "/api/quiz/" + encodeURIComponent(quizId) : "/api/quiz/latest";
+  const query = recoveryToken ? "?recoveryToken=" + encodeURIComponent(recoveryToken) : "";
+  const path = "/api/quiz/" + encodeURIComponent(quizId) + query;
   const url = base ? base + path : path;
   const response = await fetch(url, { headers: { accept: "application/json" } });
   const body = await response.json().catch(() => ({}));
@@ -449,7 +466,7 @@ function buildHydrationFailureDetails(reason: string): string {
     reason,
     "",
     "Server base: " + (getServerBase() || "(none)"),
-    "Requested quiz id: " + (getRequestedQuizId() || "(latest)"),
+    "Requested quiz id: " + (getRequestedQuizId() || "(none)"),
     "Host bridge:",
     describeHostBridgeState(),
   ].join("\n");
@@ -461,9 +478,10 @@ function getRecoveredLaunchId(quiz: QuizSpec): string | undefined {
 }
 
 
-async function fetchGradeFromServer(quizId: string, sessionId?: string): Promise<GradePayload | null> {
+async function fetchGradeFromServer(quizId: string, sessionId?: string, recoveryToken?: string): Promise<GradePayload | null> {
   const base = getServerBase();
-  const path = "/api/grade/" + encodeURIComponent(quizId) + (sessionId ? "/" + encodeURIComponent(sessionId) : "");
+  const query = recoveryToken ? "?recoveryToken=" + encodeURIComponent(recoveryToken) : "";
+  const path = "/api/grade/" + encodeURIComponent(quizId) + (sessionId ? "/" + encodeURIComponent(sessionId) : "") + query;
   const url = base ? base + path : path;
   const response = await fetch(url, { headers: { accept: "application/json" } });
   const body = await response.json().catch(() => ({}));
@@ -482,6 +500,7 @@ function buildFinishedFromPersistedSubmission(quiz: QuizSpec, launchId?: string)
     submission,
     session,
     hostSubmitted: submission.status?.hostSubmitted ?? state.status !== "fallback_ready",
+    recoveryToken: state.recoveryToken,
     followUpRequested: submission.status?.followUpRequested ?? state.status === "grade_requested",
     followUpStatus,
     followUpAttempts: followUpStatus === "submitted" ? 0 : 1,
@@ -689,6 +708,7 @@ function QuizRunner({
   quiz,
   startedAt,
   launchId,
+  recoveryToken,
   widgetMode,
   onReset,
   onFinish,
@@ -696,11 +716,12 @@ function QuizRunner({
   quiz: QuizSpec;
   startedAt: string;
   launchId?: string;
+  recoveryToken?: string;
   widgetMode: boolean;
   onReset: () => void;
   onFinish: (finished: FinishedSubmission) => void;
 }): ReactElement {
-  const restoredDraftState = useMemo(() => widgetMode ? getPersistedDraftState(getQuizId(quiz)) : null, [widgetMode, quiz]);
+  const restoredDraftState = useMemo(() => widgetMode ? getPersistedDraftState(getQuizId(quiz), launchId) : null, [widgetMode, quiz, launchId]);
   const [currentIndex, setCurrentIndex] = useState(() => clampIndex(restoredDraftState?.currentIndex ?? 0, quiz.questions.length));
   const [drafts, setDrafts] = useState<Record<string, DraftAnswer>>(() => sanitizeRestoredDrafts(restoredDraftState?.drafts, quiz));
   const [submitting, setSubmitting] = useState(false);
@@ -741,11 +762,12 @@ function QuizRunner({
       status: "answering",
       quizId: getQuizId(quiz),
       launchId,
+      recoveryToken,
       currentIndex,
       drafts: keepDraftsForQuiz(drafts, quiz),
       updatedAt: new Date().toISOString(),
     });
-  }, [widgetMode, quiz, launchId, currentIndex, drafts]);
+  }, [widgetMode, quiz, launchId, recoveryToken, currentIndex, drafts]);
 
   useEffect(() => {
     const currentQuestion = quiz.questions[currentIndex];
@@ -798,6 +820,7 @@ function QuizRunner({
         status: "skipped",
         quizId: getQuizId(quiz),
         launchId,
+        recoveryToken,
         currentIndex,
         drafts,
         error: "User skipped the quiz before submission.",
@@ -840,6 +863,7 @@ function QuizRunner({
         status: "submitting",
         quizId: submission.quizId,
         launchId,
+        recoveryToken,
         currentIndex,
         drafts,
         session,
@@ -862,6 +886,7 @@ function QuizRunner({
           status: "grade_requested",
           quizId: submission.quizId,
           launchId,
+          recoveryToken,
           currentIndex,
           drafts,
           session,
@@ -896,6 +921,7 @@ function QuizRunner({
           status: hostSubmitted ? "submitted" : "fallback_ready",
           quizId: submission.quizId,
           launchId,
+          recoveryToken,
           currentIndex,
           drafts,
           session,
@@ -907,7 +933,7 @@ function QuizRunner({
 
       const bqV44EarlyFollowUpSent = bqV44EarlyFollowUpResult?.status === "sent";
       const firstStatus: SubmissionDeliveryStatus = bqV44EarlyFollowUpSent ? "grade_requested" : widgetMode ? "requesting_grade" : "submitted";
-      onFinish({ submission, session, hostSubmitted, followUpRequested: bqV44EarlyFollowUpSent, followUpStatus: firstStatus, followUpAttempts: 0, followUpMessage: bridgeError ?? undefined });
+      onFinish({ submission, session, hostSubmitted, recoveryToken, followUpRequested: bqV44EarlyFollowUpSent, followUpStatus: firstStatus, followUpAttempts: 0, followUpMessage: bridgeError ?? undefined });
 
       if (widgetMode) {
         void requestChatGptGradeOnce({
@@ -918,6 +944,7 @@ function QuizRunner({
           drafts,
           hostResult,
           launchId,
+          recoveryToken,
           onUpdate: onFinish,
         });
       }
@@ -2482,7 +2509,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
     let attempts = 0;
     const poll = async () => {
       attempts += 1;
-      const grade = await fetchGradeFromServer(submission.quizId, submission.sessionId).catch(() => null);
+      const grade = await fetchGradeFromServer(submission.quizId, submission.sessionId, finished.recoveryToken).catch(() => null);
       if (cancelled) return;
       if (grade) {
         setRecordedGrade(grade);
@@ -2503,7 +2530,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [widgetMode, submission.quizId, submission.sessionId]);
+  }, [widgetMode, submission.quizId, submission.sessionId, finished.recoveryToken]);
 
   return (
     <main className="shell narrow result-shell">
@@ -2702,6 +2729,7 @@ type GradeRetryOptions = {
   drafts: Record<string, DraftAnswer>;
   hostResult: ToolResultLike | null;
   launchId?: string;
+  recoveryToken?: string;
   onUpdate: (finished: FinishedSubmission) => void;
 };
 
@@ -2738,6 +2766,7 @@ function setFollowUpDelivery(options: GradeRetryOptions, status: SubmissionDeliv
     status: status === "grade_requested" ? "grade_requested" : status === "grade_request_unavailable" || status === "grade_request_failed" ? "fallback_ready" : "requesting_grade",
     quizId: options.submission.quizId,
     launchId: options.launchId,
+    recoveryToken: options.recoveryToken,
     currentIndex: options.currentIndex,
     drafts: options.drafts,
     session: options.session,
@@ -2750,6 +2779,7 @@ function setFollowUpDelivery(options: GradeRetryOptions, status: SubmissionDeliv
     submission: options.submission,
     session: options.session,
     hostSubmitted: options.hostSubmitted,
+    recoveryToken: options.recoveryToken,
     followUpRequested,
     followUpStatus: status,
     followUpAttempts: attempts,

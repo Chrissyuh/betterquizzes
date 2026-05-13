@@ -37355,18 +37355,20 @@ function persistWidgetState(state) {
 function getPersistedWidgetStateRecord() {
 	return asRecord(getOpenAiBridge()?.widgetState);
 }
-function getPersistedDraftState(quizId) {
+function getPersistedDraftState(quizId, launchId) {
 	const state = getPersistedWidgetStateRecord();
 	if (!state) return null;
 	const kind = state.kind;
 	if (kind !== "betterquizzer.answer_state" && kind !== "betterquizzer.draft_state" && kind !== "betterquizzer.submission_state") return null;
 	if (state.quizId !== quizId) return null;
+	if (launchId && typeof state.launchId === "string" && state.launchId !== launchId) return null;
 	if (kind === "betterquizzer.submission_state" && asSubmissionCapsule(state.submission)) return null;
 	return {
 		kind: "betterquizzer.answer_state",
 		status: "answering",
 		quizId,
 		launchId: typeof state.launchId === "string" ? state.launchId : void 0,
+		recoveryToken: typeof state.recoveryToken === "string" ? state.recoveryToken : void 0,
 		currentIndex: typeof state.currentIndex === "number" && Number.isFinite(state.currentIndex) ? state.currentIndex : void 0,
 		drafts: state.drafts,
 		updatedAt: typeof state.updatedAt === "string" ? state.updatedAt : (/* @__PURE__ */ new Date()).toISOString()
@@ -37386,6 +37388,7 @@ function getPersistedSubmissionState(quizId, launchId) {
 		status,
 		quizId,
 		launchId: typeof state.launchId === "string" ? state.launchId : void 0,
+		recoveryToken: typeof state.recoveryToken === "string" ? state.recoveryToken : void 0,
 		currentIndex: typeof state.currentIndex === "number" && Number.isFinite(state.currentIndex) ? state.currentIndex : void 0,
 		drafts: state.drafts,
 		session: asQuizSession(state.session),
@@ -37583,6 +37586,7 @@ function toHostQuizPayload(candidate, source) {
 		quiz: normalized,
 		source,
 		launchId: typeof launchSummary?.launchId === "string" ? launchSummary.launchId : void 0,
+		recoveryToken: typeof launchSummary?.recoveryToken === "string" ? launchSummary.recoveryToken : void 0,
 		quizRevision: typeof launchSummary?.quizRevision === "number" ? launchSummary.quizRevision : void 0,
 		questionCount: typeof launchSummary?.questionCount === "number" ? launchSummary.questionCount : normalized.questions.length,
 		declaredQuestionCount: typeof launchSummary?.declaredQuestionCount === "number" ? launchSummary.declaredQuestionCount : getExpectedQuestionCount(launchSummary ?? null) ?? normalized.questions.length,
@@ -38113,6 +38117,7 @@ function App() {
 	const [screen, setScreen] = (0, import_react.useState)(widgetMode ? "loading" : "import");
 	const [quiz, setQuiz] = (0, import_react.useState)(null);
 	const [launchId, setLaunchId] = (0, import_react.useState)(void 0);
+	const [recoveryToken, setRecoveryToken] = (0, import_react.useState)(void 0);
 	const [startedAt, setStartedAt] = (0, import_react.useState)(() => (/* @__PURE__ */ new Date()).toISOString());
 	const [finished, setFinished] = (0, import_react.useState)(null);
 	const [importError, setImportError] = (0, import_react.useState)(null);
@@ -38121,13 +38126,14 @@ function App() {
 	const [hydrationProgress, setHydrationProgress] = (0, import_react.useState)(null);
 	const pendingLaunchRef = (0, import_react.useRef)(null);
 	const hydrationStartedAtRef = (0, import_react.useRef)(Date.now());
-	function applyQuiz(rawQuiz, nextLaunchId) {
+	function applyQuiz(rawQuiz, nextLaunchId, nextRecoveryToken) {
 		const prepared = prepareQuizForRender(rawQuiz);
 		if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
 		const nextQuiz = prepared.quiz;
 		const restored = widgetMode ? buildFinishedFromPersistedSubmission(nextQuiz, nextLaunchId) : null;
 		setQuiz(nextQuiz);
 		setLaunchId(nextLaunchId);
+		setRecoveryToken(nextRecoveryToken ?? restored?.recoveryToken);
 		setStartedAt(restored?.session.startedAt ?? (/* @__PURE__ */ new Date()).toISOString());
 		setFinished(restored);
 		setImportError(null);
@@ -38172,6 +38178,7 @@ function App() {
 				if (!shouldAcceptHydratedQuiz(quiz, currentPending.quiz)) return;
 				const restored = buildFinishedFromPersistedSubmission(currentPending.quiz, currentPending.payload.launchId);
 				setLaunchId(currentPending.payload.launchId);
+				setRecoveryToken(currentPending.payload.recoveryToken ?? restored?.recoveryToken);
 				setStartedAt(restored?.session.startedAt ?? (/* @__PURE__ */ new Date()).toISOString());
 				setFinished(restored);
 				setImportError(null);
@@ -38201,6 +38208,8 @@ function App() {
 	(0, import_react.useEffect)(() => {
 		if (!widgetMode || quiz) return;
 		const requestedQuizId = getRequestedQuizId();
+		const requestedRecoveryToken = getRequestedRecoveryToken();
+		if (!requestedQuizId) return;
 		let cancelled = false;
 		const poll = async () => {
 			try {
@@ -38211,7 +38220,7 @@ function App() {
 					source: "server-recovery",
 					message: "Still waiting for the quiz from ChatGPT..."
 				});
-				const serverQuiz = await fetchQuizFromServer(requestedQuizId);
+				const serverQuiz = await fetchQuizFromServer(requestedQuizId, requestedRecoveryToken);
 				if (cancelled) return;
 				const prepared = prepareQuizForRender(serverQuiz);
 				if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
@@ -38222,9 +38231,9 @@ function App() {
 					receivedQuestions: prepared.quiz.questions.length,
 					renderableQuestions: diagnostics.renderableQuestionCount,
 					complete: true,
-					source: requestedQuizId ? "server-quiz-id" : "server-latest"
+					source: "server-quiz-id"
 				});
-				applyQuiz(prepared.quiz, getRecoveredLaunchId(prepared.quiz));
+				applyQuiz(prepared.quiz, getRecoveredLaunchId(prepared.quiz), requestedRecoveryToken ?? void 0);
 			} catch (error) {
 				if (cancelled) return;
 				setHydrationError(buildHydrationFailureDetails(error instanceof Error ? error.message : String(error)));
@@ -38243,7 +38252,7 @@ function App() {
 		let cancelled = false;
 		const quizId = getQuizId(quiz);
 		const poll = async () => {
-			const serverQuiz = await fetchQuizFromServer(quizId).catch(() => null);
+			const serverQuiz = await fetchQuizFromServer(quizId, recoveryToken).catch(() => null);
 			if (cancelled || !serverQuiz || !shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
 			const progress = getIncrementalGenerationStatus(serverQuiz);
 			setHydrationProgress({
@@ -38260,7 +38269,11 @@ function App() {
 			cancelled = true;
 			window.clearInterval(interval);
 		};
-	}, [widgetMode, quiz]);
+	}, [
+		widgetMode,
+		quiz,
+		recoveryToken
+	]);
 	if (screen === "import") {
 		if (widgetMode) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, { progress: hydrationProgress });
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ImportScreen, {
@@ -38272,7 +38285,10 @@ function App() {
 	if (screen === "submission" && finished) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubmissionScreen, {
 		finished,
 		widgetMode,
-		onNewQuiz: () => setScreen(widgetMode ? "submission" : "import")
+		onNewQuiz: () => {
+			setRecoveryToken(void 0);
+			setScreen(widgetMode ? "submission" : "import");
+		}
 	});
 	if (!quiz) return widgetMode ? hydrationError && hydrationErrorVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuizSetupIssue, { message: hydrationError }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, { progress: hydrationProgress }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ImportScreen, {
 		error: "No quiz is loaded.",
@@ -38282,6 +38298,7 @@ function App() {
 		quiz,
 		startedAt,
 		launchId,
+		recoveryToken,
 		widgetMode,
 		onReset: () => setScreen("import"),
 		onFinish: (result) => {
@@ -38382,15 +38399,21 @@ function getRequestedQuizId() {
 	const params = new URLSearchParams(window.location.search);
 	return params.get("quizId") || params.get("quiz") || null;
 }
+function getRequestedRecoveryToken() {
+	if (typeof window === "undefined") return null;
+	const params = new URLSearchParams(window.location.search);
+	return params.get("recoveryToken") || params.get("token") || params.get("accessToken") || null;
+}
 function getServerBase() {
 	if (typeof window === "undefined") return "";
 	const injected = window.__BETTERQUIZZER_SERVER_BASE__?.trim().replace(/\/$/, "");
 	if (injected) return injected;
 	return window.location.origin && window.location.origin !== "null" ? window.location.origin : "";
 }
-async function fetchQuizFromServer(quizId) {
+async function fetchQuizFromServer(quizId, recoveryToken) {
 	const base = getServerBase();
-	const path = quizId ? "/api/quiz/" + encodeURIComponent(quizId) : "/api/quiz/latest";
+	const query = recoveryToken ? "?recoveryToken=" + encodeURIComponent(recoveryToken) : "";
+	const path = "/api/quiz/" + encodeURIComponent(quizId) + query;
 	const url = base ? base + path : path;
 	const response = await fetch(url, { headers: { accept: "application/json" } });
 	const body = await response.json().catch(() => ({}));
@@ -38407,7 +38430,7 @@ function buildHydrationFailureDetails(reason) {
 		reason,
 		"",
 		"Server base: " + (getServerBase() || "(none)"),
-		"Requested quiz id: " + (getRequestedQuizId() || "(latest)"),
+		"Requested quiz id: " + (getRequestedQuizId() || "(none)"),
 		"Host bridge:",
 		describeHostBridgeState()
 	].join("\n");
@@ -38416,9 +38439,10 @@ function getRecoveredLaunchId(quiz) {
 	const revision = quiz.metadata?.quizRevision;
 	return typeof revision === "number" && Number.isFinite(revision) ? `${getQuizId(quiz)}:r${revision}` : void 0;
 }
-async function fetchGradeFromServer(quizId, sessionId) {
+async function fetchGradeFromServer(quizId, sessionId, recoveryToken) {
 	const base = getServerBase();
-	const path = "/api/grade/" + encodeURIComponent(quizId) + (sessionId ? "/" + encodeURIComponent(sessionId) : "");
+	const query = recoveryToken ? "?recoveryToken=" + encodeURIComponent(recoveryToken) : "";
+	const path = "/api/grade/" + encodeURIComponent(quizId) + (sessionId ? "/" + encodeURIComponent(sessionId) : "") + query;
 	const url = base ? base + path : path;
 	const response = await fetch(url, { headers: { accept: "application/json" } });
 	const body = await response.json().catch(() => ({}));
@@ -38435,6 +38459,7 @@ function buildFinishedFromPersistedSubmission(quiz, launchId) {
 		submission,
 		session,
 		hostSubmitted: submission.status?.hostSubmitted ?? state.status !== "fallback_ready",
+		recoveryToken: state.recoveryToken,
 		followUpRequested: submission.status?.followUpRequested ?? state.status === "grade_requested",
 		followUpStatus,
 		followUpAttempts: followUpStatus === "submitted" ? 0 : 1,
@@ -38623,8 +38648,12 @@ function getIncrementalGenerationStatus(quiz) {
 		ready: quiz.questions.length
 	};
 }
-function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }) {
-	const restoredDraftState = (0, import_react.useMemo)(() => widgetMode ? getPersistedDraftState(getQuizId(quiz)) : null, [widgetMode, quiz]);
+function QuizRunner({ quiz, startedAt, launchId, recoveryToken, widgetMode, onReset, onFinish }) {
+	const restoredDraftState = (0, import_react.useMemo)(() => widgetMode ? getPersistedDraftState(getQuizId(quiz), launchId) : null, [
+		widgetMode,
+		quiz,
+		launchId
+	]);
 	const [currentIndex, setCurrentIndex] = (0, import_react.useState)(() => clampIndex(restoredDraftState?.currentIndex ?? 0, quiz.questions.length));
 	const [drafts, setDrafts] = (0, import_react.useState)(() => sanitizeRestoredDrafts(restoredDraftState?.drafts, quiz));
 	const [submitting, setSubmitting] = (0, import_react.useState)(false);
@@ -38664,6 +38693,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 			status: "answering",
 			quizId: getQuizId(quiz),
 			launchId,
+			recoveryToken,
 			currentIndex,
 			drafts: keepDraftsForQuiz(drafts, quiz),
 			updatedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -38672,6 +38702,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 		widgetMode,
 		quiz,
 		launchId,
+		recoveryToken,
 		currentIndex,
 		drafts
 	]);
@@ -38725,6 +38756,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 			status: "skipped",
 			quizId: getQuizId(quiz),
 			launchId,
+			recoveryToken,
 			currentIndex,
 			drafts,
 			error: "User skipped the quiz before submission."
@@ -38767,6 +38799,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 			status: "submitting",
 			quizId: submission.quizId,
 			launchId,
+			recoveryToken,
 			currentIndex,
 			drafts,
 			session,
@@ -38790,6 +38823,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 					status: "grade_requested",
 					quizId: submission.quizId,
 					launchId,
+					recoveryToken,
 					currentIndex,
 					drafts,
 					session,
@@ -38823,6 +38857,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 					status: hostSubmitted ? "submitted" : "fallback_ready",
 					quizId: submission.quizId,
 					launchId,
+					recoveryToken,
 					currentIndex,
 					drafts,
 					session,
@@ -38836,6 +38871,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 				submission,
 				session,
 				hostSubmitted,
+				recoveryToken,
 				followUpRequested: bqV44EarlyFollowUpSent,
 				followUpStatus: bqV44EarlyFollowUpSent ? "grade_requested" : widgetMode ? "requesting_grade" : "submitted",
 				followUpAttempts: 0,
@@ -38849,6 +38885,7 @@ function QuizRunner({ quiz, startedAt, launchId, widgetMode, onReset, onFinish }
 				drafts,
 				hostResult,
 				launchId,
+				recoveryToken,
 				onUpdate: onFinish
 			});
 		} finally {
@@ -40651,7 +40688,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 		let attempts = 0;
 		const poll = async () => {
 			attempts += 1;
-			const grade = await fetchGradeFromServer(submission.quizId, submission.sessionId).catch(() => null);
+			const grade = await fetchGradeFromServer(submission.quizId, submission.sessionId, finished.recoveryToken).catch(() => null);
 			if (cancelled) return;
 			if (grade) {
 				setRecordedGrade(grade);
@@ -40675,7 +40712,8 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }) {
 	}, [
 		widgetMode,
 		submission.quizId,
-		submission.sessionId
+		submission.sessionId,
+		finished.recoveryToken
 	]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
 		className: "shell narrow result-shell",
@@ -40832,6 +40870,7 @@ function setFollowUpDelivery(options, status, followUpRequested, attempts, messa
 		status: status === "grade_requested" ? "grade_requested" : status === "grade_request_unavailable" || status === "grade_request_failed" ? "fallback_ready" : "requesting_grade",
 		quizId: options.submission.quizId,
 		launchId: options.launchId,
+		recoveryToken: options.recoveryToken,
 		currentIndex: options.currentIndex,
 		drafts: options.drafts,
 		session: options.session,
@@ -40843,6 +40882,7 @@ function setFollowUpDelivery(options, status, followUpRequested, attempts, messa
 		submission: options.submission,
 		session: options.session,
 		hostSubmitted: options.hostSubmitted,
+		recoveryToken: options.recoveryToken,
 		followUpRequested,
 		followUpStatus: status,
 		followUpAttempts: attempts,

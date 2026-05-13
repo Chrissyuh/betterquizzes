@@ -2,6 +2,8 @@
 import { createServer } from "node:http";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
+import { randomUUID } from "node:crypto";
+import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs";
 
 // BEGIN BETTERQUIZZES V23 BUILDER REPAIR
 
@@ -126,23 +128,6 @@ function bqV43NormalizeOrderingAliasesDeep(payload) {
   return payload;
 }
 // END BETTERQUIZZES V43 ORDERING DIRECTION GUARDRAILS
-
-const V2_BUILDER_INSTRUCTIONS = [
-  
-  "V45 ORDERING CHECKLIST BEFORE add_question: if type is ordering, use items, answer item ids, and orderingBehavior.direction exactly top_to_bottom.",
-  "V45 ORDERING WARNING: orderingBehavior.direction is never conceptual. Never use first_to_last, chronological, sequence, most_to_least, least_to_most, closest_to_farthest, left_to_right, or horizontal.",
-  "V45 ORDERING LABELS: write conceptual meaning only in orderingBehavior.topLabel and orderingBehavior.bottomLabel, such as First/Last or Most/Least.",
-  "For normal assistant-authored quizzes, build quietly. Do not send chat progress/check-in messages while authoring. Start with start_quiz and expectedQuestionCount, add 1-3 good questions, then call open_quiz once without args so the widget launches early. After that, continue add_question/repair_question silently; accepted questions are stored continuously and the launched widget refreshes from the stored draft. The normal path has no separate validation step. Do not call open_quiz again for the same quiz unless the first launch failed. Bulk questions in start_quiz are available for reliability or smoke tests.",
-  "Do not ask the user to confirm they want a quiz after they request one. Do not describe internal tool progress unless a repair failure blocks completion.",
-  "For matching questions, canonical schema is left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]. Legacy pairs/matches/items are accepted only for compatibility and normalized internally.",
-  "Keep the public product name BetterQuizzes.",
-  "Keep the internal compatibility schema exactly betterquizzer.quiz version 2.",
-  "Required questions should be rare; practice quizzes should not make every question required by default.",
-  "Disable confidence for subjective, preference, survey, reflection, and developer smoke-test questions.",
-  "orderingBehavior.direction must always be exactly \"top_to_bottom\". Use topLabel/bottomLabel for conceptual order such as First/Last, Most/Least, or Closest/Farthest.",
-  "Never use first_to_last, last_to_first, chronological, sequence, left_to_right, most_to_least, or least_to_most as orderingBehavior.direction.",
-  "Use repair_question when a question is missing required fields or needs replacement."
-].join("\n");
 
 const START_QUIZ_INPUT_SCHEMA = {
 type: "object",
@@ -716,6 +701,7 @@ function startQuiz(input = {}) {
     expectedQuestionCount: input.expectedQuestionCount ?? undefined,
     instructions: input.instructions ?? "",
     metadata: input.metadata ?? {},
+    recoveryToken: newRecoveryToken(),
     questions,
     createdAt: new Date().toISOString()
   };
@@ -752,6 +738,7 @@ function addQuestion(input = {}) {
       title: input.title ?? "Untitled BetterQuizzes quiz",
       description: input.description ?? "",
       metadata: {},
+      recoveryToken: newRecoveryToken(),
       questions: [],
       createdAt: new Date().toISOString()
     };
@@ -827,8 +814,9 @@ function v23SyncLaunchedDraft(draft) {
   };
   const prepared = prepareQuizForRender(quiz);
   if (!prepared.ok) return null;
-  const stored = storePreparedQuiz(prepared, { expectedQuestionCount: draft.expectedQuestionCount });
+  const stored = storePreparedQuiz(prepared, { expectedQuestionCount: draft.expectedQuestionCount, recoveryToken: draft.recoveryToken });
   draft.quizId = stored.quizId;
+  draft.recoveryToken = stored.recoveryToken;
   draft.metadata = { ...(draft.metadata ?? {}), expectedQuestionCount: stored.expectedQuestionCount, quizRevision: stored.quizRevision };
   return stored;
 }
@@ -1637,6 +1625,7 @@ const CREATE_QUIZ_DESCRIPTION = "Use only when the user supplied a complete, val
 
 const quizzes = new Map();
 const grades = new Map();
+const quizRecoveryTokens = new Map();
 let lastQuizId = null;
 const builtInQuizzes = loadBuiltInQuizzes();
 for (const quiz of builtInQuizzes) quizzes.set(getQuizId(quiz), quiz);
@@ -1658,6 +1647,47 @@ function widgetDomain() {
 
 function uniqueDomains(...domains) {
   return [...new Set(domains.map((domain) => cleanOrigin(domain)).filter(Boolean))];
+}
+
+function newRecoveryToken() {
+  return randomUUID();
+}
+
+function normalizeRecoveryToken(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function getRecoveryTokenFromUrl(url) {
+  return normalizeRecoveryToken(url.searchParams.get("recoveryToken") || url.searchParams.get("token") || url.searchParams.get("accessToken"));
+}
+
+function getOrCreateQuizRecoveryToken(quizId, options = {}) {
+  const provided = normalizeRecoveryToken(options.recoveryToken);
+  if (provided) {
+    quizRecoveryTokens.set(quizId, provided);
+    return provided;
+  }
+  if (options.rotateRecoveryToken || !quizRecoveryTokens.has(quizId)) {
+    quizRecoveryTokens.set(quizId, newRecoveryToken());
+  }
+  return quizRecoveryTokens.get(quizId);
+}
+
+function isBuiltInQuizId(quizId) {
+  return builtInQuizzes.some((sample) => getQuizId(sample) === quizId);
+}
+
+function requireQuizRecoveryAccess(url, quizId) {
+  if (isBuiltInQuizId(quizId)) return null;
+  const expected = quizRecoveryTokens.get(quizId);
+  const actual = getRecoveryTokenFromUrl(url);
+  if (!expected || !actual || actual !== expected) {
+    return {
+      error: "Recovery token required for this quiz.",
+      hint: "Use the recoveryToken from the BetterQuizzes launch metadata."
+    };
+  }
+  return null;
 }
 
 function publicOriginFrom(url) {
@@ -1758,27 +1788,30 @@ try {
 
 
     if (request.method === "GET" && url.pathname.startsWith("/api/grade/")) {
-      return sendJson(response, 200, getGradeForUrl(url));
+      const gradeResult = getGradeForUrl(url);
+      return sendJson(response, gradeResult.httpStatus ?? 200, gradeResult.body ?? gradeResult);
     }
 
     if (request.method === "GET" && url.pathname === "/api/quizzes") {
       return sendJson(response, 200, {
-        quizzes: [...quizzes.values()].map((quiz) => ({ quizId: getQuizId(quiz), title: quiz.title, questionCount: quiz.questions.length, source: builtInQuizzes.some((sample) => getQuizId(sample) === getQuizId(quiz)) ? "sample" : "created" })),
-        lastQuizId
+        quizzes: builtInQuizzes.map((quiz) => ({ quizId: getQuizId(quiz), title: quiz.title, questionCount: quiz.questions.length, source: "sample" })),
+        createdQuizzesHidden: true
       });
     }
 
     if (request.method === "GET" && url.pathname === "/api/quiz/latest") {
-      const quiz = lastQuizId ? quizzes.get(lastQuizId) : null;
-      if (!quiz) return sendJson(response, 404, { error: "No LLM-created quiz is available yet.", lastQuizId, availableQuizIds: [...quizzes.keys()] });
-      return sendJson(response, 200, { quiz, quizId: getQuizId(quiz), source: "latest" });
+      return sendJson(response, 410, {
+        error: "Latest quiz recovery is disabled for privacy. Fetch by quizId with a recoveryToken from launch metadata."
+      });
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/api/quiz/")) {
       const quizId = decodeURIComponent(url.pathname.slice("/api/quiz/".length));
       const quiz = quizzes.get(quizId);
-      if (!quiz) return sendJson(response, 404, { error: "No stored quiz with id " + quizId + ".", availableQuizIds: [...quizzes.keys()] });
-      return sendJson(response, 200, { quiz, quizId: getQuizId(quiz), source: builtInQuizzes.some((sample) => getQuizId(sample) === getQuizId(quiz)) ? "sample" : "created" });
+      if (!quiz) return sendJson(response, 404, { error: "No stored quiz with id " + quizId + "." });
+      const accessError = requireQuizRecoveryAccess(url, quizId);
+      if (accessError) return sendJson(response, 403, accessError);
+      return sendJson(response, 200, { quiz, quizId: getQuizId(quiz), source: isBuiltInQuizId(getQuizId(quiz)) ? "sample" : "created" });
     }
 
     if (request.method === "POST" && url.pathname === "/mcp") {
@@ -1900,7 +1933,7 @@ function buildLaunchToolResult(prepared, options = {}) {
     activityPolicy: toCanonicalActivityPolicy(quiz.activityPolicy),
     quiz: publicQuiz
   };
-  return { structuredContent: launch, content: [{ type: "text", text: `BetterQuizzes is ready: ${quiz.title} (${prepared.diagnostics.renderableQuestionCount}/${quiz.questions.length} renderable questions).` }], _meta: { ...launch, startedAt: new Date().toISOString(), ui: { route: "quiz" } } };
+  return { structuredContent: launch, content: [{ type: "text", text: `BetterQuizzes is ready: ${quiz.title} (${prepared.diagnostics.renderableQuestionCount}/${quiz.questions.length} renderable questions).` }], _meta: { ...launch, recoveryToken: stored.recoveryToken, startedAt: new Date().toISOString(), ui: { route: "quiz" } } };
 }
 
 function storePreparedQuiz(prepared, options = {}) {
@@ -1917,12 +1950,13 @@ function storePreparedQuiz(prepared, options = {}) {
   const previousFingerprint = quizFingerprints.get(quizId);
   const previousRevision = quizRevisions.get(quizId) ?? 0;
   const quizRevision = previousFingerprint === fingerprint && previousRevision > 0 ? previousRevision : previousRevision + 1;
+  const recoveryToken = getOrCreateQuizRecoveryToken(quizId, options);
   quizRevisions.set(quizId, quizRevision);
   quizFingerprints.set(quizId, fingerprint);
   quiz.metadata = { ...(quiz.metadata ?? {}), expectedQuestionCount, quizRevision };
   quizzes.set(quizId, quiz);
   lastQuizId = quizId;
-  return { quiz, quizId, quizRevision, launchId: `${quizId}:r${quizRevision}`, expectedQuestionCount, complete };
+  return { quiz, quizId, quizRevision, launchId: `${quizId}:r${quizRevision}`, recoveryToken, expectedQuestionCount, complete };
 }
 
 function quizRevisionFingerprint(quiz) {
@@ -1945,7 +1979,7 @@ function openQuiz(input = {}) {
 function createQuiz(id, rawQuiz) {
   const prepared = prepareQuizForRender(rawQuiz);
   if (!prepared.ok) return errorResponse(id, -32602, "Invalid or unrenderable QuizSpec", { errors: prepared.errors, warnings: prepared.warnings, renderDiagnostics: prepared.diagnostics, canonicalExample: CANONICAL_QUIZ_EXAMPLE });
-  return okResponse(id, buildLaunchToolResult(prepared));
+  return okResponse(id, buildLaunchToolResult(prepared, { rotateRecoveryToken: true }));
 }
 
 function submitAnswers(id, args) {
@@ -1988,6 +2022,7 @@ function normalizeGradePayload(args = {}) {
   const source = args.grade && typeof args.grade === "object" && !Array.isArray(args.grade) ? { ...args.grade, quizId: args.quizId ?? args.grade.quizId, sessionId: args.sessionId ?? args.grade.sessionId } : { ...args };
   const quizId = String(source.quizId || "").trim();
   const sessionId = String(source.sessionId || "").trim();
+  const launchId = String(source.launchId || "").trim();
   if (!quizId) throw new Error("record_grade requires quizId.");
 
   const score = source.score === null ? null : toFiniteNumberOrNull(source.score);
@@ -2011,6 +2046,7 @@ function normalizeGradePayload(args = {}) {
     version: "V1",
     quizId,
     sessionId,
+    ...(launchId ? { launchId } : {}),
     score,
     maxScore,
     percent,
@@ -2053,8 +2089,10 @@ function getGradeForUrl(url) {
   const parts = rest.split("/").filter(Boolean);
   const quizId = parts[0] || "";
   const sessionId = parts[1] || url.searchParams.get("sessionId") || "";
+  const accessError = requireQuizRecoveryAccess(url, quizId);
+  if (accessError) return { httpStatus: 403, body: accessError };
   const grade = grades.get(gradeStorageKey(quizId, sessionId)) || grades.get(gradeStorageKey(quizId, "latest")) || null;
-  return { ok: Boolean(grade), grade };
+  return { body: { ok: Boolean(grade), grade } };
 }
 
 function inspectQuiz(id, quizId) {

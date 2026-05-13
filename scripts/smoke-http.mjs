@@ -146,9 +146,8 @@ async function runSmoke() {
     }
   });
 
-  const stagedLatestBeforeOpen = await getJson("/api/quiz/latest");
-  assert(stagedLatestBeforeOpen.quizId === "staged-builder-smoke", "add_question should store the staged quiz before open_quiz");
-  assert(stagedLatestBeforeOpen.quiz.questions.length === 1, "add_question should store the first staged question");
+  const latestBeforeOpen = await getJsonAllowStatus("/api/quiz/latest", 410);
+  assert(latestBeforeOpen.error?.includes("disabled for privacy"), "latest quiz endpoint should not expose created quizzes without launch metadata");
 
   const opened = await rpc("tools/call", {
     name: "open_quiz",
@@ -158,9 +157,12 @@ async function runSmoke() {
   assert(opened.result.structuredContent.declaredQuestionCount === 3, "open_quiz should preserve expected question count");
   assert(opened.result.structuredContent.questionCount === 1, "open_quiz should launch available questions");
   assert(opened.result.structuredContent.packetProgress.complete === false, "open_quiz partial launch should not be complete");
-  const stagedLatestAfterOpen = await getJson("/api/quiz/latest");
-  assert(stagedLatestAfterOpen.quizId === "staged-builder-smoke", "latest quiz endpoint should expose the opened staged quiz");
-  assert(stagedLatestAfterOpen.quiz.questions.length === 1, "latest quiz endpoint should expose the current staged revision");
+  const stagedRecoveryToken = opened.result._meta?.recoveryToken;
+  assert(typeof stagedRecoveryToken === "string" && stagedRecoveryToken.length > 10, "open_quiz must provide a private recovery token in metadata");
+  await getJsonAllowStatus("/api/quiz/staged-builder-smoke", 403);
+  const stagedAfterOpen = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
+  assert(stagedAfterOpen.quizId === "staged-builder-smoke", "token-scoped quiz endpoint should expose the opened staged quiz");
+  assert(stagedAfterOpen.quiz.questions.length === 1, "token-scoped quiz endpoint should expose the current staged revision");
   const replayedOpen = await rpc("tools/call", {
     name: "open_quiz",
     arguments: {}
@@ -217,11 +219,11 @@ async function runSmoke() {
     }
   });
 
-  const stagedStored = await getJson("/api/quiz/staged-builder-smoke");
+  const stagedStored = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
   assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
-  const stagedLatestAfterUpdates = await getJson("/api/quiz/latest");
-  assert(stagedLatestAfterUpdates.quiz.questions.length === 3, "latest quiz endpoint should update as staged questions are added");
+  const stagedAfterUpdates = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
+  assert(stagedAfterUpdates.quiz.questions.length === 3, "token-scoped quiz endpoint should update as staged questions are added");
 
   const badTextSelect = await rpc("tools/call", {
     name: "add_question",
@@ -343,14 +345,15 @@ async function runSmoke() {
     }
   });
 
-  const storedBuilderQuiz = await getJson("/api/quiz/builder-ordering-smoke");
-  assert(storedBuilderQuiz.quiz.questions.length === 3, "add_question should continuously store all builder questions");
-
   const openedFinal = await rpc("tools/call", {
     name: "open_quiz",
     arguments: { quizId: "builder-ordering-smoke" }
   });
   assert(openedFinal.result._meta?.ui?.route === "quiz", "open_quiz missing launch metadata route");
+  const builderRecoveryToken = openedFinal.result._meta?.recoveryToken;
+  assert(typeof builderRecoveryToken === "string" && builderRecoveryToken.length > 10, "open_quiz must provide a builder recovery token in metadata");
+  const storedBuilderQuiz = await getJson("/api/quiz/builder-ordering-smoke?recoveryToken=" + encodeURIComponent(builderRecoveryToken));
+  assert(storedBuilderQuiz.quiz.questions.length === 3, "add_question should continuously store all builder questions");
   assert(openedFinal.result.structuredContent.quiz.questions[1].type === "matching", "canonical matching question was not preserved");
   assert(Array.isArray(openedFinal.result.structuredContent.quiz.questions[2].left), "legacy matching pairs were not normalized to left/right");
 
@@ -416,6 +419,12 @@ async function runSmoke() {
 async function getJson(pathname) {
   const response = await fetch(`${baseUrl}${pathname}`);
   if (!response.ok) throw new Error(`GET ${pathname} failed: ${response.status}`);
+  return response.json();
+}
+
+async function getJsonAllowStatus(pathname, expectedStatus) {
+  const response = await fetch(`${baseUrl}${pathname}`);
+  if (response.status !== expectedStatus) throw new Error(`GET ${pathname} expected ${expectedStatus}, received ${response.status}`);
   return response.json();
 }
 
