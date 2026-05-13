@@ -37321,6 +37321,36 @@ function getHostQuizPayload(options = {}) {
 	}
 	return null;
 }
+async function callHostOpenQuizForUpdates(expectedQuizId, timeoutMs = 8e3) {
+	const bridge = getOpenAiBridge();
+	if (!bridge?.callTool) return null;
+	const names = [
+		"open_quiz",
+		"betterquizzer.open_quiz",
+		"BetterQuizzes.open_quiz"
+	];
+	let lastError = null;
+	for (const name of names) try {
+		const payload = getHostQuizPayloadFromToolResult(await withTimeout(bridge.callTool(name, {}), timeoutMs, `Timed out calling ${name}`));
+		if (payload && payload.quiz.quizId === expectedQuizId) return payload;
+	} catch (error) {
+		lastError = error;
+	}
+	if (lastError instanceof Error && lastError.message.toLowerCase().includes("timed out")) throw lastError;
+	return null;
+}
+function getHostQuizPayloadFromToolResult(result) {
+	if (!result) return null;
+	const fakeBridge = {
+		toolOutput: result,
+		toolResponseMetadata: result._meta
+	};
+	for (const candidate of getBridgeQuizCandidates(fakeBridge)) {
+		const payload = toHostQuizPayload(candidate, "chatgpt-widget");
+		if (payload) return payload;
+	}
+	return null;
+}
 function describeHostBridgeState() {
 	const bridge = getOpenAiBridge();
 	const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : void 0);
@@ -38252,20 +38282,22 @@ function App() {
 		let cancelled = false;
 		const quizId = getQuizId(quiz);
 		const poll = async () => {
-			const fetchedQuiz = await fetchQuizFromServer(quizId, recoveryToken).catch(() => null);
-			if (cancelled || !fetchedQuiz) return;
-			const prepared = prepareQuizForRender(fetchedQuiz);
+			const update = await fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken).catch(() => null);
+			if (cancelled || !update) return;
+			const prepared = prepareQuizForRender(update.quiz);
 			if (!prepared.ok) return;
 			const serverQuiz = prepared.quiz;
 			if (!shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
 			const progress = getIncrementalGenerationStatus(serverQuiz);
+			const hostProgress = update.payload?.uploadProgress;
 			setHydrationProgress({
-				expectedQuestions: progress?.expected ?? serverQuiz.questions.length,
-				receivedQuestions: serverQuiz.questions.length,
-				renderableQuestions: prepared.diagnostics.renderableQuestionCount,
-				complete: progress === null
+				expectedQuestions: hostProgress?.expectedQuestions ?? progress?.expected ?? serverQuiz.questions.length,
+				receivedQuestions: hostProgress?.receivedQuestions ?? serverQuiz.questions.length,
+				renderableQuestions: hostProgress?.renderableQuestions ?? prepared.diagnostics.renderableQuestionCount,
+				complete: hostProgress?.complete ?? progress === null
 			});
 			setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId);
+			if (update.payload?.recoveryToken) setRecoveryToken(update.payload.recoveryToken);
 			setQuiz(serverQuiz);
 		};
 		const interval = window.setInterval(() => void poll(), 1500);
@@ -38431,6 +38463,18 @@ async function fetchQuizFromServer(quizId, recoveryToken) {
 	const record = body;
 	if (!record.quiz) throw new Error("Server response did not include a quiz.");
 	return record.quiz;
+}
+async function fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken) {
+	if (recoveryToken) try {
+		return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
+	} catch {}
+	const hostPayload = await callHostOpenQuizForUpdates(quizId);
+	if (hostPayload) return {
+		quiz: hostPayload.quiz,
+		payload: hostPayload
+	};
+	if (!recoveryToken) throw new Error("No recovery token or host open_quiz bridge is available for quiz updates.");
+	return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
 }
 function buildHydrationFailureDetails(reason) {
 	return [

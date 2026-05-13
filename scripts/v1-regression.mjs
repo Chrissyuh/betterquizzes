@@ -7,6 +7,7 @@ const remote = readFileSync("mcp/remote-server.mjs", "utf8");
 const types = readFileSync("src/shared/types.ts", "utf8");
 const render = readFileSync("src/shared/renderContract.ts", "utf8");
 const submission = readFileSync("src/shared/submission.ts", "utf8");
+const bridge = readFileSync("src/host/openaiBridge.ts", "utf8");
 
 function assert(value, message) {
   if (!value) throw new Error(message);
@@ -52,7 +53,8 @@ assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.i
 assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");
 assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("call open_quiz immediately before adding question 2"), "staged authoring must open after the first stored question without duplicate widget launches");
 assert(!remote.includes('name: "finalize_quiz"') && remote.includes("Do not call finalize_quiz for assistant-authored quizzes"), "finalize_quiz must not be advertised in the normal model tool path");
-assert(app.includes("fetchQuizFromServer(quizId, recoveryToken)") && app.includes("shouldPollForServerQuizUpdates(quiz, hydrationProgress)") && app.includes("setQuiz(serverQuiz)"), "widget must poll token-scoped stored quiz updates while questions are still generating");
+assert(app.includes("fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken)") && app.includes("shouldPollForServerQuizUpdates(quiz, hydrationProgress)") && app.includes("setQuiz(serverQuiz)"), "widget must poll stored quiz updates while questions are still generating");
+assert(app.includes("callHostOpenQuizForUpdates(quizId)") && bridge.includes("getHostQuizPayloadFromToolResult"), "widget must fall back to host open_quiz when recovery token metadata is unavailable");
 assert(app.includes("nextRevision > currentRevision") && app.includes("setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId)"), "widget must accept newer stored quiz revisions while answering");
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
 assert(app.includes("submission.launchId = launchId") && app.includes("submission.quizRevision = quiz.metadata.quizRevision"), "submissions must carry stable launch/revision identity");

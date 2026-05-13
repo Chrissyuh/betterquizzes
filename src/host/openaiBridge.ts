@@ -115,6 +115,44 @@ export function getHostQuizPayload(options: HostQuizPayloadOptions = {}): HostQu
   return null;
 }
 
+export async function callHostOpenQuizForUpdates(expectedQuizId: string, timeoutMs = 8000): Promise<HostQuizPayload | null> {
+  const bridge = getOpenAiBridge();
+  if (!bridge?.callTool) return null;
+
+  const names = [
+    "open_quiz",
+    "betterquizzer.open_quiz",
+    "BetterQuizzes.open_quiz",
+  ];
+
+  let lastError: unknown = null;
+  for (const name of names) {
+    try {
+      const result = await withTimeout(bridge.callTool(name, {}), timeoutMs, `Timed out calling ${name}`);
+      const payload = getHostQuizPayloadFromToolResult(result);
+      if (payload && payload.quiz.quizId === expectedQuizId) return payload;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError instanceof Error && lastError.message.toLowerCase().includes("timed out")) throw lastError;
+  return null;
+}
+
+function getHostQuizPayloadFromToolResult(result: ToolResultLike | null | undefined): HostQuizPayload | null {
+  if (!result) return null;
+  const fakeBridge: OpenAiBridge = {
+    toolOutput: result,
+    toolResponseMetadata: result._meta,
+  };
+  for (const candidate of getBridgeQuizCandidates(fakeBridge)) {
+    const payload = toHostQuizPayload(candidate, "chatgpt-widget");
+    if (payload) return payload;
+  }
+  return null;
+}
+
 export function describeHostBridgeState(): string {
   const bridge = getOpenAiBridge();
   const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : undefined);
