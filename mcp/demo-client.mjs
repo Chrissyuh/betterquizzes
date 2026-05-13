@@ -38,26 +38,37 @@ function request(method, params = {}) {
 }
 
 async function main() {
-  console.log("→ initialize");
+  console.log("-> initialize");
   console.log(await request("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "stage12-demo", version: "0.1.0" } }));
-  console.log("→ tools/list");
+  console.log("-> tools/list");
   const tools = await request("tools/list");
   console.log(tools.result.tools.map((tool) => ({ name: tool.name, ui: tool._meta?.ui?.resourceUri })));
-  console.log("→ resources/list");
-  console.log(await request("resources/list"));
-  console.log("→ resources/read");
-  const resource = await request("resources/read", { uri: "ui://widget/betterquizzer-stage12-1.html" });
+  console.log("-> resources/list");
+  const resources = await request("resources/list");
+  console.log(resources);
+  console.log("-> resources/read");
+  const resourceUri = resources.result.resources[0].uri;
+  const resource = await request("resources/read", { uri: resourceUri });
   console.log({ mimeType: resource.result.contents[0].mimeType, chars: resource.result.contents[0].text.length });
-  console.log("→ start_quiz/add_question/open_quiz");
+  console.log("-> start_quiz/add_question/open_quiz");
   const quiz = JSON.parse(readFileSync("src/shared/examples/tiny-demo.json", "utf8"));
-  const started = await request("tools/call", { name: "start_quiz", arguments: { title: quiz.title, topic: quiz.subject, quizId: quiz.quizId, expectedQuestionCount: quiz.questions.length } });
+  const started = await request("tools/call", {
+    name: "start_quiz",
+    arguments: {
+      title: quiz.title,
+      topic: quiz.subject,
+      quizId: quiz.quizId,
+      expectedQuestionCount: quiz.questions.length
+    }
+  });
   const draftId = started.result.structuredContent.draftId;
-  for (const question of quiz.questions) {
+  await request("tools/call", { name: "add_question", arguments: { draftId, question: quiz.questions[0] } });
+  const created = await request("tools/call", { name: "open_quiz", arguments: {} });
+  for (const question of quiz.questions.slice(1)) {
     await request("tools/call", { name: "add_question", arguments: { draftId, question } });
   }
-  const created = await request("tools/call", { name: "open_quiz", arguments: { quizId: quiz.quizId } });
   console.log(created.result.structuredContent);
-  console.log("→ submit_answers");
+  console.log("-> submit_answers");
   const submitted = await request("tools/call", {
     name: "submit_answers",
     arguments: {
