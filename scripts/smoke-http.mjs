@@ -92,7 +92,9 @@ async function runSmoke() {
   assert(!submitSchema.required?.includes("answers"), "submit_answers schema should not always require top-level answers");
   assert(submitSchema.anyOf.some((entry) => entry.required?.includes("submission")), "submit_answers schema should accept a complete fallback submission");
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
-  assert(startTool?.inputSchema?.properties?.questions?.type === "array", "start_quiz schema missing bulk questions array");
+  assert(!startTool?.inputSchema?.properties?.questions, "start_quiz should not advertise bulk questions");
+  const addTool = listed.result.tools.find((tool) => tool.name === "add_question");
+  assert(addTool?._meta?.["openai/outputTemplate"], "add_question missing widget output template for first-question launch");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
   assert(repairTool?.inputSchema?.properties?.repairedQuestion, "repair_question schema missing repairedQuestion");
   assert(repairTool?.inputSchema?.required?.includes("repairedQuestion"), "repair_question schema should require repairedQuestion");
@@ -110,7 +112,7 @@ async function runSmoke() {
     title: "Smoke Quiz",
     mode: "practice",
     displayPolicy: { showCorrectAnswers: "after_submit", showExplanations: "llm_after_submit", requireConfidence: true },
-    gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: true },
+    gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: false },
     questions: [
       { id: "q1", type: "multiple_choice", prompt: "Pick A.", choices: ["A", "B"], answer: 0, tags: ["smoke"] },
       { id: "q2", type: "short_answer", prompt: "Explain briefly.", expectedKeywords: ["brief"] }
@@ -132,7 +134,7 @@ async function runSmoke() {
     }
   });
   const stagedDraftId = stagedStarted.result.structuredContent.draftId;
-  await rpc("tools/call", {
+  const firstAdd = await rpc("tools/call", {
     name: "add_question",
     arguments: {
       draftId: stagedDraftId,
@@ -145,6 +147,12 @@ async function runSmoke() {
       }
     }
   });
+  assert(firstAdd.result.structuredContent.autoOpened === true, "first add_question should attach launch metadata");
+  assert(firstAdd.result.structuredContent.launch?.kind === "betterquizzer.launch", "first add_question launch packet missing");
+  assert(firstAdd.result.structuredContent.launch.declaredQuestionCount === 3, "first add_question launch should preserve expected question count");
+  assert(firstAdd.result.structuredContent.launch.packetProgress.complete === false, "first add_question launch should report partial generation");
+  const firstAddRecoveryToken = firstAdd.result._meta?.recoveryToken;
+  assert(typeof firstAddRecoveryToken === "string" && firstAddRecoveryToken.length > 10, "first add_question must provide a private recovery token");
 
   const latestBeforeOpen = await getJsonAllowStatus("/api/quiz/latest", 410);
   assert(latestBeforeOpen.error?.includes("disabled for privacy"), "latest quiz endpoint should not expose created quizzes without launch metadata");
@@ -159,6 +167,7 @@ async function runSmoke() {
   assert(opened.result.structuredContent.packetProgress.complete === false, "open_quiz partial launch should not be complete");
   const stagedRecoveryToken = opened.result._meta?.recoveryToken;
   assert(typeof stagedRecoveryToken === "string" && stagedRecoveryToken.length > 10, "open_quiz must provide a private recovery token in metadata");
+  assert(stagedRecoveryToken === firstAddRecoveryToken, "open_quiz should preserve the first add_question recovery token");
   await getJsonAllowStatus("/api/quiz/staged-builder-smoke", 403);
   const stagedAfterOpen = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedAfterOpen.quizId === "staged-builder-smoke", "token-scoped quiz endpoint should expose the opened staged quiz");
@@ -381,7 +390,7 @@ async function runSmoke() {
   const submission = submitted.result.structuredContent.submission;
   assert(submission.schema === "betterquizzer.submission", "submit_answers did not return a submission capsule");
   assert(submission.answers.length === 2, "submission answer count mismatch");
-  assert(Array.isArray(submission.answerKey), "submission missing answer key");
+  assert(!("answerKey" in submission), "submission should omit answer key by default");
   assert(submission.launchId === "smoke-quiz:r1", "submission should preserve launch identity");
   assert(submission.quizRevision === 1, "submission should preserve quiz revision identity");
   assert(submitted.result.structuredContent.launchId === "smoke-quiz:r1", "submission packet should expose launch identity");
@@ -401,7 +410,7 @@ async function runSmoke() {
         mode: "practice",
         submittedAt: new Date(0).toISOString(),
         displayPolicy: { showCorrectAnswers: "after_submit", showExplanations: "llm_after_submit", requireConfidence: false },
-        gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: true },
+        gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: false },
         activityPolicy: { allowSkipQuiz: true, allowSkipQuestions: true, defaultAnswerRequired: false, submitRequiresRequiredAnswers: true },
         completion: { requiredTotal: 0, requiredAnswered: 0, optionalTotal: 1, optionalAnswered: 1, missingRequiredQuestionIds: [], missingRequiredConfidenceIds: [], isComplete: true },
         questions: [],

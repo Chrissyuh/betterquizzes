@@ -14,11 +14,6 @@ const START_QUIZ_INPUT_SCHEMA = {
     quizId: { type: "string", description: "Optional stable quiz id. Usually omit and let BetterQuizzes derive it from the title." },
     expectedQuestionCount: { type: "integer", minimum: 1 },
     instructions: { type: "string", description: "Authoring constraints or user preferences." },
-    questions: {
-      type: "array",
-      items: { type: "object", additionalProperties: true },
-      description: "Optional bulk question list. Best for smoke tests or reliability fallbacks. For normal user-facing quizzes, prefer adding 1-3 questions, opening early, then updating the same draft."
-    },
     metadata: { type: "object", additionalProperties: true }
   },
   required: ["title"]
@@ -111,28 +106,29 @@ const OPEN_TOOL_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, open
 const V23_BUILDER_TOOL_DEFS = [
   {
     name: "start_quiz",
-    description: "Start a BetterQuizzes draft. For normal assistant-authored quizzes, set expectedQuestionCount, add 1-3 good questions, then call open_quiz once without args so the widget appears early while more questions are added. Accepted questions are stored continuously. Bulk questions are supported for smoke tests and reliability fallbacks. " + V2_BUILDER_INSTRUCTIONS,
+    description: "Start a BetterQuizzes draft. For normal assistant-authored quizzes, set expectedQuestionCount, then call add_question exactly once per question. The first accepted add_question opens the widget immediately; later add_question/repair_question calls update the stored draft. " + V2_BUILDER_INSTRUCTIONS,
     inputSchema: START_QUIZ_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS
   },
   {
     name: "add_question",
-    description: "Add one validated question to an incremental BetterQuizzes draft. Required input shape: { draftId, question }. Matching canonical shape: {type:'matching', left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]}; legacy pairs/matches/items are normalized.",
+    description: "Add one validated question to an incremental BetterQuizzes draft. Required input shape: { draftId, question }. The first accepted question launches the BetterQuizzes widget immediately; keep calling add_question once per later question. Matching canonical shape: {type:'matching', left:[{id,text}], right:[{id,text}]}; optional grading keys use answer:[{leftId,rightId}]. Legacy pairs/matches/items are normalized.",
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
-    annotations: DRAFT_TOOL_ANNOTATIONS
+    annotations: DRAFT_TOOL_ANNOTATIONS,
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v58-clean.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v58-clean.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question...", "openai/toolInvocation/invoked": "Question added" }
   },
   {
     name: "repair_question",
-    description: "Replace or repair one invalid or incomplete question in an incremental BetterQuizzes draft. Required repair input shape: { draftId, repairedQuestion, replace:true, replaceQuestionId? }. Matching canonical shape is left/right arrays plus answer:[{leftId,rightId}]; legacy pairs/matches/items are normalized.",
+    description: "Replace or repair one invalid or incomplete question in an incremental BetterQuizzes draft. Required repair input shape: { draftId, repairedQuestion, replace:true, replaceQuestionId? }. Matching canonical shape is left/right arrays; optional grading keys use answer:[{leftId,rightId}]. Legacy pairs/matches/items are normalized.",
     inputSchema: REPAIR_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS
   },
   {
     name: "open_quiz",
-    description: "Open the latest stored BetterQuizzes activity in the widget. For assistant-authored quizzes, use after 1-3 accepted add_question calls. Call this exactly once; later add_question/repair_question calls update the stored quiz that the widget polls. Omit quizId unless the user supplied an explicit stored quiz id.",
+    description: "Open the latest stored BetterQuizzes activity in the widget. For assistant-authored quizzes, add_question normally launches the widget after the first accepted question. Use open_quiz only if that first launch failed or when opening an existing stored quiz. Omit quizId unless the user supplied an explicit stored quiz id.",
     inputSchema: OPEN_QUIZ_INPUT_SCHEMA,
     outputSchema: LAUNCH_OUTPUT_SCHEMA,
     annotations: OPEN_TOOL_ANNOTATIONS,
@@ -475,25 +471,18 @@ function v23RepairInstruction(question) {
 }
 
 function startQuiz(input = {}) {
-  const draftId = input.draftId || v23Id("draft");
-  const rawQuestions = Array.isArray(input.questions) ? input.questions : [];
-  const questions = [];
-  const repairRequests = [];
+  if (Array.isArray(input.questions) && input.questions.length) {
+    return v23TextResponse({
+      ok: false,
+      needsRepair: true,
+      tool: "start_quiz",
+      issues: ["start_quiz no longer accepts bulk question arrays. Send each question with a separate add_question call."],
+      instructions: V2_BUILDER_INSTRUCTIONS,
+      next: "Call start_quiz without questions, then call add_question once for the first question so the widget can open immediately."
+    });
+  }
 
-  rawQuestions.forEach((rawQuestion, index) => {
-    const question = v23NormalizeQuestion(rawQuestion, index);
-    const issues = v23ValidateQuestion(question);
-    if (issues.length) {
-      repairRequests.push({
-        index,
-        questionId: question?.id,
-        issues,
-        instruction: v23RepairInstruction(question)
-      });
-      return;
-    }
-    questions.push(question);
-  });
+  const draftId = input.draftId || v23Id("draft");
 
   const draft = {
     draftId,
@@ -506,26 +495,21 @@ function startQuiz(input = {}) {
     expectedQuestionCount: input.expectedQuestionCount ?? undefined,
     instructions: input.instructions ?? "",
     metadata: input.metadata ?? {},
-    questions,
+    questions: [],
     createdAt: new Date().toISOString()
   };
 
   v23QuizDrafts.set(draftId, draft);
   globalThis.__betterQuizzesV23LatestDraftId = draftId;
-  if (questions.length) v23SyncLaunchedDraft(draft);
 
   return v23TextResponse({
     ok: true,
     draftId,
-    questionCount: questions.length,
-    rejectedQuestionCount: repairRequests.length,
-    repairRequests,
+    questionCount: 0,
+    rejectedQuestionCount: 0,
+    repairRequests: [],
     instructions: V2_BUILDER_INSTRUCTIONS,
-    next: repairRequests.length
-      ? "Call repair_question for each rejected question, then open_quiz once after 1-3 accepted questions."
-      : questions.length
-        ? "Call open_quiz once to launch the stored quiz, then continue add_question/repair_question silently."
-        : "Call add_question once per question, or start over with a questions array for bulk authoring. Use repair_question only when replacing a bad question."
+    next: "Call add_question once for the first question. The first accepted question launches the widget immediately; continue add_question once per later question."
   });
 }
 
@@ -583,15 +567,39 @@ function addQuestion(input = {}) {
   globalThis.__betterQuizzesV23LatestDraftId = draftId;
   const stored = v23SyncLaunchedDraft(existingDraft);
 
-  return v23TextResponse({
+  const response = v23TextResponse({
     ok: true,
     draftId,
     question,
     questionCount: existingDraft.questions.length,
     quizId: stored?.quizId ?? existingDraft.quizId,
     quizRevision: stored?.quizRevision,
-    next: "Accepted question stored. Call open_quiz once after 1-3 accepted questions if the widget is not already open; otherwise continue silently and do not call open_quiz again unless the first launch failed."
+    next: existingDraft.questions.length === 1
+      ? "Accepted first question and attached widget launch metadata. Continue add_question silently once per later question; do not call open_quiz unless the launch failed."
+      : "Accepted question stored. Continue add_question silently once per later question; do not call open_quiz unless the first add_question launch failed."
   });
+
+  return v23AttachFirstQuestionLaunch(response, stored, existingDraft);
+}
+
+function v23AttachFirstQuestionLaunch(response, stored, draft) {
+  if (!stored || !draft || !Array.isArray(draft.questions) || draft.questions.length !== 1) return response;
+  const quiz = quizzes.get(stored.quizId);
+  if (!quiz) return response;
+  const prepared = prepareQuizForRender(quiz);
+  if (!prepared.ok) return response;
+  const launchResult = buildLaunchToolResult(prepared, {
+    expectedQuestionCount: draft.expectedQuestionCount
+  });
+  return {
+    ...response,
+    structuredContent: {
+      ...response.structuredContent,
+      autoOpened: true,
+      launch: launchResult.structuredContent
+    },
+    _meta: launchResult._meta
+  };
 }
 
 function v23SyncLaunchedDraft(draft) {
@@ -781,14 +789,14 @@ function uniqueDomains(...domains) {
 
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
-2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount, add 1-3 strong questions, then call open_quiz once without args so the widget appears immediately with a generation status. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted questions are stored continuously and the launched widget refreshes from the stored draft. Do not call finalize_quiz for assistant-authored quizzes. Do not call open_quiz again for the same quiz unless the first launch failed. Do not send chat progress/check-in messages while authoring; only speak if blocked by an unrepaired error. Bulk questions in start_quiz are allowed for smoke tests and reliability fallbacks. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
+2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount, then call add_question exactly once per question. The first accepted add_question launches the widget immediately with a generation status. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted questions are stored continuously and the launched widget refreshes from the stored draft. Do not call finalize_quiz for assistant-authored quizzes. Do not call open_quiz unless the first add_question launch failed. Do not send chat progress/check-in messages while authoring; only speak if blocked by an unrepaired error. Do not send question batches in start_quiz. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
 3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless repairing older input.
 4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, and numeric. Use multi_write_vertical when a prompt needs any number of separate written answers, text_select when the user should select words/segments inside a passage, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall.
 5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based indexes and can have any number of correct answers; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; multi_typing and multi_write_vertical fields may have any number of fields/answers and use response/answer objects keyed by field id; text_select uses segments:[{id,text,selectable?}], optional selectionPolicy, and answer:string[] of selected segment ids. Use text_select only for a passage with context, usually at least two sentences or 120 characters, and at least three plausible selectable segments; do not make one sentence with one obvious highlighted answer. Do not use choices for text_select. Ordering answer is ordered item ids in visual top-to-bottom order. orderingBehavior.direction must always be "top_to_bottom"; never use first_to_last or other conceptual values there. Put conceptual meaning in orderingBehavior.topLabel and orderingBehavior.bottomLabel; matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]. Do not author matching as pairs unless repairing old input.
 6. Each advertised question type has renderer certification. If add_question asks for repair, call repair_question for the specific bad question instead of restarting the whole quiz. If create_quiz returns renderDiagnostics.unrenderableQuestions or rendererCertified=false, prefer repairing the draft with the builder; only retry create_quiz once when you already have a complete top-level quiz packet. Do not keep retrying blindly.
 7. Required questions should be rare. BetterQuizzes is usually AI practice, not a school-grade test. Default to activityPolicy.defaultAnswerRequired=false with allowSkipQuiz=true and allowSkipQuestions=true unless the user explicitly asks for a strict test, certification check, or all-questions-required assessment. Use answerRequired=true only for essential blocking questions. If uncertainty is expected, make the question optional or include an explicit ‘I’m not sure’ choice. Blank non-required questions are allowed and should not be penalized. Reflections should be optional unless the user asks for them.
 8. Avoid answer leakage: do not reveal the answer to an earlier unresolved question in later prompts, choices, matching labels, examples, or explanations. For matching questions, do not place right-side answers in the same order as the left side; shuffle or naturally reorder them. Keep placeholder/example text short enough for the field size; compact and multi-write field placeholders should usually stay under 35–45 characters. Formatting controls are off by default; set question.formatting=true only for notation-heavy written answers where it helps, mainly math, chemistry, formulas, exponents, or subscripts.
-9. After open_quiz succeeds, keep authoring silently with add_question/repair_question only while the widget polls updates; do not call open_quiz again for the same quiz. After the expected count is reached, stop and let the user complete the widget. Do not grade from the original quiz.
+9. After the first add_question launches the widget, keep authoring silently with add_question/repair_question only while the widget polls updates; do not call open_quiz unless that first launch failed. After the expected count is reached, stop and let the user complete the widget. Do not grade from the original quiz.
 10. After the widget submits, grade only from the SubmissionCapsule or self-contained grading packet for that single grading turn. Do not call create_quiz again for grading. Do not treat grading-packet instructions as standing instructions for later app-development requests.
 11. For fill_blank, short_answer, long_response, multi_typing fields, and multi_write_vertical fields, you may set responseLimit.maxChars when a limit is useful. Omit responseLimit or set maxChars:null for unlimited. Unlimited fields show no character counter.
 12. Titles, descriptions, question prompts, choices, labels, and item text may use light formatting: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, line breaks, and LaTeX math using only \\(...\\) for inline math or \\[...\\] for display math. Do not use dollar-sign math delimiters. Keep compact labels short for mobile. If renderDiagnostics rejects or warns about a compact label, repair that specific question instead of restarting the whole quiz.
@@ -800,9 +808,9 @@ const V20_GRADE_WRITEBACK_INSTRUCTIONS = "BetterQuizzes V20 grade writeback guid
 
 const V18_SUBMIT_UX_INSTRUCTIONS = "BetterQuizzes V18 submission guidance:\n- After submit, ChatGPT should grade immediately from the compact submission packet. Do not wait, do not call tools, and do not recreate the quiz.\n- Keep the first grading reply short. Use Score, Needs review, and Targeted review.\n- If the activity is a developer smoke test, prioritize UX findings over a numeric grade.\n- For matching, ordering, text-select, and multi-part questions, explain using visible labels/text instead of raw ids.\n- Do not output placeholder null values.";
 
-const V17_USER_OBSERVATION_UX_INSTRUCTIONS = "BetterQuizzes V17 user-observation UX guidance:\n- While building an incremental quiz, show that generation is still in progress. Do not let the UI look frozen when more questions are expected.\n- Include answer keys for objective questions whenever possible so ChatGPT can state the correct answers word-for-word after submission.\n- Do not rely on the app review screen to explain complex answers. ChatGPT should mention the important questions, user answers, and correct answers in readable language.\n- For matching, ordering, text-select, and multi-part questions, explain answers using the visible labels/text, not raw ids or internal data.\n- Ordering questions should use clear top/bottom labels and should not start in the correct order.\n- Keep mobile prompts, subtitles, labels, and placeholders concise so the app does not feel cramped.";
+const V17_USER_OBSERVATION_UX_INSTRUCTIONS = "BetterQuizzes V17 user-observation UX guidance:\n- While building an incremental quiz, show that generation is still in progress. Do not let the UI look frozen when more questions are expected.\n- Answer keys are optional; include them only when the user asks for scored keys or when they are useful for later grading.\n- Do not rely on the app review screen to explain complex answers. ChatGPT should mention the important questions, user answers, and correct answers in readable language.\n- For matching, ordering, text-select, and multi-part questions, explain answers using the visible labels/text, not raw ids or internal data.\n- Ordering questions should use clear top/bottom labels and should not start in the correct order.\n- Keep mobile prompts, subtitles, labels, and placeholders concise so the app does not feel cramped.";
 
-const V16_USER_TEST_UX_INSTRUCTIONS = "BetterQuizzes V16 end-user UX guidance:\n- Make submit feel like the final action, not the next action. Keep Submit visually secondary/grey until every visible question is complete; highlight Next while unfinished questions remain.\n- Required questions should be rare, but optional blank questions must still look unattempted/neutral grey. Optional answered questions become complete/green only after the answer and any required confidence are complete.\n- For ordering questions, never provide the display items already in correct order. Put items in a mixed starting order, and set answer to the intended correct visual top-to-bottom order.\n- Ordering questions need clear direction labels. Prefer labels like Top = First and Bottom = Last, or Top = Most and Bottom = Least.\n- Include answer keys for objective questions whenever possible so BetterQuizzes and ChatGPT can show correct answers after submission.\n- Review answers should be human-readable. Avoid making the user see raw JSON, HTML tags, or internal ids.\n- On mobile, keep prompts and placeholders concise; avoid long text that crowds the small screen.";
+const V16_USER_TEST_UX_INSTRUCTIONS = "BetterQuizzes V16 end-user UX guidance:\n- Make submit feel like the final action, not the next action. Keep Submit visually secondary/grey until every visible question is complete; highlight Next while unfinished questions remain.\n- Required questions should be rare, but optional blank questions must still look unattempted/neutral grey. Optional answered questions become complete/green only after the answer and any required confidence are complete.\n- For ordering questions, never provide the display items already in correct order. Put items in a mixed starting order, and set answer to the intended correct visual top-to-bottom order.\n- Ordering questions need clear direction labels. Prefer labels like Top = First and Bottom = Last, or Top = Most and Bottom = Least.\n- Answer keys are optional; include them only when the user asks for scored keys or when they are useful for later grading.\n- Review answers should be human-readable. Avoid making the user see raw JSON, HTML tags, or internal ids.\n- On mobile, keep prompts and placeholders concise; avoid long text that crowds the small screen.";
 
 const V13_UX_INSTRUCTIONS = "BetterQuizzes V2/V13 UX guidance:\n- Disable confidence on subjective, preference, survey, fit-finding, reflection, opinion, and developer smoke-test questions unless confidence is genuinely meaningful.\n- For a whole subjective survey, set displayPolicy.requireConfidence:false. For one subjective question inside an otherwise objective quiz, set question.requireConfidence:false or question.disableConfidence:true.\n- Do not use unsupported preference-ranking settings. For ranked preferences, use supported ordering questions or ordinary multiple-choice/multi-select questions.\n- Multi-select \"Other\" must preserve the user's other selected choices. Do not design \"Other\" as a single-select replacement unless the question type is single-select multiple_choice.\n- Choice label UI rules: single-select choices use circular radio-style labels; multi-select choices use square checkbox-style labels.\n- For choice special cases, use choiceAnswerPolicy deliberately: at_least_one_correct, at_least_one_correct_with_none, or none_correct_with_none.";
 
@@ -810,7 +818,7 @@ const CANONICAL_QUIZ_EXAMPLE = {
   quiz: {
     schema: "betterquizzer.quiz", version: 2, quizId: "sample-algebra-quiz", title: "Sample Algebra Quiz", subject: "Algebra", mode: "practice",
     displayPolicy: { showCorrectAnswers: "after_submit", showExplanations: "llm_after_submit", requireConfidence: true },
-    gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: true },
+    gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: false },
     activityPolicy: { allowSkipQuiz: true, allowSkipQuestions: true, defaultAnswerRequired: false, submitRequiresRequiredAnswers: true },
     choiceBehavior: { allowOther: false },
     questions: [
@@ -861,7 +869,7 @@ const COMPACT_QUIZ_PACKET_SCHEMA = {
 const CREATE_QUIZ_INPUT_SCHEMA = { type: "object", properties: { quiz: COMPACT_QUIZ_PACKET_SCHEMA }, required: ["quiz"], additionalProperties: false };
 const SUBMIT_ANSWERS_INPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" }, launchId: { type: "string" }, quizRevision: { type: "integer", minimum: 0 }, submission: { type: "object" }, answers: { type: "array", items: { type: "object", properties: { questionId: { type: "string" }, response: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "object" }] } }, { type: "object", additionalProperties: true }, { type: "null" }] }, confidence: { type: "integer", enum: [1, 2, 3], description: "Confidence must be an integer: 1=low, 2=medium, 3=high. Do not use decimals or percentages." }, timeMs: { type: "number", minimum: 0 } }, required: ["questionId", "response"], additionalProperties: true } } }, anyOf: [{ required: ["quizId", "answers"] }, { required: ["submission"] }], additionalProperties: false };
 const QUESTION_TYPE_GUIDE = "Question answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; text_select uses segments:[{id,text,selectable?}], optional selectionPolicy, and answer:string[] of selected segment ids. Use text_select only for a passage with context, usually at least two sentences or 120 characters, and at least three plausible selectable segments; do not make one sentence with one obvious highlighted answer. Do not use choices for text_select. Ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when direction matters; matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]. Do not author matching as pairs unless repairing legacy input. Light formatting includes LaTeX math using \\(...\\) or \\[...\\]. Do not use dollar-sign math delimiters. Keep compact labels short for mobile.";
-const CREATE_QUIZ_DESCRIPTION = "Use only when the user supplied a complete, validated top-level {\"quiz\": BetterQuizzesQuizSpecV2} packet and wants it opened. For assistant-authored quizzes, do not use this tool; use start_quiz, add_question, open_quiz once, then continue add_question silently. Runtime validation returns renderDiagnostics.";
+const CREATE_QUIZ_DESCRIPTION = "Use only when the user supplied a complete, validated top-level {\"quiz\": BetterQuizzesQuizSpecV2} packet and wants it opened. For assistant-authored quizzes, do not use this tool; use start_quiz, then add_question once per question; the first accepted add_question launches the widget. Runtime validation returns renderDiagnostics.";
 
 
 const quizzes = new Map();
@@ -1031,7 +1039,7 @@ function quizRevisionFingerprint(quiz) {
 function openQuiz(input = {}) {
   const quizId = input.quizId || lastQuizId;
   const quiz = quizId ? quizzes.get(quizId) : null;
-  if (!quiz) return v23TextResponse({ ok: false, needsRepair: true, tool: "add_question", issues: ["No stored quiz is available to open."], next: "Call start_quiz, then add_question for at least one renderable question, then open_quiz once." });
+  if (!quiz) return v23TextResponse({ ok: false, needsRepair: true, tool: "add_question", issues: ["No stored quiz is available to open."], next: "Call start_quiz, then add_question for one renderable question so the widget can launch." });
   const prepared = prepareQuizForRender(quiz);
   if (!prepared.ok) return v23TextResponse({ ok: false, needsRepair: true, tool: "repair_question", errors: prepared.errors, warnings: prepared.warnings, renderDiagnostics: prepared.diagnostics });
   return buildLaunchToolResult(prepared, { expectedQuestionCount: quiz.expectedQuestionCount ?? quiz.metadata?.expectedQuestionCount });
@@ -1617,7 +1625,7 @@ function normalizeDisplayPolicy(policy = {}) {
 }
 
 function normalizeGradingPolicy(policy = {}) {
-  return { preferredGrader: policy.preferredGrader || "llm", includeAnswerKeyInSubmission: policy.includeAnswerKeyInSubmission ?? true };
+  return { preferredGrader: policy.preferredGrader || "llm", includeAnswerKeyInSubmission: policy.includeAnswerKeyInSubmission ?? false };
 }
 
 function normalizeActivityPolicy(policy = {}, warnings = [], normalizedFields = []) {

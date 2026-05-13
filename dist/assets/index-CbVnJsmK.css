@@ -1609,23 +1609,17 @@ textarea,
   width: fit-content;
   max-width: 100%;
   margin-top: .72rem;
-  padding: .42rem .68rem;
-  border: 1px solid #bfdbfe;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #1e3a8a;
-  font-size: .9rem;
-  font-weight: 800;
+  padding: .38rem .62rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: .84rem;
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 .generation-status-spinner {
-  width: .86rem;
-  height: .86rem;
-  border-radius: 999px;
-  border: 2px solid #bfdbfe;
-  border-top-color: #2563eb;
-  animation: bq-spin 850ms linear infinite;
-  flex: 0 0 auto;
+  display: none;
 }
 .math-node {
   max-width: 100%;
@@ -2421,6 +2415,43 @@ main,
 .question-dots .dot,
 .dot {
   flex: 0 0 auto !important;
+}
+
+.question-dots .dot:not(.planned-question) {
+  animation: bq-question-button-materialize 220ms ease-out both;
+}
+
+.question-dots .planned-question {
+  width: 46px;
+  min-width: 46px;
+  height: 42px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f1f5f9 0%, #e5e7eb 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
+  color: transparent;
+  pointer-events: none;
+  animation: bq-planned-question-rest 1.8s ease-in-out infinite;
+}
+
+@keyframes bq-question-button-materialize {
+  from {
+    opacity: .62;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bq-planned-question-rest {
+  0%, 100% {
+    opacity: .76;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .question-dots::-webkit-scrollbar {

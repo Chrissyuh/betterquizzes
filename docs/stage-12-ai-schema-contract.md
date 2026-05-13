@@ -1,6 +1,6 @@
 # Stage 12: AI-Facing Schema Contract
 
-Stage 12 keeps the AI-facing contract aligned with the staged BetterQuizzes creation flow. Normal assistant-authored quizzes are built with `start_quiz`, stored continuously by `add_question`, and opened once with the read-only `open_quiz` launcher. `create_quiz` remains a compact legacy compatibility opener for complete user-supplied quiz packets, not the normal authoring path.
+Stage 12 keeps the AI-facing contract aligned with the staged BetterQuizzes creation flow. Normal assistant-authored quizzes are built with `start_quiz`, stored continuously by one `add_question` call per question, and launched by the first accepted `add_question`. `open_quiz` remains a read-only compatibility opener for stored quizzes. `create_quiz` remains a compact legacy compatibility opener for complete user-supplied quiz packets, not the normal authoring path.
 
 ## Included
 

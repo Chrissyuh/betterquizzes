@@ -302,19 +302,24 @@ export default function App(): ReactElement {
   }, [widgetMode, quiz]);
 
   useEffect(() => {
-    if (!widgetMode || !quiz || !isIncrementalQuizBuilding(quiz)) return;
+    if (!widgetMode || !quiz || finished || !shouldPollForServerQuizUpdates(quiz, hydrationProgress)) return;
     let cancelled = false;
     const quizId = getQuizId(quiz);
     const poll = async () => {
-      const serverQuiz = await fetchQuizFromServer(quizId, recoveryToken).catch(() => null);
-      if (cancelled || !serverQuiz || !shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
+      const fetchedQuiz = await fetchQuizFromServer(quizId, recoveryToken).catch(() => null);
+      if (cancelled || !fetchedQuiz) return;
+      const prepared = prepareQuizForRender(fetchedQuiz);
+      if (!prepared.ok) return;
+      const serverQuiz = prepared.quiz;
+      if (!shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
       const progress = getIncrementalGenerationStatus(serverQuiz);
       setHydrationProgress({
         expectedQuestions: progress?.expected ?? serverQuiz.questions.length,
         receivedQuestions: serverQuiz.questions.length,
-        renderableQuestions: serverQuiz.questions.length,
+        renderableQuestions: prepared.diagnostics.renderableQuestionCount,
         complete: progress === null,
       });
+      setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId);
       setQuiz(serverQuiz);
     };
     const interval = window.setInterval(() => void poll(), 1500);
@@ -323,7 +328,7 @@ export default function App(): ReactElement {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [widgetMode, quiz, recoveryToken]);
+  }, [widgetMode, quiz, finished, hydrationProgress, recoveryToken]);
 
   if (screen === "import") {
     if (widgetMode) return <WidgetLoading progress={hydrationProgress} />;
@@ -581,8 +586,17 @@ function shouldAcceptHydratedQuiz(currentQuiz: QuizSpec | null, nextQuiz: QuizSp
   const currentQuizId = getQuizId(currentQuiz);
   const nextQuizId = getQuizId(nextQuiz);
   if (currentQuizId !== nextQuizId) return true;
+  const currentRevision = getQuizRevision(currentQuiz);
+  const nextRevision = getQuizRevision(nextQuiz);
+  if (nextRevision !== null && currentRevision !== null && nextRevision > currentRevision) return true;
+  if (nextRevision !== null && currentRevision !== null && nextRevision < currentRevision) return false;
   if (quizFingerprint(currentQuiz) === quizFingerprint(nextQuiz)) return false;
   return isMoreCompleteQuiz(nextQuiz, currentQuiz);
+}
+
+function getQuizRevision(quiz: QuizSpec): number | null {
+  const revision = quiz.metadata?.quizRevision;
+  return typeof revision === "number" && Number.isFinite(revision) ? revision : null;
 }
 
 function isMoreCompleteQuiz(candidate: QuizSpec, current: QuizSpec): boolean {
@@ -696,6 +710,12 @@ function isIncrementalQuizBuilding(quiz: QuizSpec): boolean {
   return getIncrementalGenerationStatus(quiz) !== null;
 }
 
+function shouldPollForServerQuizUpdates(quiz: QuizSpec, progress: HydrationProgress | null): boolean {
+  if (isIncrementalQuizBuilding(quiz)) return true;
+  if (!progress || progress.complete === true) return false;
+  return progress.expectedQuestions > quiz.questions.length;
+}
+
 function getIncrementalGenerationStatus(quiz: QuizSpec): { expected: number; ready: number } | null {
   const record = quiz as unknown as Record<string, unknown>;
   const metadata = record.metadata && typeof record.metadata === "object" ? record.metadata as Record<string, unknown> : {};
@@ -747,7 +767,9 @@ function QuizRunner({
   const submitLooksReady = allQuestionsDone || isLastQuestion;
   const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
   const generationStatus = getIncrementalGenerationStatus(quiz);
-  const progressPercent = quiz.questions.length ? Math.round((completeQuestionCount / quiz.questions.length) * 100) : 100;
+  const progressTotal = generationStatus?.expected ?? quiz.questions.length;
+  const progressPercent = progressTotal ? Math.round((completeQuestionCount / progressTotal) * 100) : 100;
+  const shouldShowQuestionNav = quiz.questions.length > 1 || Boolean(generationStatus);
   const answeredCount = quiz.questions.filter((question) => hasResponse(drafts[question.id])).length;
 
   useEffect(() => {
@@ -997,12 +1019,12 @@ function QuizRunner({
         {generationStatus ? (
           <div className="generation-status-strip" aria-live="polite">
             <span className="generation-status-spinner" aria-hidden="true" />
-            <span>Generating more questions... {generationStatus.ready} of {generationStatus.expected} ready</span>
+            <span>Questions are being added: {generationStatus.ready} of {generationStatus.expected} ready</span>
           </div>
         ) : null}
       </section>
 
-      {quiz.questions.length > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={setCurrentIndex} /> : null}
+      {shouldShowQuestionNav ? <QuestionNav questions={quiz.questions} expectedQuestionCount={generationStatus?.expected} drafts={drafts} currentIndex={currentIndex} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={setCurrentIndex} /> : null}
 
       <section className="main-column">
         <QuestionCard question={current} draft={drafts[current.id]} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
@@ -1086,6 +1108,7 @@ function SkipQuizScreen({
 
 function QuestionNav({
   questions,
+  expectedQuestionCount,
   drafts,
   currentIndex,
   displayPolicy,
@@ -1094,6 +1117,7 @@ function QuestionNav({
   onSelect,
 }: {
   questions: Question[];
+  expectedQuestionCount?: number;
   drafts: Record<string, DraftAnswer>;
   currentIndex: number;
   displayPolicy: DisplayPolicy;
@@ -1101,6 +1125,8 @@ function QuestionNav({
   revealRequiredStatus: boolean;
   onSelect: (index: number) => void;
 }): ReactElement {
+  const plannedCount = Math.max(questions.length, Math.floor(expectedQuestionCount ?? questions.length));
+  const placeholderCount = Math.max(0, plannedCount - questions.length);
   return (
     <aside className="card nav-card">
       <p className="eyebrow">Questions</p>
@@ -1109,6 +1135,9 @@ function QuestionNav({
           const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy, revealRequiredStatus);
           return <button key={question.id} type="button" className={`dot ${index === currentIndex ? "active" : ""} ${status}`} onClick={() => onSelect(index)}>{index + 1}</button>;
         })}
+        {Array.from({ length: placeholderCount }, (_, index) => (
+          <span key={`planned-${questions.length + index + 1}`} className="dot planned-question" aria-hidden="true" />
+        ))}
       </div>
     </aside>
   );

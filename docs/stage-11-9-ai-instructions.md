@@ -15,7 +15,7 @@ Stage 11.9 makes the connector much clearer for the AI model. The goal is to pre
 - `matching` needs `left` and `right` arrays.
 - `ordering` needs an `items` array.
 - If unsure, use `fill_blank`, `short_answer`, or `long_response`.
-- Include answer keys when `includeAnswerKeyInSubmission` is true.
+- Answer keys are optional; include them only when `includeAnswerKeyInSubmission` is true or the user asks for scored keys.
 
 ## Grading rules
 

@@ -50,7 +50,7 @@ async function main() {
   const resourceUri = resources.result.resources[0].uri;
   const resource = await request("resources/read", { uri: resourceUri });
   console.log({ mimeType: resource.result.contents[0].mimeType, chars: resource.result.contents[0].text.length });
-  console.log("-> start_quiz/add_question/open_quiz");
+  console.log("-> start_quiz/add_question");
   const quiz = JSON.parse(readFileSync("src/shared/examples/tiny-demo.json", "utf8"));
   const started = await request("tools/call", {
     name: "start_quiz",
@@ -62,8 +62,8 @@ async function main() {
     }
   });
   const draftId = started.result.structuredContent.draftId;
-  await request("tools/call", { name: "add_question", arguments: { draftId, question: quiz.questions[0] } });
-  const created = await request("tools/call", { name: "open_quiz", arguments: {} });
+  const firstAdd = await request("tools/call", { name: "add_question", arguments: { draftId, question: quiz.questions[0] } });
+  const created = { result: { structuredContent: firstAdd.result.structuredContent.launch, _meta: firstAdd.result._meta } };
   for (const question of quiz.questions.slice(1)) {
     await request("tools/call", { name: "add_question", arguments: { draftId, question } });
   }

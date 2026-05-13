@@ -31,10 +31,11 @@ assert(app.includes("Preserve confidence while a user temporarily clears or edit
 assert(app.includes("disabled={!answerComplete}"), "confidence picker must stay disabled until all question parts are complete");
 assert(app.includes("function OrderingInput") && app.includes("bqV61OrderingRebuild") && app.includes("data-ordering-mode") && app.includes("draggable={false}") && app.includes("moveByStep"), "ordering questions must support rebuilt separate desktop/mobile sorting with fallback controls");
 assert(!app.includes("Question {currentIndex + 1} of"), "question count label must stay removed");
-assert(app.includes("quiz.questions.length > 1 ? <QuestionNav"), "one-question quizzes must not show question navigation");
+assert(app.includes("const shouldShowQuestionNav = quiz.questions.length > 1 || Boolean(generationStatus)"), "question navigation must show when a one-question staged quiz expects more questions");
 assert(app.includes("single-question-actions"), "one-question quizzes must not show prev/next controls");
 assert(app.includes("const submitLooksReady = allQuestionsDone || isLastQuestion"), "submit button must highlight on the last question even when earlier optional questions are unfinished");
-assert(app.includes("generation-status-strip") && app.includes("Generating more questions..."), "incremental generation must use a compact status strip");
+assert(app.includes("generation-status-strip") && app.includes("Questions are being added:"), "incremental generation must use a compact status strip");
+assert(app.includes("planned-question") && styles.includes(".question-dots .planned-question"), "incremental generation must show planned question placeholders in the question bar");
 assert(!app.includes("className=\"card question-card build-next-card\""), "incremental generation must not render the old end-card");
 assert(app.includes("const [submitAttempted, setSubmitAttempted]") && app.includes("revealRequiredStatus={submitAttempted}"), "required validation styling must wait until submit is attempted");
 assert(app.includes("disabled={submitting}") && !app.includes("disabled={submitting || !canSubmit}"), "submit must remain clickable so missing required items can show delayed feedback");
@@ -49,9 +50,10 @@ assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('requi
 assert(remote.includes("start_quiz with expectedQuestionCount") && remote.includes("Do not send chat progress/check-in messages while authoring"), "model instructions must prefer quiet staged authoring");
 assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Accepted question stored"), "add_question must store accepted questions continuously");
 assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");
-assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("do not call open_quiz again"), "staged authoring must update stored quizzes without duplicate widget launches");
+assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("do not call open_quiz unless the first add_question launch failed"), "staged authoring must update stored quizzes without duplicate widget launches");
 assert(!remote.includes('name: "finalize_quiz"') && remote.includes("Do not call finalize_quiz for assistant-authored quizzes"), "finalize_quiz must not be advertised in the normal model tool path");
-assert(app.includes("fetchQuizFromServer(quizId, recoveryToken)") && app.includes("isIncrementalQuizBuilding(quiz)") && app.includes("setQuiz(serverQuiz)"), "widget must poll token-scoped stored quiz updates while questions are still generating");
+assert(app.includes("fetchQuizFromServer(quizId, recoveryToken)") && app.includes("shouldPollForServerQuizUpdates(quiz, hydrationProgress)") && app.includes("setQuiz(serverQuiz)"), "widget must poll token-scoped stored quiz updates while questions are still generating");
+assert(app.includes("nextRevision > currentRevision") && app.includes("setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId)"), "widget must accept newer stored quiz revisions while answering");
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
 assert(app.includes("submission.launchId = launchId") && app.includes("submission.quizRevision = quiz.metadata.quizRevision"), "submissions must carry stable launch/revision identity");
 assert(!app.includes('"/api/quiz/latest"') && app.includes("getRequestedRecoveryToken") && app.includes("SERVER_RECOVERY_TIMEOUT_MS"), "widget must not use global latest quiz recovery; explicit recovery needs quizId and token");

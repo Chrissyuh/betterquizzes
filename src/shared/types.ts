@@ -58,7 +58,7 @@ export const DEFAULT_DISPLAY_POLICY: DisplayPolicy = {
 
 export const DEFAULT_GRADING_POLICY: GradingPolicy = {
   preferredGrader: "llm",
-  includeAnswerKeyInSubmission: true,
+  includeAnswerKeyInSubmission: false,
   requestCorrectnessMarks: true,
 };
 

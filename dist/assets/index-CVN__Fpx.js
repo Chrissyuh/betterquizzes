@@ -36239,7 +36239,7 @@ var DEFAULT_DISPLAY_POLICY = {
 };
 var DEFAULT_GRADING_POLICY = {
 	preferredGrader: "llm",
-	includeAnswerKeyInSubmission: true,
+	includeAnswerKeyInSubmission: false,
 	requestCorrectnessMarks: true
 };
 var DEFAULT_ACTIVITY_POLICY = {
@@ -37631,12 +37631,12 @@ function toUploadProgress(summary, quiz, diagnostics) {
 }
 function getExpectedQuestionCount(summary) {
 	if (!summary) return null;
-	if (typeof summary.questionCount === "number" && Number.isFinite(summary.questionCount)) return summary.questionCount;
-	if (typeof summary.declaredQuestionCount === "number" && Number.isFinite(summary.declaredQuestionCount)) return summary.declaredQuestionCount;
 	const progress = asRecord(summary.packetProgress) ?? asRecord(summary.uploadProgress);
 	if (typeof progress?.expectedQuestions === "number" && Number.isFinite(progress.expectedQuestions)) return progress.expectedQuestions;
+	if (typeof summary.declaredQuestionCount === "number" && Number.isFinite(summary.declaredQuestionCount)) return summary.declaredQuestionCount;
 	const diagnostics = asRecord(summary.renderDiagnostics);
 	if (typeof diagnostics?.questionCount === "number" && Number.isFinite(diagnostics.questionCount)) return diagnostics.questionCount;
+	if (typeof summary.questionCount === "number" && Number.isFinite(summary.questionCount)) return summary.questionCount;
 	return null;
 }
 function dedupeCandidates(candidates) {
@@ -37732,7 +37732,7 @@ var tiny_demo_default = {
 	},
 	gradingPolicy: {
 		"preferredGrader": "llm",
-		"includeAnswerKeyInSubmission": true
+		"includeAnswerKeyInSubmission": false
 	},
 	questions: [
 		{
@@ -37788,7 +37788,7 @@ var aphg_demo_default = {
 	},
 	gradingPolicy: {
 		"preferredGrader": "llm",
-		"includeAnswerKeyInSubmission": true
+		"includeAnswerKeyInSubmission": false
 	},
 	questions: [
 		{
@@ -37903,7 +37903,7 @@ var mixed_types_default = {
 	},
 	gradingPolicy: {
 		"preferredGrader": "llm",
-		"includeAnswerKeyInSubmission": true
+		"includeAnswerKeyInSubmission": false
 	},
 	questions: [
 		{
@@ -38248,19 +38248,24 @@ function App() {
 		};
 	}, [widgetMode, quiz]);
 	(0, import_react.useEffect)(() => {
-		if (!widgetMode || !quiz || !isIncrementalQuizBuilding(quiz)) return;
+		if (!widgetMode || !quiz || finished || !shouldPollForServerQuizUpdates(quiz, hydrationProgress)) return;
 		let cancelled = false;
 		const quizId = getQuizId(quiz);
 		const poll = async () => {
-			const serverQuiz = await fetchQuizFromServer(quizId, recoveryToken).catch(() => null);
-			if (cancelled || !serverQuiz || !shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
+			const fetchedQuiz = await fetchQuizFromServer(quizId, recoveryToken).catch(() => null);
+			if (cancelled || !fetchedQuiz) return;
+			const prepared = prepareQuizForRender(fetchedQuiz);
+			if (!prepared.ok) return;
+			const serverQuiz = prepared.quiz;
+			if (!shouldAcceptHydratedQuiz(quiz, serverQuiz)) return;
 			const progress = getIncrementalGenerationStatus(serverQuiz);
 			setHydrationProgress({
 				expectedQuestions: progress?.expected ?? serverQuiz.questions.length,
 				receivedQuestions: serverQuiz.questions.length,
-				renderableQuestions: serverQuiz.questions.length,
+				renderableQuestions: prepared.diagnostics.renderableQuestionCount,
 				complete: progress === null
 			});
+			setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId);
 			setQuiz(serverQuiz);
 		};
 		const interval = window.setInterval(() => void poll(), 1500);
@@ -38272,6 +38277,8 @@ function App() {
 	}, [
 		widgetMode,
 		quiz,
+		finished,
+		hydrationProgress,
 		recoveryToken
 	]);
 	if (screen === "import") {
@@ -38524,8 +38531,16 @@ function launchStabilityKey(payload, quiz) {
 function shouldAcceptHydratedQuiz(currentQuiz, nextQuiz) {
 	if (!currentQuiz) return true;
 	if (getQuizId(currentQuiz) !== getQuizId(nextQuiz)) return true;
+	const currentRevision = getQuizRevision(currentQuiz);
+	const nextRevision = getQuizRevision(nextQuiz);
+	if (nextRevision !== null && currentRevision !== null && nextRevision > currentRevision) return true;
+	if (nextRevision !== null && currentRevision !== null && nextRevision < currentRevision) return false;
 	if (quizFingerprint(currentQuiz) === quizFingerprint(nextQuiz)) return false;
 	return isMoreCompleteQuiz(nextQuiz, currentQuiz);
+}
+function getQuizRevision(quiz) {
+	const revision = quiz.metadata?.quizRevision;
+	return typeof revision === "number" && Number.isFinite(revision) ? revision : null;
 }
 function isMoreCompleteQuiz(candidate, current) {
 	if (candidate.questions.length > current.questions.length) return true;
@@ -38638,6 +38653,11 @@ function ImportScreen({ error, onLoadQuiz }) {
 function isIncrementalQuizBuilding(quiz) {
 	return getIncrementalGenerationStatus(quiz) !== null;
 }
+function shouldPollForServerQuizUpdates(quiz, progress) {
+	if (isIncrementalQuizBuilding(quiz)) return true;
+	if (!progress || progress.complete === true) return false;
+	return progress.expectedQuestions > quiz.questions.length;
+}
 function getIncrementalGenerationStatus(quiz) {
 	const record = quiz;
 	const metadata = record.metadata && typeof record.metadata === "object" ? record.metadata : {};
@@ -38680,7 +38700,9 @@ function QuizRunner({ quiz, startedAt, launchId, recoveryToken, widgetMode, onRe
 	const submitLooksReady = allQuestionsDone || isLastQuestion;
 	const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
 	const generationStatus = getIncrementalGenerationStatus(quiz);
-	const progressPercent = quiz.questions.length ? Math.round(completeQuestionCount / quiz.questions.length * 100) : 100;
+	const progressTotal = generationStatus?.expected ?? quiz.questions.length;
+	const progressPercent = progressTotal ? Math.round(completeQuestionCount / progressTotal * 100) : 100;
+	const shouldShowQuestionNav = quiz.questions.length > 1 || Boolean(generationStatus);
 	const answeredCount = quiz.questions.filter((question) => hasResponse(drafts[question.id])).length;
 	(0, import_react.useEffect)(() => {
 		setCurrentIndex((index) => clampIndex(index, quiz.questions.length));
@@ -38960,7 +38982,7 @@ function QuizRunner({ quiz, startedAt, launchId, recoveryToken, widgetMode, onRe
 							className: "generation-status-spinner",
 							"aria-hidden": "true"
 						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-							"Generating more questions... ",
+							"Questions are being added: ",
 							generationStatus.ready,
 							" of ",
 							generationStatus.expected,
@@ -38969,8 +38991,9 @@ function QuizRunner({ quiz, startedAt, launchId, recoveryToken, widgetMode, onRe
 					}) : null
 				]
 			}),
-			quiz.questions.length > 1 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionNav, {
+			shouldShowQuestionNav ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionNav, {
 				questions: quiz.questions,
+				expectedQuestionCount: generationStatus?.expected,
 				drafts,
 				currentIndex,
 				displayPolicy,
@@ -39112,15 +39135,17 @@ function SkipQuizScreen({ mode, widgetMode, title, answeredCount, totalCount, su
 		})
 	});
 }
-function QuestionNav({ questions, drafts, currentIndex, displayPolicy, activityPolicy, revealRequiredStatus, onSelect }) {
+function QuestionNav({ questions, expectedQuestionCount, drafts, currentIndex, displayPolicy, activityPolicy, revealRequiredStatus, onSelect }) {
+	const plannedCount = Math.max(questions.length, Math.floor(expectedQuestionCount ?? questions.length));
+	const placeholderCount = Math.max(0, plannedCount - questions.length);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
 		className: "card nav-card",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "eyebrow",
 			children: "Questions"
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "question-dots",
-			children: questions.map((question, index) => {
+			children: [questions.map((question, index) => {
 				const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy, revealRequiredStatus);
 				return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
@@ -39128,7 +39153,10 @@ function QuestionNav({ questions, drafts, currentIndex, displayPolicy, activityP
 					onClick: () => onSelect(index),
 					children: index + 1
 				}, question.id);
-			})
+			}), Array.from({ length: placeholderCount }, (_, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "dot planned-question",
+				"aria-hidden": "true"
+			}, `planned-${questions.length + index + 1}`))]
 		})]
 	});
 }

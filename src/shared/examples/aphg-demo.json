@@ -13,7 +13,7 @@
   },
   "gradingPolicy": {
     "preferredGrader": "llm",
-    "includeAnswerKeyInSubmission": true
+    "includeAnswerKeyInSubmission": false
   },
   "questions": [
     {

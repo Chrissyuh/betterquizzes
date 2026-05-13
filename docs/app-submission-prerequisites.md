@@ -86,7 +86,7 @@ Check that the MCP tool metadata includes:
 - an accurate widget description
 - current version/build strings
 
-The `open_quiz` tool should attach the widget output template and act as the normal launch step for assistant-authored quizzes after `add_question` has stored at least one accepted question. Keep `create_quiz` described as a compatibility opener for complete user-supplied quiz packets.
+The `add_question` tool should attach the widget output template and act as the normal launch step for assistant-authored quizzes when the first question is accepted. Keep `open_quiz` available as an idempotent compatibility opener for stored quizzes, and keep `create_quiz` described as a compatibility opener for complete user-supplied quiz packets.
 
 ## 6. Prepare user-facing submission materials
 

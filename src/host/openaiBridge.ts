@@ -467,12 +467,12 @@ function toUploadProgress(summary: Record<string, unknown> | undefined, quiz: Qu
 
 function getExpectedQuestionCount(summary: Record<string, unknown> | null): number | null {
   if (!summary) return null;
-  if (typeof summary.questionCount === "number" && Number.isFinite(summary.questionCount)) return summary.questionCount;
-  if (typeof summary.declaredQuestionCount === "number" && Number.isFinite(summary.declaredQuestionCount)) return summary.declaredQuestionCount;
   const progress = asRecord(summary.packetProgress) ?? asRecord(summary.uploadProgress);
   if (typeof progress?.expectedQuestions === "number" && Number.isFinite(progress.expectedQuestions)) return progress.expectedQuestions;
+  if (typeof summary.declaredQuestionCount === "number" && Number.isFinite(summary.declaredQuestionCount)) return summary.declaredQuestionCount;
   const diagnostics = asRecord(summary.renderDiagnostics);
   if (typeof diagnostics?.questionCount === "number" && Number.isFinite(diagnostics.questionCount)) return diagnostics.questionCount;
+  if (typeof summary.questionCount === "number" && Number.isFinite(summary.questionCount)) return summary.questionCount;
   return null;
 }
 

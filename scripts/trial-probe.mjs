@@ -62,11 +62,11 @@ async function runTrial() {
   const quiz = makeTrialQuiz();
   const started = await check("MCP tools/call start_quiz", () => callTool("start_quiz", { title: quiz.title, topic: quiz.subject, quizId: quiz.quizId, expectedQuestionCount: quiz.questions.length }), (value) => typeof value.result?.structuredContent?.draftId === "string");
   const draftId = started.result.structuredContent.draftId;
-  await check(`MCP tools/call add_question ${quiz.questions[0].id}`, () => callTool("add_question", { draftId, question: quiz.questions[0] }), (value) => value.result?.structuredContent?.ok === true);
-  const opened = await check("MCP tools/call open_quiz", () => callTool("open_quiz", {}), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch");
-  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "open_quiz must privately hydrate the widget with the staged quiz");
-  assert(opened.result?.structuredContent?.questionCount === 1, "open_quiz should launch after the first staged question");
-  assert(opened.result?.structuredContent?.packetProgress?.complete === false, "early open_quiz launch should report partial generation");
+  const firstAdd = await check(`MCP tools/call add_question ${quiz.questions[0].id}`, () => callTool("add_question", { draftId, question: quiz.questions[0] }), (value) => value.result?.structuredContent?.ok === true && value.result?.structuredContent?.launch?.kind === "betterquizzer.launch");
+  const opened = { result: { structuredContent: firstAdd.result.structuredContent.launch, _meta: firstAdd.result._meta } };
+  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "first add_question must privately hydrate the widget with the staged quiz");
+  assert(opened.result?.structuredContent?.questionCount === 1, "first add_question should launch after the first staged question");
+  assert(opened.result?.structuredContent?.packetProgress?.complete === false, "early add_question launch should report partial generation");
 
   for (const question of quiz.questions.slice(1)) {
     await check(`MCP tools/call add_question ${question.id}`, () => callTool("add_question", { draftId, question }), (value) => value.result?.structuredContent?.ok === true);
@@ -90,7 +90,7 @@ async function runTrial() {
   const submission = submitted.result.structuredContent.submission;
   assert(submission.version === 2, "submission version must be 2");
   assert(submission.answers.length === 4, "submission must include all trial answers");
-  assert(submission.answerKey?.length >= 3, "submission should include the answer key when policy allows it");
+  assert(!("answerKey" in submission), "submission should omit the answer key by default");
   assert(submitted.result.content?.[0]?.text?.includes("Grade"), "submit_answers model-facing content should ask the LLM to grade/teach");
 
   return buildReport(true, null, { health, manifest, initialized, tools, resourceUri, inspected, submission });
@@ -145,7 +145,7 @@ function makeTrialQuiz() {
     subject: "BetterQuizzes Integration",
     mode: "practice",
     displayPolicy: { showCorrectAnswers: "after_submit", showExplanations: "llm_after_submit", requireConfidence: true },
-    gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: true },
+    gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: false },
     questions: [
       { id: "q1", type: "multiple_choice", prompt: "Which layer should explain missed answers?", choices: ["The static UI", "The LLM", "The CSS file", "The package manager"], answer: 1, tags: ["architecture", "llm-grading"], difficulty: 1 },
       { id: "q2", type: "multi_select", prompt: "Which data should BetterQuizzes return?", choices: ["User answers", "Ad data", "Confidence ratings", "Private browser history"], answer: [0, 2], tags: ["submission", "privacy"], difficulty: 2 },
@@ -215,6 +215,6 @@ function markdownReport(report) {
   lines.push("");
   lines.push(`## Next manual step`);
   lines.push("");
-  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz` and `add_question`, launch once with `open_quiz`, take the quiz in the widget, then verify the LLM receives and grades the `SubmissionCapsule`.");
+  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz` and one `add_question` call per question, take the quiz in the widget after the first question launches it, then verify the LLM receives and grades the `SubmissionCapsule`.");
   return lines.join("\n");
 }
