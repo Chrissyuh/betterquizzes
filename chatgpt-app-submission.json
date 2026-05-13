@@ -48,7 +48,8 @@
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": true
       },
       "justifications": {
         "read_only_justification": "Opens the latest stored BetterQuizzes quiz widget without modifying external state.",

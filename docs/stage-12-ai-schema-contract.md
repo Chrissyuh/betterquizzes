@@ -1,13 +1,15 @@
 # Stage 12: AI-Facing Schema Contract
 
-Stage 12 fixes the main AI-side reliability issue: create_quiz now exposes the exact nested QuizSpec v2 schema the widget can render.
+Stage 12 keeps the AI-facing contract aligned with the staged BetterQuizzes creation flow. Normal assistant-authored quizzes are built with `start_quiz`, stored continuously by `add_question`, and opened once with the read-only `open_quiz` launcher. `create_quiz` remains a compact legacy compatibility opener for complete user-supplied quiz packets, not the normal authoring path.
 
 ## Included
 
-- Complete create_quiz.inputSchema instead of quiz: object / any.
+- Compact create_quiz.inputSchema for complete legacy quiz packets instead of the full nested QuizSpec v2 schema.
 - Discriminated question schemas for supported question types.
-- Canonical example embedded in the tool description.
+- Short compatibility-only create_quiz description so model guidance does not compete with the builder flow.
+- Continuous draft storage after accepted `add_question` calls, including `quizId` and monotonic `quizRevision`.
+- Read-only, non-destructive, non-open-world, idempotent `open_quiz` metadata with no required launch arguments.
 - Normalization for common aliases: options -> choices, stem/question/text -> prompt, correctAnswer/answerKey -> answer, object choices -> text choices.
 - Server validation rejects quizzes the renderer cannot display.
-- create_quiz returns renderDiagnostics, renderableQuestionCount, unrenderableQuestions, warnings, and the normalized quiz object.
+- Widget launch tools return renderDiagnostics, renderableQuestionCount, unrenderableQuestions, warnings, and the normalized quiz object.
 - inspect_quiz returns render diagnostics too.

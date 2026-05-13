@@ -2,6 +2,8 @@
 import { readFileSync } from "node:fs";
 
 const server = readFileSync("mcp/remote-server.mjs", "utf8");
+const stage12Contract = readFileSync("docs/stage-12-ai-schema-contract.md", "utf8");
+const appSubmission = JSON.parse(readFileSync("chatgpt-app-submission.json", "utf8"));
 function assert(value, message) { if (!value) throw new Error(message); }
 
 assert(server.includes('const VERSION = "V1"'), "server version must be V1");
@@ -42,5 +44,15 @@ assert(!server.includes('"openai/outputTemplate": RESOURCE_URI,\n      "openai/w
 assert(!server.includes("create_quiz exactly once"), "legacy create_quiz exactly-once guidance must not remain");
 assert(!server.includes("destructiveHint: true"), "no tool should be marked destructive");
 assert(!server.includes("openWorldHint: true"), "no tool should be marked open-world");
+
+assert(stage12Contract.includes("Normal assistant-authored quizzes are built with `start_quiz`"), "Stage 12 docs must describe the staged builder flow");
+assert(stage12Contract.includes("`create_quiz` remains a compact legacy compatibility opener"), "Stage 12 docs must demote create_quiz to legacy compatibility");
+assert(!stage12Contract.includes("create_quiz now exposes the exact nested QuizSpec v2 schema"), "Stage 12 docs must not restore stale full-schema create_quiz guidance");
+assert(!stage12Contract.includes("Complete create_quiz.inputSchema instead of quiz: object / any."), "Stage 12 docs must not claim create_quiz exposes the full contract");
+
+assert(appSubmission.tools?.open_quiz?.annotations?.readOnlyHint === true, "submission metadata must mark open_quiz read-only");
+assert(appSubmission.tools?.open_quiz?.annotations?.destructiveHint === false, "submission metadata must mark open_quiz non-destructive");
+assert(appSubmission.tools?.open_quiz?.annotations?.openWorldHint === false, "submission metadata must mark open_quiz non-open-world");
+assert(appSubmission.tools?.open_quiz?.annotations?.idempotentHint === true, "submission metadata must mark open_quiz idempotent");
 
 console.log("V1 MCP/App contract static checks passed.");
