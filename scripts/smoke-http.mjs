@@ -67,7 +67,6 @@ async function runSmoke() {
   assert(toolNames.includes("create_quiz"), "create_quiz missing");
   assert(toolNames.includes("start_quiz"), "start_quiz missing");
   assert(toolNames.includes("add_question"), "add_question missing");
-  assert(toolNames.includes("finalize_quiz"), "finalize_quiz missing");
   assert(toolNames.includes("open_quiz"), "open_quiz missing");
   assert(toolNames.includes("submit_answers"), "submit_answers missing");
   for (const tool of listed.result.tools) {
@@ -75,8 +74,7 @@ async function runSmoke() {
     assert(tool.annotations?.destructiveHint !== true, `${tool.name} should not be destructive`);
     assert(tool.annotations?.openWorldHint !== true, `${tool.name} should not be open-world`);
   }
-  const finalizeTool = listed.result.tools.find((tool) => tool.name === "finalize_quiz");
-  assert(!finalizeTool._meta?.["openai/outputTemplate"], "finalize_quiz must not have widget output template");
+  assert(!toolNames.includes("finalize_quiz"), "finalize_quiz should not be advertised in normal tools/list");
   const openTool = listed.result.tools.find((tool) => tool.name === "open_quiz");
   assert(openTool._meta?.["openai/outputTemplate"], "open_quiz missing widget output template");
   assert(openTool.annotations?.readOnlyHint === true, "open_quiz should be read-only");
@@ -118,6 +116,7 @@ async function runSmoke() {
     arguments: {
       title: "Staged Builder Smoke",
       topic: "QA",
+      quizId: "staged-builder-smoke",
       expectedQuestionCount: 3
     }
   });
@@ -136,13 +135,9 @@ async function runSmoke() {
     }
   });
 
-  const partialFinalized = await rpc("tools/call", {
-    name: "finalize_quiz",
-    arguments: { quizId: "staged-builder-smoke" }
-  });
-  assert(partialFinalized.result.structuredContent.ok === true, "partial finalize should validate/store successfully");
-  assert(partialFinalized.result.structuredContent.questionCount === 1, "partial finalize should store available questions");
-  assert(partialFinalized.result.structuredContent.complete === false, "partial finalize should not be marked complete");
+  const stagedLatestBeforeOpen = await getJson("/api/quiz/latest");
+  assert(stagedLatestBeforeOpen.quizId === "staged-builder-smoke", "add_question should store the staged quiz before open_quiz");
+  assert(stagedLatestBeforeOpen.quiz.questions.length === 1, "add_question should store the first staged question");
 
   const opened = await rpc("tools/call", {
     name: "open_quiz",
@@ -190,7 +185,7 @@ async function runSmoke() {
         prompt: "Match each builder step to its role.",
         left: [
           { id: "l1", text: "start_quiz" },
-          { id: "l2", text: "finalize_quiz" }
+          { id: "l2", text: "add_question" }
         ],
         right: [
           { id: "r1", text: "Create draft" },
@@ -234,7 +229,8 @@ async function runSmoke() {
     name: "start_quiz",
     arguments: {
       title: "Builder Ordering Smoke",
-      topic: "QA"
+      topic: "QA",
+      quizId: "builder-ordering-smoke"
     }
   });
   const builderDraftId = started.result.structuredContent.draftId;
@@ -329,13 +325,8 @@ async function runSmoke() {
     }
   });
 
-  const finalized = await rpc("tools/call", {
-    name: "finalize_quiz",
-    arguments: { draftId: builderDraftId, quizId: "builder-ordering-smoke" }
-  });
-  assert(finalized.result.structuredContent.ok === true, "finalize_quiz did not validate/store builder quiz");
-  assert(finalized.result.structuredContent.quizId === "builder-ordering-smoke", "finalize_quiz returned wrong canonical quizId");
-  assert(finalized.result.structuredContent.questionCount === 3, "finalize_quiz should store all builder questions");
+  const storedBuilderQuiz = await getJson("/api/quiz/builder-ordering-smoke");
+  assert(storedBuilderQuiz.quiz.questions.length === 3, "add_question should continuously store all builder questions");
 
   const openedFinal = await rpc("tools/call", {
     name: "open_quiz",
@@ -347,10 +338,10 @@ async function runSmoke() {
 
   const inspected = await rpc("tools/call", {
     name: "inspect_quiz",
-    arguments: { quizId: finalized.result.structuredContent.quizId }
+    arguments: { quizId: "builder-ordering-smoke" }
   });
-  assert(inspected.result.structuredContent.quizId === "builder-ordering-smoke", "inspect_quiz could not find finalized builder quiz");
-  assert(inspected.result.structuredContent.questionCount === 3, "inspect_quiz returned wrong finalized question count");
+  assert(inspected.result.structuredContent.quizId === "builder-ordering-smoke", "inspect_quiz could not find stored builder quiz");
+  assert(inspected.result.structuredContent.questionCount === 3, "inspect_quiz returned wrong stored question count");
 
   const submitted = await rpc("tools/call", {
     name: "submit_answers",

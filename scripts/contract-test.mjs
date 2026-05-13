@@ -9,10 +9,10 @@ assert(server.includes('ui://widget/betterquizzes-v1-build-bqv1p1.html'), "widge
 assert(server.includes('CREATE_QUIZ_INPUT_SCHEMA'), "create_quiz must use a named input schema");
 assert(server.includes('outputSchema: LAUNCH_OUTPUT_SCHEMA'), "create_quiz must expose an output schema");
 assert(server.includes('outputSchema: BUILDER_OUTPUT_SCHEMA'), "builder tools must expose output schemas");
-assert(server.includes('name: "finalize_quiz"'), "finalize_quiz must be registered");
+assert(!server.includes('name: "finalize_quiz"'), "finalize_quiz must not be advertised as a normal tool");
 assert(server.includes('name: "open_quiz"'), "open_quiz must be registered");
 assert(server.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "open_quiz must attach widget launch metadata");
-assert(server.includes("finalize_quiz is storage-only; open_quiz is the UI launch step"), "model instructions must make open_quiz the UI launch step");
+assert(server.includes("Do not call finalize_quiz for assistant-authored quizzes"), "model instructions must remove finalize_quiz from the normal creation path");
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");

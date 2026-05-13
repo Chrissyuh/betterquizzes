@@ -24,7 +24,6 @@ for (const tool of [
   "start_quiz",
   "add_question",
   "repair_question",
-  "finalize_quiz",
   "open_quiz",
   "record_grade",
   "get_grade"
@@ -39,10 +38,12 @@ for (const token of [
   "V2_BUILDER_INSTRUCTIONS",
   "function startQuiz",
   "function addQuestion",
-  "function finalizeQuiz"
+  "function openQuiz"
 ]) {
   assert(remote.includes(token), "remote-server.mjs missing " + token);
 }
+
+assert(!hasTool(remote, "finalize_quiz"), "finalize_quiz must not be advertised as a normal tool");
 
 const toolsIndex = remote.indexOf("const tools = [");
 const spreadIndex = remote.indexOf("...V23_BUILDER_TOOL_DEFS");

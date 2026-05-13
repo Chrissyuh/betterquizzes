@@ -48,14 +48,14 @@ async function main() {
   console.log("→ resources/read");
   const resource = await request("resources/read", { uri: "ui://widget/betterquizzer-stage12-1.html" });
   console.log({ mimeType: resource.result.contents[0].mimeType, chars: resource.result.contents[0].text.length });
-  console.log("→ start_quiz/add_question/finalize_quiz");
+  console.log("→ start_quiz/add_question/open_quiz");
   const quiz = JSON.parse(readFileSync("src/shared/examples/tiny-demo.json", "utf8"));
-  const started = await request("tools/call", { name: "start_quiz", arguments: { title: quiz.title, topic: quiz.subject, expectedQuestionCount: quiz.questions.length } });
+  const started = await request("tools/call", { name: "start_quiz", arguments: { title: quiz.title, topic: quiz.subject, quizId: quiz.quizId, expectedQuestionCount: quiz.questions.length } });
   const draftId = started.result.structuredContent.draftId;
   for (const question of quiz.questions) {
     await request("tools/call", { name: "add_question", arguments: { draftId, question } });
   }
-  const created = await request("tools/call", { name: "finalize_quiz", arguments: { draftId, quizId: quiz.quizId } });
+  const created = await request("tools/call", { name: "open_quiz", arguments: { quizId: quiz.quizId } });
   console.log(created.result.structuredContent);
   console.log("→ submit_answers");
   const submitted = await request("tools/call", {

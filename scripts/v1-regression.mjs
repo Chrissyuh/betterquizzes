@@ -47,9 +47,10 @@ assert(remote.includes("v23NormalizeMatchingQuestion") && remote.includes("Match
 assert(render.includes("normalizeMatchingQuestion") && render.includes("normalized legacy matching pairs to left/right/answer"), "render contract must normalize legacy matching pairs before finalization");
 assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('required: ["draftId", "repairedQuestion"]'), "repair_question must expose repairedQuestion in its input schema");
 assert(remote.includes("start_quiz with expectedQuestionCount") && remote.includes("Do not send chat progress/check-in messages while authoring"), "model instructions must prefer quiet staged authoring");
-assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Omit to finalize the latest draft"), "finalize_quiz must be able to avoid draftId sharing");
+assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Accepted question stored"), "add_question must store accepted questions continuously");
 assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");
 assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("do not call open_quiz again"), "staged authoring must update stored quizzes without duplicate widget launches");
+assert(!remote.includes('name: "finalize_quiz"') && remote.includes("Do not call finalize_quiz for assistant-authored quizzes"), "finalize_quiz must not be advertised in the normal model tool path");
 assert(app.includes("fetchQuizFromServer(quizId)") && app.includes("isIncrementalQuizBuilding(quiz)") && app.includes("setQuiz(serverQuiz)"), "widget must poll stored quiz updates while questions are still generating");
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
 assert(app.includes("submission.launchId = launchId") && app.includes("submission.quizRevision = quiz.metadata.quizRevision"), "submissions must carry stable launch/revision identity");

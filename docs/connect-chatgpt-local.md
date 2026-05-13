@@ -32,7 +32,7 @@ Ask the host/model to create a quiz, then verify this flow:
 
 1. `start_quiz` is selected by the model.
 2. `add_question` is called once per assistant-authored question.
-3. `finalize_quiz` launches the BetterQuizzes widget.
+3. `add_question` stores accepted questions continuously, and `open_quiz` launches the BetterQuizzes widget once.
 4. User answers questions and gives confidence.
 5. Widget calls `submit_answers`.
 6. Model receives a SubmissionCapsule.

@@ -44,14 +44,14 @@
         "destructive_justification": "Does not delete, revoke access, or perform irreversible actions."
       }
     },
-    "finalize_quiz": {
+    "open_quiz": {
       "annotations": {
-        "readOnlyHint": false,
+        "readOnlyHint": true,
         "openWorldHint": false,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Validates and stores the current quiz in server memory, then opens the BetterQuizzes widget.",
+        "read_only_justification": "Opens the latest stored BetterQuizzes quiz widget without modifying external state.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -134,7 +134,7 @@
       "description": "Create a short assistant-authored mixed-format practice quiz.",
       "user_prompt": "Make me a 4-question practice quiz about photosynthesis with a mix of question types.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_question, finalize_quiz",
+      "tools_triggered": "start_quiz, add_question, open_quiz",
       "expected_output": "Launches one BetterQuizzes activity with a mixed-format quiz ready for the user to answer.",
       "expected_output_url": null
     },
@@ -142,7 +142,7 @@
       "description": "Create an ordering question and launch it through the builder flow.",
       "user_prompt": "Make a one-question quiz where I drag these app release steps into the right order.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_question, finalize_quiz",
+      "tools_triggered": "start_quiz, add_question, open_quiz",
       "expected_output": "Launches an ordering quiz whose items can be rearranged in the widget.",
       "expected_output_url": null
     },
@@ -150,7 +150,7 @@
       "description": "Repair an invalid draft question without restarting the quiz.",
       "user_prompt": "Create a quiz with an ordering question, and if the question needs repair, fix just that question.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_question, repair_question, finalize_quiz",
+      "tools_triggered": "start_quiz, add_question, repair_question, open_quiz",
       "expected_output": "Repairs the invalid question and launches the corrected quiz once.",
       "expected_output_url": null
     },
