@@ -16,9 +16,14 @@ for (const required of [
   "server.registerResource",
   "openai/outputTemplate",
   "openai/widgetAccessible",
-  "betterquizzer.submission"
+  "betterquizzer.submission",
+  "launchId: z.string().optional()",
+  "quizRevision: z.number().int().min(0).optional()"
 ]) {
   if (!sdkServer.includes(required)) throw new Error(`SDK server missing expected pattern: ${required}`);
+}
+if (!sdkServer.includes('...(typeof args.launchId === "string"') || !sdkServer.includes("Number.isInteger(args.quizRevision)")) {
+  throw new Error("SDK submit path must preserve launchId and quizRevision in SubmissionCapsule output.");
 }
 
 const remoteServer = readFileSync("mcp/remote-server.mjs", "utf8");

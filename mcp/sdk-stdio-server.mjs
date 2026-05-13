@@ -127,6 +127,8 @@ server.registerTool(
     inputSchema: {
       quizId: z.string(),
       sessionId: z.string().optional(),
+      launchId: z.string().optional(),
+      quizRevision: z.number().int().min(0).optional(),
       submission: z.any().optional(),
       answers: z.array(z.object({
         questionId: z.string(),
@@ -155,6 +157,8 @@ server.registerTool(
     inputSchema: {
       quizId: z.string(),
       sessionId: z.string().optional(),
+      launchId: z.string().optional(),
+      quizRevision: z.number().int().min(0).optional(),
       submission: z.any().optional(),
       answers: z.array(z.object({
         questionId: z.string(),
@@ -336,6 +340,8 @@ function makeSubmission(quiz, args) {
     subject: quiz.subject,
     mode: quiz.mode,
     submittedAt: new Date().toISOString(),
+    ...(typeof args.launchId === "string" && args.launchId ? { launchId: args.launchId } : {}),
+    ...(Number.isInteger(args.quizRevision) ? { quizRevision: args.quizRevision } : {}),
     displayPolicy,
     gradingPolicy,
     activityPolicy,
