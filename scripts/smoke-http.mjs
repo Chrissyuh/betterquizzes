@@ -165,6 +165,7 @@ async function runSmoke() {
   assert(opened.result.structuredContent.packetProgress.complete === false, "open_quiz partial launch should not be complete");
   const stagedRecoveryToken = opened.result._meta?.recoveryToken;
   assert(typeof stagedRecoveryToken === "string" && stagedRecoveryToken.length > 10, "open_quiz must provide a private recovery token in metadata");
+  assert(opened.result.structuredContent.recoveryToken === stagedRecoveryToken, "open_quiz structured content must expose recovery token for widget polling fallback");
   await getJsonAllowStatus("/api/quiz/staged-builder-smoke", 403);
   const stagedAfterOpen = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedAfterOpen.quizId === "staged-builder-smoke", "token-scoped quiz endpoint should expose the opened staged quiz");
