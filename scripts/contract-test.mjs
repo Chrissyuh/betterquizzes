@@ -26,8 +26,8 @@ assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHi
 assert(server.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "remote server must use shared builder guidance");
 assert(stableServer.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "stable stdio server must use shared builder guidance");
 assert(sharedGuidance.includes("call add_question exactly once for question 1"), "shared builder guidance must add the first question before launch");
-assert(sharedGuidance.includes("after every later accepted add_question call open_quiz again"), "shared builder guidance must refresh the widget after every later question");
-assert(sharedGuidance.includes("Do not send question batches in start_quiz"), "shared builder guidance must enforce one-question-at-a-time authoring");
+assert(sharedGuidance.includes("call open_quiz once to show the widget"), "shared builder guidance must open the widget immediately after the first question");
+assert(sharedGuidance.includes("do not call open_quiz again"), "shared builder guidance must avoid duplicate staged widgets");
 assert(sharedGuidance.includes("Do not send question batches in start_quiz"), "shared builder guidance must reject start_quiz question batches");
 for (const [label, text] of [["remote server", server], ["stable stdio server", stableServer], ["SDK stdio server", sdkServer]]) {
   assert(text.includes('orderingBehavior.direction') && text.includes('"top_to_bottom"'), `${label} must instruct top_to_bottom ordering direction`);
@@ -83,13 +83,14 @@ assert(appSubmission.tools?.open_quiz?.annotations?.openWorldHint === false, "su
 assert(appSubmission.tools?.open_quiz?.annotations?.idempotentHint === true, "submission metadata must mark open_quiz idempotent");
 
 assert(demoClient.includes("resources.result.resources[0].uri"), "demo client must read the advertised widget resource URI");
-assert(demoClient.includes('name: "open_quiz"'), "demo client must open the widget after add_question");
+assert(demoClient.includes('name: "open_quiz"'), "demo client must open the widget after first add_question");
 assert(!demoClient.includes("betterquizzer-stage12-1.html"), "demo client must not hardcode stale widget resource aliases");
 
 assert(trialProbe.includes('callTool("add_question"'), "host trial probe must exercise add_question staged launch path");
-assert(trialProbe.includes('callTool("open_quiz"'), "host trial probe must refresh after staged questions");
-assert(trialProbe.includes("opened = await check"), "host trial probe must keep the latest launch packet");
+assert(trialProbe.includes('callTool("open_quiz"'), "host trial probe must open after first staged question");
+assert(trialProbe.includes("quiz.questions.slice(1)"), "host trial probe must launch before adding all staged questions");
 assert(trialProbe.includes("packetProgress?.complete === false"), "host trial probe must assert early launch is partial");
+assert(trialProbe.includes("updatedStoredQuiz = await fetchQuizFromServerForTrial"), "host trial probe must verify the already-open widget polling API can see later questions");
 assert(trialProbe.includes("launchId: opened.result.structuredContent.launchId"), "host trial submission must preserve launch identity");
 assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "local host trial wrapper must preserve probe CLI flags");
 assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");

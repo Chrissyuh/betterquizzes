@@ -64,16 +64,16 @@ async function runTrial() {
   const draftId = started.result.structuredContent.draftId;
   const firstAdd = await check(`MCP tools/call add_question ${quiz.questions[0].id}`, () => callTool("add_question", { draftId, question: quiz.questions[0] }), (value) => value.result?.structuredContent?.ok === true && value.result?.structuredContent?.questionCount === 1 && !value.result?.structuredContent?.launch);
   assert(firstAdd.result?.structuredContent?.quizId === quiz.quizId, "first add_question must store the staged quiz before launch");
-  let opened = await check("MCP tools/call open_quiz after q1", () => callTool("open_quiz", {}), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch" && value.result?.structuredContent?.questionCount === 1);
+  const opened = await check("MCP tools/call open_quiz after first question", () => callTool("open_quiz", {}), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch" && value.result?.structuredContent?.questionCount === 1);
   assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "open_quiz must privately hydrate the widget with the staged quiz");
   assert(opened.result?.structuredContent?.packetProgress?.complete === false, "early open_quiz launch should report partial generation");
 
-  for (const [index, question] of quiz.questions.slice(1).entries()) {
-    const expectedCount = index + 2;
-    await check(`MCP tools/call add_question ${question.id}`, () => callTool("add_question", { draftId, question }), (value) => value.result?.structuredContent?.ok === true && value.result?.structuredContent?.questionCount === expectedCount);
-    opened = await check(`MCP tools/call open_quiz after ${question.id}`, () => callTool("open_quiz", {}), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch" && value.result?.structuredContent?.questionCount === expectedCount);
+  for (const question of quiz.questions.slice(1)) {
+    await check(`MCP tools/call add_question ${question.id}`, () => callTool("add_question", { draftId, question }), (value) => value.result?.structuredContent?.ok === true);
   }
-  assert(opened.result?.structuredContent?.packetProgress?.complete === true, "final open_quiz launch should report complete generation");
+  const recoveryToken = opened.result.structuredContent.recoveryToken || opened.result._meta?.recoveryToken;
+  const updatedStoredQuiz = await fetchQuizFromServerForTrial(quiz.quizId, recoveryToken);
+  assert(updatedStoredQuiz.questions.length === quiz.questions.length, "stored staged quiz must expose later questions through the polling API");
 
   const inspected = await check("MCP tools/call inspect_quiz", () => callTool("inspect_quiz", { quizId: quiz.quizId }), (value) => value.result?.structuredContent?.questionCount === quiz.questions.length);
 
@@ -103,6 +103,13 @@ async function getJson(pathname) {
   const response = await fetch(`${baseUrl}${pathname}`);
   if (!response.ok) throw new Error(`GET ${pathname} failed with HTTP ${response.status}`);
   return response.json();
+}
+
+async function fetchQuizFromServerForTrial(quizId, recoveryToken) {
+  assert(typeof recoveryToken === "string" && recoveryToken.length > 0, "open_quiz must expose a recovery token for widget polling");
+  const payload = await getJson(`/api/quiz/${encodeURIComponent(quizId)}?recoveryToken=${encodeURIComponent(recoveryToken)}`);
+  assert(payload?.quiz, "polling API response must include quiz");
+  return payload.quiz;
 }
 
 async function rpc(method, params) {
@@ -218,6 +225,6 @@ function markdownReport(report) {
   lines.push("");
   lines.push(`## Next manual step`);
   lines.push("");
-  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz`, alternate `add_question` and `open_quiz` once per question, then verify the LLM receives and grades the `SubmissionCapsule`.");
+  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz`, add the first question with `add_question`, call `open_quiz`, add remaining questions one at a time, then verify the already-open widget can poll the stored quiz and the LLM receives and grades the `SubmissionCapsule`.");
   return lines.join("\n");
 }

@@ -38443,26 +38443,41 @@ function getRequestedRecoveryToken() {
 	const params = new URLSearchParams(window.location.search);
 	return params.get("recoveryToken") || params.get("token") || params.get("accessToken") || null;
 }
-function getServerBase() {
-	if (typeof window === "undefined") return "";
-	const injected = window.__BETTERQUIZZER_SERVER_BASE__?.trim().replace(/\/$/, "");
-	if (injected) return injected;
-	return window.location.origin && window.location.origin !== "null" ? window.location.origin : "";
+function cleanServerBase(value) {
+	return typeof value === "string" ? value.trim().replace(/\/$/, "") : "";
+}
+function getServerBases() {
+	if (typeof window === "undefined") return [];
+	const bootstrap = window.__BETTERQUIZZER_BOOTSTRAP__ && typeof window.__BETTERQUIZZER_BOOTSTRAP__ === "object" ? window.__BETTERQUIZZER_BOOTSTRAP__ : {};
+	const bootstrapBases = Array.isArray(bootstrap.serverBases) ? bootstrap.serverBases : [];
+	const candidates = [
+		...Array.isArray(window.__BETTERQUIZZER_SERVER_BASES__) ? window.__BETTERQUIZZER_SERVER_BASES__ : [],
+		window.__BETTERQUIZZER_SERVER_BASE__,
+		...bootstrapBases,
+		bootstrap.serverBase,
+		window.location.origin && window.location.origin !== "null" ? window.location.origin : ""
+	].map(cleanServerBase).filter(Boolean);
+	return [...new Set(candidates)];
 }
 async function fetchQuizFromServer(quizId, recoveryToken) {
-	const base = getServerBase();
 	const query = recoveryToken ? "?recoveryToken=" + encodeURIComponent(recoveryToken) : "";
 	const path = "/api/quiz/" + encodeURIComponent(quizId) + query;
-	const url = base ? base + path : path;
-	const response = await fetch(url, { headers: { accept: "application/json" } });
-	const body = await response.json().catch(() => ({}));
-	if (!response.ok) {
-		const detail = body && typeof body === "object" && "error" in body ? String(body.error) : response.status + " " + response.statusText;
-		throw new Error("Server quiz fetch failed: " + detail);
+	const bases = getServerBases();
+	let lastError = null;
+	for (const base of bases.length ? bases : [""]) try {
+		const response = await fetch((base ? base : "") + path, { headers: { accept: "application/json" } });
+		const body = await response.json().catch(() => ({}));
+		if (!response.ok) {
+			const detail = body && typeof body === "object" && "error" in body ? String(body.error) : response.status + " " + response.statusText;
+			throw new Error(detail);
+		}
+		const record = body;
+		if (!record.quiz) throw new Error("Server response did not include a quiz.");
+		return record.quiz;
+	} catch (error) {
+		lastError = error;
 	}
-	const record = body;
-	if (!record.quiz) throw new Error("Server response did not include a quiz.");
-	return record.quiz;
+	throw new Error("Server quiz fetch failed from " + describeServerBases() + ": " + (lastError instanceof Error ? lastError.message : String(lastError)));
 }
 async function fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken) {
 	if (recoveryToken) try {
@@ -38480,7 +38495,7 @@ function buildHydrationFailureDetails(reason) {
 	return [
 		reason,
 		"",
-		"Server base: " + (getServerBase() || "(none)"),
+		"Server bases: " + describeServerBases(),
 		"Requested quiz id: " + (getRequestedQuizId() || "(none)"),
 		"Host bridge:",
 		describeHostBridgeState()
@@ -38491,14 +38506,18 @@ function getRecoveredLaunchId(quiz) {
 	return typeof revision === "number" && Number.isFinite(revision) ? `${getQuizId(quiz)}:r${revision}` : void 0;
 }
 async function fetchGradeFromServer(quizId, sessionId, recoveryToken) {
-	const base = getServerBase();
 	const query = recoveryToken ? "?recoveryToken=" + encodeURIComponent(recoveryToken) : "";
 	const path = "/api/grade/" + encodeURIComponent(quizId) + (sessionId ? "/" + encodeURIComponent(sessionId) : "") + query;
-	const url = base ? base + path : path;
-	const response = await fetch(url, { headers: { accept: "application/json" } });
-	const body = await response.json().catch(() => ({}));
-	if (!response.ok) return null;
-	return body.grade ?? null;
+	for (const base of getServerBases()) {
+		const response = await fetch(base + path, { headers: { accept: "application/json" } }).catch(() => null);
+		if (!response?.ok) continue;
+		return (await response.json().catch(() => ({}))).grade ?? null;
+	}
+	return null;
+}
+function describeServerBases() {
+	const bases = getServerBases();
+	return bases.length ? bases.join(", ") : "(none)";
 }
 function buildFinishedFromPersistedSubmission(quiz, launchId) {
 	const state = getPersistedSubmissionState(getQuizId(quiz), launchId);

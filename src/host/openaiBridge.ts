@@ -54,6 +54,7 @@ declare global {
     openai?: OpenAiBridge;
     __BETTERQUIZZER_BOOTSTRAP__?: unknown;
     __BETTERQUIZZER_SERVER_BASE__?: string;
+    __BETTERQUIZZER_SERVER_BASES__?: string[];
     __BETTERQUIZZER_FORCE_WIDGET__?: boolean;
   }
 }
