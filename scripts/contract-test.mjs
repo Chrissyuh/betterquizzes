@@ -13,6 +13,7 @@ assert(!server.includes('name: "finalize_quiz"'), "finalize_quiz must not be adv
 assert(server.includes('name: "open_quiz"'), "open_quiz must be registered");
 assert(server.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "open_quiz must attach widget launch metadata");
 assert(server.includes("Do not call finalize_quiz for assistant-authored quizzes"), "model instructions must remove finalize_quiz from the normal creation path");
+assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input);'), "hidden finalize_quiz compatibility handler must remain for cached old tool callers");
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");

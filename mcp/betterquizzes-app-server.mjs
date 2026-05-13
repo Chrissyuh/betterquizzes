@@ -156,6 +156,10 @@ const V23_BUILDER_TOOL_NAMES = new Set([
   "repair_question",
   "open_quiz"
 ]);
+const V23_BUILDER_COMPAT_TOOL_NAMES = new Set([
+  ...V23_BUILDER_TOOL_NAMES,
+  "finalize_quiz"
+]);
 
 const v23QuizDrafts = globalThis.__betterQuizzesV23Drafts ?? new Map();
 globalThis.__betterQuizzesV23Drafts = v23QuizDrafts;
@@ -701,29 +705,25 @@ function finalizeQuiz(input = {}) {
     });
   }
 
+  const expectedQuestionCount = draft?.expectedQuestionCount ?? input.expectedQuestionCount ?? input.quiz?.expectedQuestionCount;
+  const launchResult = buildLaunchToolResult(prepared, { expectedQuestionCount });
+  const launch = launchResult.structuredContent ?? {};
   v23QuizDrafts.set(draftId, {
     ...(draft ?? {}),
     ...prepared.quiz,
+    quizId: launch.quizId ?? prepared.quiz.quizId,
     draftId,
-    expectedQuestionCount: draft?.expectedQuestionCount ?? input.expectedQuestionCount ?? input.quiz?.expectedQuestionCount,
+    expectedQuestionCount,
+    metadata: {
+      ...(draft?.metadata ?? {}),
+      ...(prepared.quiz.metadata ?? {}),
+      expectedQuestionCount,
+      quizRevision: launch.quizRevision
+    },
     finalizedAt: new Date().toISOString()
   });
   globalThis.__betterQuizzesV23LatestDraftId = draftId;
-
-  const stored = storePreparedQuiz(prepared, { expectedQuestionCount: draft?.expectedQuestionCount ?? input.expectedQuestionCount ?? input.quiz?.expectedQuestionCount });
-  return v23TextResponse({
-    ok: true,
-    draftId,
-    quizId: stored.quizId,
-    quizRevision: stored.quizRevision,
-    questionCount: prepared.quiz.questions.length,
-    renderableQuestionCount: prepared.diagnostics.renderableQuestionCount,
-    rendererCertified: prepared.diagnostics.rendererCertified === true,
-    complete: stored.complete,
-    warnings: prepared.warnings,
-    renderDiagnostics: prepared.diagnostics,
-    next: "Call open_quiz once to open the widget, then continue add_question/repair_question silently while the widget polls stored updates."
-  });
+  return launchResult;
 }
 
 function handleV23BuilderTool(name, input = {}) {
@@ -923,7 +923,7 @@ function handleRequest(message) {
   if (method === "tools/call") {
     const name = params?.name;
     const args = params?.arguments || {};
-    if (V23_BUILDER_TOOL_NAMES.has(name)) {
+    if (V23_BUILDER_COMPAT_TOOL_NAMES.has(name)) {
       const v24BuilderArgs =
         typeof toolArgs !== "undefined"
           ? toolArgs

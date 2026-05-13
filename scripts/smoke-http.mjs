@@ -156,6 +156,13 @@ async function runSmoke() {
   });
   assert(replayedOpen.result.structuredContent.launchId === opened.result.structuredContent.launchId, "open_quiz should replay a stable launchId for the same revision");
 
+  const legacyFinalizeLaunch = await rpc("tools/call", {
+    name: "finalize_quiz",
+    arguments: { draftId: stagedDraftId, quizId: "staged-builder-smoke" }
+  });
+  assert(legacyFinalizeLaunch.result.structuredContent.kind === "betterquizzer.launch", "legacy finalize_quiz should launch for cached old tool callers");
+  assert(legacyFinalizeLaunch.result.structuredContent.quizId === "staged-builder-smoke", "legacy finalize_quiz returned wrong quizId");
+
   await rpc("tools/call", {
     name: "add_question",
     arguments: {
