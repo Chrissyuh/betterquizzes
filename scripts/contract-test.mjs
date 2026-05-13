@@ -36,7 +36,8 @@ assert(server.includes('renderableQuestionCount'), "create_quiz must report rend
 assert(server.includes('componentByQuestion'), "render diagnostics must include componentByQuestion");
 assert(server.includes('normalizedFields'), "render diagnostics must include normalizedFields");
 assert(server.includes('rendererCertified'), "render diagnostics must include rendererCertified");
-assert(server.includes('canonical minimal example') || server.includes('Canonical minimal example'), "tool description should include canonical example guidance");
+assert(server.includes('const CREATE_QUIZ_DESCRIPTION = "Use only when'), "create_quiz description should stay compact");
+assert(!server.includes('CREATE_QUIZ_DESCRIPTION = "Compatibility opener'), "create_quiz description must not restore the long legacy guidance");
 assert(!server.includes('"openai/outputTemplate": RESOURCE_URI,\n      "openai/widgetAccessible": true,\n      "openai/toolInvocation/invoking": "Submitting'), "submit_answers must not attach the widget output template");
 assert(!server.includes("create_quiz exactly once"), "legacy create_quiz exactly-once guidance must not remain");
 assert(!server.includes("destructiveHint: true"), "no tool should be marked destructive");

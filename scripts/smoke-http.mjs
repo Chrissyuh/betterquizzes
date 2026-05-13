@@ -84,6 +84,8 @@ async function runSmoke() {
   const createSchemaJson = JSON.stringify(createTool?.inputSchema || {});
   assert(createTool?.inputSchema?.properties?.quiz?.properties?.questions?.items?.additionalProperties === true, "create_quiz should advertise compact question objects");
   assert(!createSchemaJson.includes('"oneOf"'), "create_quiz input schema should stay compact");
+  assert((createTool?.description || "").length < 500, "create_quiz description should stay compact");
+  assert(!(createTool?.description || "").includes("Canonical minimal example"), "create_quiz description should not advertise legacy examples");
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(startTool?.inputSchema?.properties?.questions?.type === "array", "start_quiz schema missing bulk questions array");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
