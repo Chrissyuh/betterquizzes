@@ -62,17 +62,23 @@ async function runTrial() {
   const quiz = makeTrialQuiz();
   const started = await check("MCP tools/call start_quiz", () => callTool("start_quiz", { title: quiz.title, topic: quiz.subject, quizId: quiz.quizId, expectedQuestionCount: quiz.questions.length }), (value) => typeof value.result?.structuredContent?.draftId === "string");
   const draftId = started.result.structuredContent.draftId;
-  for (const question of quiz.questions) {
+  await check(`MCP tools/call add_question ${quiz.questions[0].id}`, () => callTool("add_question", { draftId, question: quiz.questions[0] }), (value) => value.result?.structuredContent?.ok === true);
+  const opened = await check("MCP tools/call open_quiz", () => callTool("open_quiz", {}), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch");
+  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "open_quiz must privately hydrate the widget with the staged quiz");
+  assert(opened.result?.structuredContent?.questionCount === 1, "open_quiz should launch after the first staged question");
+  assert(opened.result?.structuredContent?.packetProgress?.complete === false, "early open_quiz launch should report partial generation");
+
+  for (const question of quiz.questions.slice(1)) {
     await check(`MCP tools/call add_question ${question.id}`, () => callTool("add_question", { draftId, question }), (value) => value.result?.structuredContent?.ok === true);
   }
-  const opened = await check("MCP tools/call open_quiz", () => callTool("open_quiz", { quizId: quiz.quizId }), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch");
-  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "open_quiz must privately hydrate the widget with the quiz");
 
   const inspected = await check("MCP tools/call inspect_quiz", () => callTool("inspect_quiz", { quizId: quiz.quizId }), (value) => value.result?.structuredContent?.questionCount === quiz.questions.length);
 
   const submitted = await check("MCP tools/call submit_answers", () => callTool("submit_answers", {
     quizId: quiz.quizId,
     sessionId: "stage11-trial-session",
+    launchId: opened.result.structuredContent.launchId,
+    quizRevision: opened.result.structuredContent.quizRevision,
     answers: [
       { questionId: "q1", response: 1, confidence: 3, timeMs: 1200 },
       { questionId: "q2", response: [0, 2], confidence: 3, timeMs: 2400 },

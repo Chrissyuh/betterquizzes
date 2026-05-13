@@ -5,6 +5,8 @@ const server = readFileSync("mcp/remote-server.mjs", "utf8");
 const stage12Contract = readFileSync("docs/stage-12-ai-schema-contract.md", "utf8");
 const appSubmission = JSON.parse(readFileSync("chatgpt-app-submission.json", "utf8"));
 const demoClient = readFileSync("mcp/demo-client.mjs", "utf8");
+const trialProbe = readFileSync("scripts/trial-probe.mjs", "utf8");
+const localHostTrial = readFileSync("scripts/local-host-trial.mjs", "utf8");
 function assert(value, message) { if (!value) throw new Error(message); }
 
 assert(server.includes('const VERSION = "V1"'), "server version must be V1");
@@ -60,5 +62,13 @@ assert(demoClient.includes("resources.result.resources[0].uri"), "demo client mu
 assert(demoClient.includes('name: "open_quiz", arguments: {}'), "demo client must exercise the no-arg open_quiz path");
 assert(!demoClient.includes("betterquizzer-stage12-1.html"), "demo client must not hardcode stale widget resource aliases");
 assert(!demoClient.includes("arguments: { quizId: quiz.quizId }"), "demo client must not teach explicit quizId launch args for normal staged authoring");
+
+assert(trialProbe.includes('callTool("open_quiz", {})'), "host trial probe must exercise the no-arg open_quiz path");
+assert(trialProbe.includes("quiz.questions.slice(1)"), "host trial probe must open before adding all staged questions");
+assert(trialProbe.includes("packetProgress?.complete === false"), "host trial probe must assert early launch is partial");
+assert(trialProbe.includes("launchId: opened.result.structuredContent.launchId"), "host trial submission must preserve launch identity");
+assert(!trialProbe.includes('callTool("open_quiz", { quizId: quiz.quizId })'), "host trial probe must not teach explicit quizId launch args for normal staged authoring");
+assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "local host trial wrapper must preserve probe CLI flags");
+assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");
 
 console.log("V1 MCP/App contract static checks passed.");
