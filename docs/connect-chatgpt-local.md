@@ -31,12 +31,13 @@ https://YOUR-DEPLOYED-APP.example/mcp
 Ask the host/model to create a quiz, then verify this flow:
 
 1. `start_quiz` is selected by the model.
-2. `add_question` is called once per assistant-authored question.
-3. The first accepted `add_question` launches the BetterQuizzes widget, and later `add_question` calls update the stored quiz.
-4. User answers questions and gives confidence.
-5. Widget calls `submit_answers`.
-6. Model receives a SubmissionCapsule.
-7. Model grades the answers and gives targeted teaching.
+2. `add_question` is called once for the first assistant-authored question.
+3. `open_quiz` is called immediately after that first accepted question, before question 2 is added.
+4. Later `add_question` calls update the stored quiz one question at a time while the widget polls for new revisions.
+5. User answers questions and gives confidence.
+6. Widget calls `submit_answers`.
+7. Model receives a SubmissionCapsule.
+8. Model grades the answers and gives targeted teaching.
 
 ## 4. Current limitation
 
