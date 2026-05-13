@@ -64,9 +64,10 @@ async function main() {
   const draftId = started.result.structuredContent.draftId;
   const firstAdd = await request("tools/call", { name: "add_question", arguments: { draftId, question: quiz.questions[0] } });
   if (firstAdd.result.structuredContent.questionCount !== 1) throw new Error("First add_question did not store exactly one question.");
-  const created = await request("tools/call", { name: "open_quiz", arguments: {} });
+  let created = await request("tools/call", { name: "open_quiz", arguments: {} });
   for (const question of quiz.questions.slice(1)) {
     await request("tools/call", { name: "add_question", arguments: { draftId, question } });
+    created = await request("tools/call", { name: "open_quiz", arguments: {} });
   }
   console.log(created.result.structuredContent);
   console.log("-> submit_answers");

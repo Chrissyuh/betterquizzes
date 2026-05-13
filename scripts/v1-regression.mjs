@@ -51,7 +51,7 @@ assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('requi
 assert(remote.includes("start_quiz with expectedQuestionCount") && remote.includes("Do not send chat progress/check-in messages while authoring"), "model instructions must prefer quiet staged authoring");
 assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Accepted question stored"), "add_question must store accepted questions continuously");
 assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");
-assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("call open_quiz immediately before adding question 2"), "staged authoring must open after the first stored question without duplicate widget launches");
+assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("Call open_quiz after every accepted add_question"), "staged authoring must refresh after every stored question");
 assert(!remote.includes('name: "finalize_quiz"') && remote.includes("Do not call finalize_quiz for assistant-authored quizzes"), "finalize_quiz must not be advertised in the normal model tool path");
 assert(app.includes("fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken)") && app.includes("shouldPollForServerQuizUpdates(quiz, hydrationProgress)") && app.includes("setQuiz(serverQuiz)"), "widget must poll stored quiz updates while questions are still generating");
 assert(app.includes("callHostOpenQuizForUpdates(quizId)") && bridge.includes("getHostQuizPayloadFromToolResult"), "widget must fall back to host open_quiz when recovery token metadata is unavailable");

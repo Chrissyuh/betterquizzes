@@ -86,7 +86,7 @@ Check that the MCP tool metadata includes:
 - an accurate widget description
 - current version/build strings
 
-The `add_question` tool should remain storage-only. For assistant-authored quizzes, the model should call `open_quiz` immediately after the first accepted `add_question`, before adding question 2. Keep `open_quiz` as the idempotent render tool for staged drafts and stored quizzes, and keep `create_quiz` described as a compatibility opener for complete user-supplied quiz packets.
+The `add_question` tool should remain storage-only. For assistant-authored quizzes, the model should call `open_quiz` after every accepted `add_question` so the visible widget refreshes. Keep `open_quiz` as the idempotent render tool for staged drafts and stored quizzes, and keep `create_quiz` described as a compatibility opener for complete user-supplied quiz packets.
 
 ## 6. Prepare user-facing submission materials
 
