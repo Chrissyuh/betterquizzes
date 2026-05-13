@@ -23,6 +23,9 @@ assert(server.includes('DRAFT_TOOL_ANNOTATIONS'), "builder tools must declare no
 assert(server.includes('destructiveHint: false'), "tool metadata must mark non-destructive tools correctly");
 assert(server.includes('QUIZ_SPEC_SCHEMA'), "server must expose a QuizSpec schema");
 assert(server.includes('QUESTION_SCHEMA'), "server must expose discriminated question schemas");
+assert(server.includes('COMPACT_QUIZ_PACKET_SCHEMA'), "create_quiz must advertise the compact legacy packet schema");
+assert(!server.includes('properties: { quiz: QUIZ_SPEC_SCHEMA }'), "create_quiz must not advertise the full QuizSpec schema");
+assert(server.includes('properties: { quiz: COMPACT_QUIZ_PACKET_SCHEMA }'), "create_quiz input must point at the compact packet schema");
 assert(server.includes('oneOf'), "question schema should be discriminated with oneOf");
 assert(server.includes('MultipleChoiceQuestion'), "schema must include multiple choice shape");
 assert(server.includes('ShortAnswerQuestion'), "schema must include short answer shape");

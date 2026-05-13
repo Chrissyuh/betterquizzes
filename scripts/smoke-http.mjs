@@ -80,6 +80,10 @@ async function runSmoke() {
   assert(openTool.annotations?.readOnlyHint === true, "open_quiz should be read-only");
   assert(openTool.annotations?.idempotentHint === true, "open_quiz should be idempotent");
   assert(!openTool.inputSchema?.required?.length, "open_quiz should not require arguments");
+  const createTool = listed.result.tools.find((tool) => tool.name === "create_quiz");
+  const createSchemaJson = JSON.stringify(createTool?.inputSchema || {});
+  assert(createTool?.inputSchema?.properties?.quiz?.properties?.questions?.items?.additionalProperties === true, "create_quiz should advertise compact question objects");
+  assert(!createSchemaJson.includes('"oneOf"'), "create_quiz input schema should stay compact");
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(startTool?.inputSchema?.properties?.questions?.type === "array", "start_quiz schema missing bulk questions array");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
