@@ -15,13 +15,13 @@ const remote = read("mcp/remote-server.mjs");
 const sharedGuidance = read("mcp/shared-authoring-guidance.mjs");
 const guidanceSurface = remote + "\n" + sharedGuidance;
 
-assert(guidanceSurface.includes("call add_question or repair_question once per question") && guidanceSurface.includes("then call finalize_quiz once"), "one-at-a-time builder guidance missing");
+assert(guidanceSurface.includes("call add_question exactly once for the first question") && guidanceSurface.includes("do not call open_quiz again"), "one-at-a-time builder guidance missing");
 assert(guidanceSurface.includes("Do not send question batches in start_quiz"), "start_quiz batch rejection guidance missing");
 assert(guidanceSurface.includes("Do not send chat progress/check-in messages while authoring"), "quiet model instructions missing");
 assert(!remote.includes("Optional bulk question list"), "start_quiz must not advertise bulk preload schema");
 assert(!remote.includes("const rawQuestions = Array.isArray(input.questions)"), "start_quiz must not process bulk preload logic");
 assert(remote.includes("questionCount: 0"), "start_quiz response should start empty");
-assert(remote.includes("then call finalize_quiz once"), "start_quiz next-step missing finalize_quiz guidance");
+assert(remote.includes("then call open_quiz once before adding question 2"), "start_quiz next-step missing first-question open_quiz guidance");
 assert(!remote.includes("draft,"), "builder tools should not echo full growing draft objects");
 assert(!remote.includes("draft: existingDraft"), "add_question still echoes full growing draft");
 assert(remote.includes("Required input shape: { draftId, question }"), "add_question description still unclear");

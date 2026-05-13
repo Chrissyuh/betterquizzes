@@ -67,18 +67,19 @@ async function runSmoke() {
   assert(toolNames.includes("create_quiz"), "create_quiz missing");
   assert(toolNames.includes("start_quiz"), "start_quiz missing");
   assert(toolNames.includes("add_question"), "add_question missing");
-  assert(toolNames.includes("finalize_quiz"), "finalize_quiz missing");
+  assert(toolNames.includes("open_quiz"), "open_quiz missing");
   assert(toolNames.includes("submit_answers"), "submit_answers missing");
   for (const tool of listed.result.tools) {
     assert(tool.outputSchema && tool.outputSchema.type === "object", `${tool.name} missing object outputSchema`);
     assert(tool.annotations?.destructiveHint !== true, `${tool.name} should not be destructive`);
     assert(tool.annotations?.openWorldHint !== true, `${tool.name} should not be open-world`);
   }
-  assert(!toolNames.includes("open_quiz"), "open_quiz should not be advertised in normal tools/list");
-  const finalizeTool = listed.result.tools.find((tool) => tool.name === "finalize_quiz");
-  assert(finalizeTool._meta?.["openai/outputTemplate"], "finalize_quiz missing widget output template");
-  assert(finalizeTool.annotations?.readOnlyHint === true, "finalize_quiz should be read-only");
-  assert(finalizeTool.annotations?.idempotentHint === true, "finalize_quiz should be idempotent");
+  assert(!toolNames.includes("finalize_quiz"), "finalize_quiz should not be advertised in normal tools/list");
+  const openTool = listed.result.tools.find((tool) => tool.name === "open_quiz");
+  assert(openTool._meta?.["openai/outputTemplate"], "open_quiz missing widget output template");
+  assert(openTool.annotations?.readOnlyHint === true, "open_quiz should be read-only");
+  assert(openTool.annotations?.idempotentHint === true, "open_quiz should be idempotent");
+  assert(!openTool.inputSchema?.required?.length, "open_quiz should not require arguments");
   const createTool = listed.result.tools.find((tool) => tool.name === "create_quiz");
   const createSchemaJson = JSON.stringify(createTool?.inputSchema || {});
   assert(createTool?.inputSchema?.properties?.quiz?.properties?.questions?.items?.additionalProperties === true, "create_quiz should advertise compact question objects");
@@ -147,12 +148,42 @@ async function runSmoke() {
     }
   });
   assert(firstAdd.result.structuredContent.ok === true, "first add_question should store one question");
-  assert(firstAdd.result.structuredContent.questionCount === 1, "first add_question should store exactly one question before finalize_quiz");
+  assert(firstAdd.result.structuredContent.questionCount === 1, "first add_question should store exactly one question before open_quiz");
   assert(!firstAdd.result.structuredContent.launch, "first add_question should not return a nested launch packet");
   assert(!firstAdd.result._meta?.["openai/outputTemplate"], "first add_question should not carry widget metadata");
 
   const latestBeforeOpen = await getJsonAllowStatus("/api/quiz/latest", 410);
   assert(latestBeforeOpen.error?.includes("disabled for privacy"), "latest quiz endpoint should not expose created quizzes without launch metadata");
+
+  const opened = await rpc("tools/call", {
+    name: "open_quiz",
+    arguments: {}
+  });
+  assert(opened.result.structuredContent.kind === "betterquizzer.launch", "open_quiz did not return a launch packet");
+  assert(opened.result.structuredContent.declaredQuestionCount === 3, "open_quiz should preserve expected question count");
+  assert(opened.result.structuredContent.questionCount === 1, "open_quiz should launch available questions");
+  assert(opened.result.structuredContent.packetProgress.complete === false, "open_quiz partial launch should not be complete");
+  const stagedRecoveryToken = opened.result._meta?.recoveryToken;
+  assert(typeof stagedRecoveryToken === "string" && stagedRecoveryToken.length > 10, "open_quiz must provide a private recovery token in metadata");
+  assert(opened.result.structuredContent.recoveryToken === stagedRecoveryToken, "open_quiz structured content must expose recovery token for widget polling fallback");
+  await getJsonAllowStatus("/api/quiz/staged-builder-smoke", 403);
+  const stagedAfterOpen = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
+  assert(stagedAfterOpen.quizId === "staged-builder-smoke", "token-scoped quiz endpoint should expose the opened staged quiz");
+  assert(stagedAfterOpen.quiz.questions.length === 1, "token-scoped quiz endpoint should expose the current staged revision");
+  const stagedViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(opened.result.structuredContent.launchId));
+  assert(stagedViaLaunchId.quiz.questions.length === 1, "launchId-scoped quiz endpoint should expose the opened staged quiz when recoveryToken metadata is unavailable");
+  const replayedOpen = await rpc("tools/call", {
+    name: "open_quiz",
+    arguments: {}
+  });
+  assert(replayedOpen.result.structuredContent.launchId === opened.result.structuredContent.launchId, "open_quiz should replay a stable launchId for the same revision");
+
+  const legacyFinalizeLaunch = await rpc("tools/call", {
+    name: "finalize_quiz",
+    arguments: { draftId: stagedDraftId, quizId: "staged-builder-smoke" }
+  });
+  assert(legacyFinalizeLaunch.result.structuredContent.kind === "betterquizzer.launch", "legacy finalize_quiz should launch for cached old tool callers");
+  assert(legacyFinalizeLaunch.result.structuredContent.quizId === "staged-builder-smoke", "legacy finalize_quiz returned wrong quizId");
 
   const secondAdd = await rpc("tools/call", {
     name: "add_question",
@@ -172,7 +203,7 @@ async function runSmoke() {
       }
     }
   });
-  assert(secondAdd.result.structuredContent.questionCount === 2, "second add_question should store another staged question before launch");
+  assert(secondAdd.result.structuredContent.quizRevision > opened.result.structuredContent.quizRevision, "later add_question should advance the stored quiz revision after open_quiz");
 
   const thirdAdd = await rpc("tools/call", {
     name: "add_question",
@@ -197,27 +228,15 @@ async function runSmoke() {
       }
     }
   });
-  assert(thirdAdd.result.structuredContent.questionCount === 3, "third add_question should complete the staged draft before launch");
+  assert(thirdAdd.result.structuredContent.quizRevision > secondAdd.result.structuredContent.quizRevision, "each later add_question should advance the stored quiz revision");
 
-  const opened = await rpc("tools/call", {
-    name: "finalize_quiz",
-    arguments: { draftId: stagedDraftId, quizId: "staged-builder-smoke" }
-  });
-  assert(opened.result.structuredContent.kind === "betterquizzer.launch", "finalize_quiz did not return a launch packet");
-  assert(opened.result.structuredContent.declaredQuestionCount === 3, "finalize_quiz should preserve expected question count");
-  assert(opened.result.structuredContent.questionCount === 3, "finalize_quiz should launch the complete staged draft");
-  assert(opened.result.structuredContent.packetProgress.complete === true, "finalize_quiz launch should be complete");
-  const stagedRecoveryToken = opened.result._meta?.recoveryToken;
-  assert(typeof stagedRecoveryToken === "string" && stagedRecoveryToken.length > 10, "finalize_quiz must provide a private recovery token in metadata");
-  assert(opened.result.structuredContent.recoveryToken === stagedRecoveryToken, "finalize_quiz structured content must expose recovery token for widget recovery");
-  await getJsonAllowStatus("/api/quiz/staged-builder-smoke", 403);
   const stagedStored = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
-  assert(stagedStored.quiz.questions.length === 3, "finalized draft should expose all staged questions");
+  assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
   assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
   const stagedStoredViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(opened.result.structuredContent.launchId));
-  assert(stagedStoredViaLaunchId.quiz.questions.length === 3, "launchId should authorize recovery of finalized staged quiz");
+  assert(stagedStoredViaLaunchId.quiz.questions.length === 3, "original launchId should authorize polling newer quiz revisions after later add_question calls");
   const stagedAfterUpdates = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
-  assert(stagedAfterUpdates.quiz.questions.length === 3, "token-scoped quiz endpoint should expose finalized staged questions");
+  assert(stagedAfterUpdates.quiz.questions.length === 3, "token-scoped quiz endpoint should update as staged questions are added");
 
   const badTextSelect = await rpc("tools/call", {
     name: "add_question",
@@ -340,12 +359,12 @@ async function runSmoke() {
   });
 
   const openedFinal = await rpc("tools/call", {
-    name: "finalize_quiz",
-    arguments: { draftId: builderDraftId, quizId: "builder-ordering-smoke" }
+    name: "open_quiz",
+    arguments: { quizId: "builder-ordering-smoke" }
   });
-  assert(openedFinal.result._meta?.ui?.route === "quiz", "finalize_quiz missing launch metadata route");
+  assert(openedFinal.result._meta?.ui?.route === "quiz", "open_quiz missing launch metadata route");
   const builderRecoveryToken = openedFinal.result._meta?.recoveryToken;
-  assert(typeof builderRecoveryToken === "string" && builderRecoveryToken.length > 10, "finalize_quiz must provide a builder recovery token in metadata");
+  assert(typeof builderRecoveryToken === "string" && builderRecoveryToken.length > 10, "open_quiz must provide a builder recovery token in metadata");
   const storedBuilderQuiz = await getJson("/api/quiz/builder-ordering-smoke?recoveryToken=" + encodeURIComponent(builderRecoveryToken));
   assert(storedBuilderQuiz.quiz.questions.length === 3, "add_question should continuously store all builder questions");
   assert(openedFinal.result.structuredContent.quiz.questions[1].type === "matching", "canonical matching question was not preserved");

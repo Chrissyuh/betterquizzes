@@ -24,14 +24,14 @@ for (const tool of [
   "start_quiz",
   "add_question",
   "repair_question",
-  "finalize_quiz",
+  "open_quiz",
   "record_grade",
   "get_grade"
 ]) {
   assert(hasTool(remote, tool), "remote-server.mjs missing tool definition for " + tool);
 }
 
-assert(!hasTool(remote, "open_quiz"), "open_quiz must not be advertised as a normal tool");
+assert(!hasTool(remote, "finalize_quiz"), "finalize_quiz must not be advertised as a normal tool");
 
 for (const token of [
   "START_QUIZ_INPUT_SCHEMA",
