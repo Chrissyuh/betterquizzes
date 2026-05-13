@@ -493,6 +493,26 @@ async function fetchQuizFromServer(quizId: string, recoveryToken?: string | null
   throw new Error("Server quiz fetch failed from " + describeServerBases() + ": " + (lastError instanceof Error ? lastError.message : String(lastError)));
 }
 
+async function fetchLatestQuizFromServer(expectedQuizId?: string | null): Promise<QuizSpec | null> {
+  const path = "/api/quiz/latest";
+  const bases = getServerBases();
+  for (const base of bases.length ? bases : [""]) {
+    try {
+      const response = await fetch((base ? base : "") + path, { headers: { accept: "application/json" } });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) continue;
+      const record = body as { quiz?: QuizSpec; quizId?: string };
+      if (!record.quiz) continue;
+      if (expectedQuizId && (record.quizId ?? getQuizId(record.quiz)) !== expectedQuizId) continue;
+      return record.quiz;
+    } catch {
+      // Try the next server base. This is a best-effort fallback for ChatGPT shells
+      // that do not expose launch metadata to the widget frame.
+    }
+  }
+  return null;
+}
+
 async function fetchQuizUpdateForIncrementalBuild(
   quizId: string,
   recoveryToken?: string | null
@@ -505,6 +525,9 @@ async function fetchQuizUpdateForIncrementalBuild(
       // but do not expose tool-result _meta, so the widget has no recovery token.
     }
   }
+
+  const latestQuiz = await fetchLatestQuizFromServer(quizId);
+  if (latestQuiz) return { quiz: latestQuiz };
 
   const hostPayload = await callHostOpenQuizForUpdates(quizId);
   if (hostPayload) return { quiz: hostPayload.quiz, payload: hostPayload };

@@ -1805,9 +1805,9 @@ try {
     }
 
     if (request.method === "GET" && url.pathname === "/api/quiz/latest") {
-      return sendJson(response, 410, {
-        error: "Latest quiz recovery is disabled for privacy. Fetch by quizId with a recoveryToken from launch metadata."
-      });
+      const quiz = lastQuizId ? quizzes.get(lastQuizId) : null;
+      if (!quiz) return sendJson(response, 404, { error: "No LLM-created quiz is available yet.", lastQuizId });
+      return sendJson(response, 200, { quiz, quizId: getQuizId(quiz), source: "latest" });
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/api/quiz/")) {

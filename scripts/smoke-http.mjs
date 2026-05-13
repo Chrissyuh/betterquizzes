@@ -152,8 +152,8 @@ async function runSmoke() {
   assert(!firstAdd.result.structuredContent.launch, "first add_question should not return a nested launch packet");
   assert(!firstAdd.result._meta?.["openai/outputTemplate"], "first add_question should not carry widget metadata");
 
-  const latestBeforeOpen = await getJsonAllowStatus("/api/quiz/latest", 410);
-  assert(latestBeforeOpen.error?.includes("disabled for privacy"), "latest quiz endpoint should not expose created quizzes without launch metadata");
+  const latestBeforeOpen = await getJson("/api/quiz/latest");
+  assert(latestBeforeOpen.quiz?.questions?.length === 1, "latest quiz endpoint should expose the staged quiz for widget refresh fallback");
 
   const opened = await rpc("tools/call", {
     name: "open_quiz",
@@ -233,6 +233,9 @@ async function runSmoke() {
   const stagedStored = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
   assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
+  const stagedLatestAfterUpdates = await getJson("/api/quiz/latest");
+  assert(stagedLatestAfterUpdates.quizId === "staged-builder-smoke", "latest quiz endpoint should stay on the active staged quiz");
+  assert(stagedLatestAfterUpdates.quiz.questions.length === 3, "latest quiz endpoint should expose later staged questions to the already-open widget");
   const stagedStoredViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(opened.result.structuredContent.launchId));
   assert(stagedStoredViaLaunchId.quiz.questions.length === 3, "original launchId should authorize polling newer quiz revisions after later add_question calls");
   const stagedAfterUpdates = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));

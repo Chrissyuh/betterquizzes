@@ -76,6 +76,8 @@ async function runTrial() {
   assert(updatedStoredQuiz.questions.length === quiz.questions.length, "stored staged quiz must expose later questions through the polling API");
   const updatedStoredQuizViaLaunchId = await fetchQuizFromServerForTrial(quiz.quizId, opened.result.structuredContent.launchId, "launchId");
   assert(updatedStoredQuizViaLaunchId.questions.length === quiz.questions.length, "stored staged quiz must expose later questions through the launchId polling fallback");
+  const updatedStoredQuizViaLatest = await fetchLatestQuizFromServerForTrial(quiz.quizId);
+  assert(updatedStoredQuizViaLatest.questions.length === quiz.questions.length, "stored staged quiz must expose later questions through the latest-quiz widget fallback");
 
   const inspected = await check("MCP tools/call inspect_quiz", () => callTool("inspect_quiz", { quizId: quiz.quizId }), (value) => value.result?.structuredContent?.questionCount === quiz.questions.length);
 
@@ -111,6 +113,13 @@ async function fetchQuizFromServerForTrial(quizId, accessToken, queryKey = "reco
   assert(typeof accessToken === "string" && accessToken.length > 0, "open_quiz must expose a recovery token or launchId for widget polling");
   const payload = await getJson(`/api/quiz/${encodeURIComponent(quizId)}?${queryKey}=${encodeURIComponent(accessToken)}`);
   assert(payload?.quiz, "polling API response must include quiz");
+  return payload.quiz;
+}
+
+async function fetchLatestQuizFromServerForTrial(quizId) {
+  const payload = await getJson("/api/quiz/latest");
+  assert(payload?.quiz, "latest polling API response must include quiz");
+  assert(payload.quizId === quizId, "latest polling API must return the active staged quiz");
   return payload.quiz;
 }
 

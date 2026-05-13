@@ -38480,10 +38480,26 @@ async function fetchQuizFromServer(quizId, recoveryToken) {
 	}
 	throw new Error("Server quiz fetch failed from " + describeServerBases() + ": " + (lastError instanceof Error ? lastError.message : String(lastError)));
 }
+async function fetchLatestQuizFromServer(expectedQuizId) {
+	const path = "/api/quiz/latest";
+	const bases = getServerBases();
+	for (const base of bases.length ? bases : [""]) try {
+		const response = await fetch((base ? base : "") + path, { headers: { accept: "application/json" } });
+		const body = await response.json().catch(() => ({}));
+		if (!response.ok) continue;
+		const record = body;
+		if (!record.quiz) continue;
+		if (expectedQuizId && (record.quizId ?? getQuizId(record.quiz)) !== expectedQuizId) continue;
+		return record.quiz;
+	} catch {}
+	return null;
+}
 async function fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken) {
 	if (recoveryToken) try {
 		return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
 	} catch {}
+	const latestQuiz = await fetchLatestQuizFromServer(quizId);
+	if (latestQuiz) return { quiz: latestQuiz };
 	const hostPayload = await callHostOpenQuizForUpdates(quizId);
 	if (hostPayload) return {
 		quiz: hostPayload.quiz,

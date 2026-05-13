@@ -57,7 +57,7 @@ assert(server.includes('getRenderDiagnostics'), "server must return render diagn
 assert(server.includes('buildLaunchToolResult') && server.includes('function openQuiz'), "open_quiz and create_quiz should share launch storage/result logic");
 assert(server.includes("quizRecoveryTokens") && server.includes("requireQuizRecoveryAccess(url, quizId)"), "public recovery endpoints must require quiz recovery tokens");
 assert(server.includes("quizLaunchAccessTokens") && server.includes('url.searchParams.get("launchId")'), "public recovery endpoints must accept scoped launchId fallback tokens for staged widget polling");
-assert(server.includes('"/api/quiz/latest"') && server.includes("disabled for privacy"), "global latest quiz recovery must stay disabled");
+assert(server.includes('"/api/quiz/latest"') && server.includes('source: "latest"'), "latest quiz recovery fallback must stay enabled for staged widget refresh");
 assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must not expose created quiz ids");
 assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");
 assert(server.includes('name: "add_question"') && server.includes("This stores one question and does not open the widget"), "add_question must be storage-only");
@@ -92,6 +92,7 @@ assert(trialProbe.includes('callTool("open_quiz"'), "host trial probe must open 
 assert(trialProbe.includes("quiz.questions.slice(1)"), "host trial probe must launch before adding all staged questions");
 assert(trialProbe.includes("packetProgress?.complete === false"), "host trial probe must assert early launch is partial");
 assert(trialProbe.includes("updatedStoredQuiz = await fetchQuizFromServerForTrial"), "host trial probe must verify the already-open widget polling API can see later questions");
+assert(trialProbe.includes("fetchLatestQuizFromServerForTrial"), "host trial probe must verify latest-quiz fallback can see later questions");
 assert(trialProbe.includes("launchId: opened.result.structuredContent.launchId"), "host trial submission must preserve launch identity");
 assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "local host trial wrapper must preserve probe CLI flags");
 assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");
