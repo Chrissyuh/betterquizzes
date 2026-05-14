@@ -94,6 +94,7 @@ async function runSmoke() {
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(!startTool?.inputSchema?.properties?.questions, "start_quiz should not advertise bulk questions");
   assert(startTool?.annotations?.readOnlyHint === true, "start_quiz should be read-only to avoid confirmation prompts");
+  assert(startTool?._meta?.["openai/outputTemplate"], "start_quiz should open the widget immediately");
   const addTool = listed.result.tools.find((tool) => tool.name === "add_question");
   assert(!addTool?._meta?.["openai/outputTemplate"], "add_question should not advertise widget output template");
   assert(addTool?.annotations?.readOnlyHint === true, "add_question should be read-only to avoid confirmation prompts");
@@ -137,6 +138,9 @@ async function runSmoke() {
     }
   });
   const stagedDraftId = stagedStarted.result.structuredContent.draftId;
+  assert(stagedStarted.result._meta?.ui?.route === "quiz", "start_quiz should return widget metadata");
+  assert(typeof stagedStarted.result.structuredContent.recoveryToken === "string", "start_quiz should return a recovery token for the polling widget");
+  assert(stagedStarted.result.structuredContent.expectedQuestionCount === 3, "start_quiz should preserve expected question count");
   const firstAdd = await rpc("tools/call", {
     name: "add_question",
     arguments: {

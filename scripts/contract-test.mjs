@@ -25,9 +25,9 @@ assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input)
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "remote server must use shared builder guidance");
 assert(stableServer.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "stable stdio server must use shared builder guidance");
-assert(sharedGuidance.includes("call add_question exactly once for question 1"), "shared builder guidance must add the first question before launch");
-assert(sharedGuidance.includes("call open_quiz once to show the widget"), "shared builder guidance must open the widget immediately after the first question");
-assert(sharedGuidance.includes("do not call open_quiz again"), "shared builder guidance must avoid duplicate staged widgets");
+assert(sharedGuidance.includes("start_quiz opens the widget immediately"), "shared builder guidance must open the widget from start_quiz");
+assert(sharedGuidance.includes("call add_question/repair_question exactly once per question"), "shared builder guidance must add one question at a time");
+assert(sharedGuidance.includes("Do not call open_quiz or finalize_quiz"), "shared builder guidance must avoid duplicate launch/finalize tools");
 assert(sharedGuidance.includes("Do not send question batches in start_quiz"), "shared builder guidance must reject start_quiz question batches");
 for (const [label, text] of [["remote server", server], ["stable stdio server", stableServer], ["SDK stdio server", sdkServer]]) {
   assert(text.includes('orderingBehavior.direction') && text.includes('"top_to_bottom"'), `${label} must instruct top_to_bottom ordering direction`);
@@ -60,7 +60,7 @@ assert(server.includes("quizLaunchAccessTokens") && server.includes('url.searchP
 assert(server.includes('"/api/quiz/latest"') && server.includes('source: "latest"'), "latest quiz recovery fallback must stay enabled for staged widget refresh");
 assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must not expose created quiz ids");
 assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");
-assert(server.includes('name: "add_question"') && server.includes("This stores one question and does not open the widget"), "add_question must be storage-only");
+assert(server.includes('name: "add_question"') && server.includes("the widget opened by start_quiz polls and refreshes automatically"), "add_question must be storage-only after start_quiz opens the widget");
 assert(!server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must not attach widget launch metadata");
 assert(server.includes('renderableQuestionCount'), "create_quiz must report renderable question count");
 assert(server.includes('componentByQuestion'), "render diagnostics must include componentByQuestion");
@@ -90,12 +90,12 @@ for (const toolName of ["start_quiz", "add_question", "repair_question"]) {
 }
 
 assert(demoClient.includes("resources.result.resources[0].uri"), "demo client must read the advertised widget resource URI");
-assert(demoClient.includes('name: "open_quiz"'), "demo client must open the widget after first add_question");
+assert(demoClient.includes('name: "open_quiz"'), "demo client must still cover explicit reopen compatibility");
 assert(!demoClient.includes("betterquizzer-stage12-1.html"), "demo client must not hardcode stale widget resource aliases");
 
 assert(trialProbe.includes('callTool("add_question"'), "host trial probe must exercise add_question staged launch path");
-assert(trialProbe.includes('callTool("open_quiz"'), "host trial probe must open after first staged question");
-assert(trialProbe.includes("quiz.questions.slice(1)"), "host trial probe must launch before adding all staged questions");
+assert(trialProbe.includes('callTool("start_quiz"'), "host trial probe must open from start_quiz");
+assert(trialProbe.includes("quiz.questions.slice(1)"), "host trial probe must still add later questions after the widget is open");
 assert(trialProbe.includes("packetProgress?.complete === false"), "host trial probe must assert early launch is partial");
 assert(trialProbe.includes("updatedStoredQuiz = await fetchQuizFromServerForTrial"), "host trial probe must verify the already-open widget polling API can see later questions");
 assert(trialProbe.includes("fetchLatestQuizFromServerForTrial"), "host trial probe must verify latest-quiz fallback can see later questions");

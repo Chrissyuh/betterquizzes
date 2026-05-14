@@ -204,6 +204,27 @@ export default function App(): ReactElement {
   }, [widgetMode]);
 
   useEffect(() => {
+    if (!widgetMode || quiz) return;
+    let cancelled = false;
+    const pollLatest = async () => {
+      const latestQuiz = await fetchLatestQuizFromServer().catch(() => null);
+      if (cancelled || !latestQuiz || !Array.isArray(latestQuiz.questions) || latestQuiz.questions.length < 1) return;
+      try {
+        applyQuiz(latestQuiz, getQuizId(latestQuiz));
+        setHydrationErrorVisible(false);
+      } catch (error) {
+        setHydrationError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void pollLatest();
+    const interval = window.setInterval(() => void pollLatest(), SERVER_RECOVERY_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [widgetMode, quiz]);
+
+  useEffect(() => {
     if (!widgetMode) return;
     const interval = window.setInterval(() => {
       const elapsedMs = Date.now() - hydrationStartedAtRef.current;

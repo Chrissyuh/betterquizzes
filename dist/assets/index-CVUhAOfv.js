@@ -38183,6 +38183,26 @@ function App() {
 		return () => window.clearTimeout(timeout);
 	}, [widgetMode]);
 	(0, import_react.useEffect)(() => {
+		if (!widgetMode || quiz) return;
+		let cancelled = false;
+		const pollLatest = async () => {
+			const latestQuiz = await fetchLatestQuizFromServer().catch(() => null);
+			if (cancelled || !latestQuiz || !Array.isArray(latestQuiz.questions) || latestQuiz.questions.length < 1) return;
+			try {
+				applyQuiz(latestQuiz, getQuizId(latestQuiz));
+				setHydrationErrorVisible(false);
+			} catch (error) {
+				setHydrationError(error instanceof Error ? error.message : String(error));
+			}
+		};
+		pollLatest();
+		const interval = window.setInterval(() => void pollLatest(), SERVER_RECOVERY_POLL_MS);
+		return () => {
+			cancelled = true;
+			window.clearInterval(interval);
+		};
+	}, [widgetMode, quiz]);
+	(0, import_react.useEffect)(() => {
 		if (!widgetMode) return;
 		const interval = window.setInterval(() => {
 			const elapsedMs = Date.now() - hydrationStartedAtRef.current;
