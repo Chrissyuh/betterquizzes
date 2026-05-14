@@ -144,13 +144,48 @@ type: "object",
   required: ["title"]
 };
 
+const SUPPORTED_QUESTION_TYPE_VALUES = ["multiple_choice", "multi_select", "true_false", "fill_blank", "short_answer", "long_response", "multi_typing", "multi_write_vertical", "text_select", "matching", "ordering", "numeric"];
+const BUILDER_WORKFLOW = [
+  "Call start_quiz to create a draft only.",
+  "Call add_question exactly once for the first accepted/renderable question.",
+  "Call open_quiz once after the first accepted question to launch the widget.",
+  "Continue add_question or repair_question silently for later questions; the launched widget polls updates.",
+  "Do not call finalize_quiz for normal assistant-authored quizzes."
+];
+const BUILDER_DO_NOT_CALL = [
+  "open_quiz before the first accepted question",
+  "finalize_quiz for normal assistant-authored quizzes",
+  "create_quiz with raw question arrays"
+];
+const BUILDER_VALIDATION_POLICY = "add_question validates every question against the renderer-supported type and shape contract before storing it.";
+const BUILDER_CAPABILITIES = {
+  supportedQuestionTypes: SUPPORTED_QUESTION_TYPE_VALUES,
+  unsupportedQuestionTypes: ["multiple_select"],
+  supportsConfidence: true,
+  supportsExplanations: true,
+  supportsAnswerKeys: true,
+  supportsPartialCredit: false,
+  launchTool: "open_quiz",
+  validationPolicy: BUILDER_VALIDATION_POLICY
+};
+
+function builderContractFields() {
+  return {
+    supportedQuestionTypes: [...SUPPORTED_QUESTION_TYPE_VALUES],
+    workflow: [...BUILDER_WORKFLOW],
+    doNotCall: [...BUILDER_DO_NOT_CALL],
+    validationPolicy: BUILDER_VALIDATION_POLICY,
+    capabilities: { ...BUILDER_CAPABILITIES, supportedQuestionTypes: [...SUPPORTED_QUESTION_TYPE_VALUES] }
+  };
+}
+
 const ADD_QUESTION_INPUT_SCHEMA = {
   type: "object",
   additionalProperties: true,
   properties: {
     draftId: { type: "string", description: "Draft id returned by start_quiz." },
-    question: { type: "object", additionalProperties: true, description: "One BetterQuizzes v2 question object." },
-    repairedQuestion: { type: "object", additionalProperties: true, description: "Replacement question for repair_question." },
+    question: { type: "object", additionalProperties: true, description: `Required. One BetterQuizzes v2 question object. Supported type values: ${SUPPORTED_QUESTION_TYPE_VALUES.join(", ")}. Use multi_select, not multiple_select, for multiple-answer questions.` },
+    repairedQuestion: { type: "object", additionalProperties: true, description: "Replacement question for repair_question compatibility; repair_question should normally use repairedQuestion." },
     replace: { type: "boolean", description: "Replace an existing question instead of appending." },
     repair: { type: "boolean", description: "Whether this call is repairing a rejected question." },
     replaceQuestionId: { type: "string" },
@@ -165,7 +200,7 @@ const REPAIR_QUESTION_INPUT_SCHEMA = {
   additionalProperties: true,
   properties: {
     draftId: { type: "string", description: "Draft id returned by start_quiz." },
-    repairedQuestion: { type: "object", additionalProperties: true, description: "Replacement BetterQuizzes v2 question object." },
+    repairedQuestion: { type: "object", additionalProperties: true, description: `Required. Replacement BetterQuizzes v2 question object. Supported type values: ${SUPPORTED_QUESTION_TYPE_VALUES.join(", ")}. Use multi_select, not multiple_select, for multiple-answer questions.` },
     replace: { type: "boolean", const: true, description: "Set true to replace the bad question." },
     replaceQuestionId: { type: "string", description: "Id of the question being replaced." },
     replaceIndex: { type: "integer", minimum: 0, description: "Zero-based index of the question being replaced." },
@@ -229,6 +264,12 @@ const BUILDER_OUTPUT_SCHEMA = {
     invalid: { type: "array", items: GENERIC_OBJECT_SCHEMA },
     repairRequest: GENERIC_OBJECT_SCHEMA,
     instructions: { type: "string" },
+    supportedQuestionTypes: { type: "array", items: { type: "string" } },
+    workflow: { type: "array", items: { type: "string" } },
+    doNotCall: { type: "array", items: { type: "string" } },
+    validationPolicy: { type: "string" },
+    capabilities: GENERIC_OBJECT_SCHEMA,
+    normalizations: { type: "array", items: GENERIC_OBJECT_SCHEMA },
     next: { type: "string" }
   },
   additionalProperties: true
@@ -245,8 +286,11 @@ const LAUNCH_OUTPUT_SCHEMA = {
     renderableQuestionCount: { type: "integer", minimum: 0 },
     rendererCertified: { type: "boolean" },
     complete: { type: "boolean" },
+    safeToPresentToUser: { type: "boolean" },
+    launchStatus: { type: "string" },
     unrenderableQuestions: { type: "array", items: GENERIC_OBJECT_SCHEMA },
     warnings: { type: "array", items: { type: "string" } },
+    normalizations: { type: "array", items: GENERIC_OBJECT_SCHEMA },
     renderDiagnostics: GENERIC_OBJECT_SCHEMA,
     quiz: GENERIC_OBJECT_SCHEMA
   },
@@ -578,6 +622,11 @@ function v23ValidateQuestion(question) {
 
   if (!prompt) issues.push("Question needs a prompt/question text.");
   if (!type) issues.push("Question needs a type.");
+  if (type && !SUPPORTED_QUESTION_TYPES.has(type)) {
+    const suggestion = type === "multiple_select" ? " Use multi_select for multiple-answer questions; multiple_select is not a BetterQuizzes type." : "";
+    issues.push(`Unsupported question type: ${type}. Supported types are ${SUPPORTED_QUESTION_TYPE_VALUES.join(", ")}.${suggestion}`);
+    return issues;
+  }
 
   const choices = question.choices ?? question.options;
 
@@ -650,7 +699,8 @@ function v23RepairRequest(question, issues, context = {}) {
       instruction: v23RepairInstruction(question),
       context,
       question
-    }
+    },
+    ...builderContractFields()
   });
 }
 
@@ -673,6 +723,7 @@ function startQuiz(input = {}) {
       tool: "start_quiz",
       issues: ["start_quiz no longer accepts bulk question arrays. Send each question with a separate add_question call."],
       instructions: V2_BUILDER_INSTRUCTIONS,
+      ...builderContractFields(),
       next: "Call start_quiz without questions, then call add_question for the first question, then call open_quiz once. Later add_question calls update the launched widget automatically."
     });
   }
@@ -708,6 +759,7 @@ function startQuiz(input = {}) {
     rejectedQuestionCount: 0,
     repairRequests: [],
     instructions: V2_BUILDER_INSTRUCTIONS,
+    ...builderContractFields(),
     next: "Draft created. Call add_question for the first question, then call open_quiz once to launch the widget. Continue add_question once per later question; do not call finalize_quiz for this normal assistant-authored quiz."
   });
   return response;
@@ -746,6 +798,62 @@ function addQuestion(input = {}) {
   }
 
   const shouldReplace = Boolean(input.replace || input.repair || input.repairedQuestion);
+  const candidateQuestions = [...existingDraft.questions];
+
+  if (shouldReplace) {
+    let replaceIndex = Number.isInteger(input.replaceIndex) ? input.replaceIndex : -1;
+
+    if (replaceIndex < 0 && input.replaceQuestionId) {
+      replaceIndex = existingDraft.questions.findIndex((candidate) => candidate?.id === input.replaceQuestionId);
+    }
+
+    if (replaceIndex >= 0 && replaceIndex < candidateQuestions.length) {
+      candidateQuestions[replaceIndex] = question;
+    } else {
+      candidateQuestions.push(question);
+    }
+  } else {
+    candidateQuestions.push(question);
+  }
+
+  const renderCheck = prepareQuizForRender({
+    schema: "betterquizzer.quiz",
+    version: 2,
+    quizId: existingDraft.quizId,
+    title: existingDraft.title ?? "Untitled BetterQuizzes quiz",
+    description: existingDraft.description ?? "",
+    subject: existingDraft.subject ?? existingDraft.topic ?? "General",
+    mode: existingDraft.mode ?? "practice",
+    displayPolicy: existingDraft.displayPolicy,
+    gradingPolicy: existingDraft.gradingPolicy,
+    activityPolicy: existingDraft.activityPolicy,
+    questions: candidateQuestions
+  });
+
+  if (!renderCheck.ok) {
+    return v23TextResponse({
+      ok: false,
+      needsRepair: true,
+      tool: "repair_question",
+      issues: renderCheck.errors,
+      errors: renderCheck.errors,
+      warnings: visibleWarnings(renderCheck.warnings),
+      normalizations: summarizeNormalizations(renderCheck.diagnostics?.normalizedFields),
+      renderDiagnostics: presentRenderDiagnostics(renderCheck.diagnostics),
+      repairRequest: {
+        instruction: v23RepairInstruction(question),
+        context: {
+          draftId,
+          replace: Boolean(input.replace),
+          repair: Boolean(input.repair),
+          replaceQuestionId: input.replaceQuestionId,
+          replaceIndex: input.replaceIndex
+        },
+        question
+      },
+      ...builderContractFields()
+    });
+  }
 
   if (shouldReplace) {
     let replaceIndex = Number.isInteger(input.replaceIndex) ? input.replaceIndex : -1;
@@ -775,6 +883,7 @@ function addQuestion(input = {}) {
     questionCount: existingDraft.questions.length,
     quizId: stored?.quizId ?? existingDraft.quizId,
     quizRevision: stored?.quizRevision,
+    ...builderContractFields(),
     next: existingDraft.questions.length === 1
       ? "Accepted first question. Call open_quiz once now to launch the widget, then continue add_question silently once per later question; do not call finalize_quiz."
       : "Accepted question stored. The launched widget will poll this update automatically. Continue add_question silently once per later question; do not call finalize_quiz for this normal quiz."
@@ -841,6 +950,7 @@ function finalizeQuiz(input = {}) {
       needsRepair: true,
       tool: "repair_question",
       invalid,
+      ...builderContractFields(),
       repairRequest: {
         instruction:
           "Repair the invalid questions one at a time using repair_question. Accepted repaired questions are stored automatically."
@@ -876,8 +986,10 @@ function finalizeQuiz(input = {}) {
       needsRepair: true,
       tool: "repair_question",
       errors: prepared.errors,
-      warnings: prepared.warnings,
-      renderDiagnostics: prepared.diagnostics,
+      warnings: visibleWarnings(prepared.warnings),
+      normalizations: summarizeNormalizations(prepared.diagnostics?.normalizedFields),
+      renderDiagnostics: presentRenderDiagnostics(prepared.diagnostics),
+      ...builderContractFields(),
       repairRequest: {
         instruction:
           "Repair the invalid or unrenderable questions using repair_question. Accepted repaired questions are stored automatically; do not restart the quiz unless the draft is missing."
@@ -1917,10 +2029,45 @@ function handleRpc(message, context = {}) {
   return { body: errorResponse(id, -32601, `Unknown method: ${method}`) };
 }
 
+function visibleWarnings(warnings = []) {
+  return (Array.isArray(warnings) ? warnings : []).filter((warning) => !/\bnormalized\b/i.test(String(warning)));
+}
+
+function summarizeNormalizations(normalizedFields = []) {
+  const fields = Array.isArray(normalizedFields) ? normalizedFields : [];
+  const counts = new Map();
+
+  for (const field of fields) {
+    if (!field || typeof field !== "object") continue;
+    const from = String(field.from ?? "input");
+    const to = String(field.to ?? "canonical");
+    const type = `${from}_to_${to}`.replace(/[^A-Za-z0-9_]+/g, "_");
+    const current = counts.get(type) ?? { type, from, to, count: 0, paths: [] };
+    current.count += 1;
+    if (typeof field.path === "string" && current.paths.length < 5) current.paths.push(field.path);
+    counts.set(type, current);
+  }
+
+  return [...counts.values()];
+}
+
+function presentRenderDiagnostics(diagnostics = emptyDiagnostics()) {
+  return {
+    ...diagnostics,
+    warnings: visibleWarnings(diagnostics.warnings),
+    normalizations: summarizeNormalizations(diagnostics.normalizedFields)
+  };
+}
+
 function buildLaunchToolResult(prepared, options = {}) {
   const stored = storePreparedQuiz(prepared, options);
   const quiz = stored.quiz;
   const publicQuiz = toPublicQuiz(quiz);
+  const renderDiagnostics = presentRenderDiagnostics(prepared.diagnostics);
+  const warnings = visibleWarnings(prepared.warnings);
+  const normalizations = summarizeNormalizations(prepared.diagnostics?.normalizedFields);
+  const safeToPresentToUser = prepared.diagnostics.rendererCertified === true &&
+    prepared.diagnostics.renderableQuestionCount === quiz.questions.length;
   const launch = {
     kind: "betterquizzer.launch",
     launchId: stored.launchId,
@@ -1935,10 +2082,13 @@ function buildLaunchToolResult(prepared, options = {}) {
     packetProgress: { expectedQuestions: stored.expectedQuestionCount, receivedQuestions: quiz.questions.length, renderableQuestions: prepared.diagnostics.renderableQuestionCount, complete: stored.complete },
     renderableQuestionCount: prepared.diagnostics.renderableQuestionCount,
     unrenderableQuestions: prepared.diagnostics.unrenderableQuestions,
-    warnings: prepared.warnings,
-    renderDiagnostics: prepared.diagnostics,
+    warnings,
+    normalizations,
+    renderDiagnostics,
     rendererCertified: prepared.diagnostics.rendererCertified === true,
     complete: stored.complete,
+    safeToPresentToUser,
+    launchStatus: stored.complete ? "ready" : "building",
     displayPolicy: normalizeDisplayPolicy(quiz.displayPolicy),
     gradingPolicy: normalizeGradingPolicy(quiz.gradingPolicy),
     activityPolicy: toCanonicalActivityPolicy(quiz.activityPolicy),
@@ -1986,13 +2136,13 @@ function openQuiz(input = {}) {
   const quiz = quizId ? quizzes.get(quizId) : null;
   if (!quiz) return v23TextResponse({ ok: false, needsRepair: true, tool: "add_question", issues: ["No stored quiz is available to open."], next: "Call start_quiz, add the first question with add_question, then call open_quiz once." });
   const prepared = prepareQuizForRender(quiz);
-  if (!prepared.ok) return v23TextResponse({ ok: false, needsRepair: true, tool: "repair_question", errors: prepared.errors, warnings: prepared.warnings, renderDiagnostics: prepared.diagnostics });
+  if (!prepared.ok) return v23TextResponse({ ok: false, needsRepair: true, tool: "repair_question", errors: prepared.errors, warnings: visibleWarnings(prepared.warnings), normalizations: summarizeNormalizations(prepared.diagnostics?.normalizedFields), renderDiagnostics: presentRenderDiagnostics(prepared.diagnostics), ...builderContractFields() });
   return buildLaunchToolResult(prepared, { expectedQuestionCount: quiz.expectedQuestionCount ?? quiz.metadata?.expectedQuestionCount });
 }
 
 function createQuiz(id, rawQuiz) {
   const prepared = prepareQuizForRender(rawQuiz);
-  if (!prepared.ok) return errorResponse(id, -32602, "Invalid or unrenderable QuizSpec", { errors: prepared.errors, warnings: prepared.warnings, renderDiagnostics: prepared.diagnostics, canonicalExample: CANONICAL_QUIZ_EXAMPLE });
+  if (!prepared.ok) return errorResponse(id, -32602, "Invalid or unrenderable QuizSpec", { errors: prepared.errors, warnings: visibleWarnings(prepared.warnings), normalizations: summarizeNormalizations(prepared.diagnostics?.normalizedFields), renderDiagnostics: presentRenderDiagnostics(prepared.diagnostics), canonicalExample: CANONICAL_QUIZ_EXAMPLE });
   return okResponse(id, buildLaunchToolResult(prepared, { rotateRecoveryToken: true }));
 }
 
@@ -2406,7 +2556,7 @@ function prepareQuizForRender(input) {
   for (const item of diagnostics.unrenderableQuestions) errors.push((item.questionId || item.index) + ": " + item.reason);
   return { ok: errors.length === 0, quiz, errors, warnings: diagnostics.warnings, diagnostics };
 }
-const SUPPORTED_QUESTION_TYPES = new Set(["multiple_choice", "multi_select", "true_false", "fill_blank", "short_answer", "long_response", "multi_typing", "multi_write_vertical", "text_select", "matching", "ordering", "numeric"]);
+const SUPPORTED_QUESTION_TYPES = new Set(SUPPORTED_QUESTION_TYPE_VALUES);
 const ORDERING_ITEM_TEXT_MAX_CHARS_RENDER = 64;
 const COMPACT_CHOICE_TEXT_WARN_CHARS = 180;
 const COMPACT_MATCH_TEXT_WARN_CHARS = 120;

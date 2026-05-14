@@ -48,6 +48,8 @@ assert(render.includes("COMPACT_CHOICE_TEXT_WARN_CHARS") && render.includes("com
 assert(remote.includes("v23NormalizeMatchingQuestion") && remote.includes("Matching canonical shape") && remote.includes("left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]"), "builder tools must accept and describe canonical matching schema");
 assert(render.includes("normalizeMatchingQuestion") && render.includes("normalized legacy matching pairs to left/right/answer"), "render contract must normalize legacy matching pairs before finalization");
 assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('required: ["draftId", "repairedQuestion"]'), "repair_question must expose repairedQuestion in its input schema");
+assert(remote.includes("SUPPORTED_QUESTION_TYPE_VALUES") && remote.includes("Use multi_select, not multiple_select"), "builder schemas must expose supported question types and the multiple_select correction");
+assert(remote.includes("Unsupported question type:") && remote.includes("prepareQuizForRender({"), "add_question must validate renderer compatibility before storing questions");
 assert(remote.includes("start_quiz with expectedQuestionCount") && remote.includes("Do not send chat progress/check-in messages while authoring"), "model instructions must prefer quiet staged authoring");
 assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Accepted question stored"), "add_question must store accepted questions continuously");
 assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");

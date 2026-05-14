@@ -102,11 +102,15 @@ async function runSmoke() {
   assert(startTool?.annotations?.readOnlyHint === true, "start_quiz should be read-only to avoid confirmation prompts");
   assert(!startTool?._meta?.["openai/outputTemplate"], "start_quiz should not open the widget before a renderable question exists");
   const addTool = listed.result.tools.find((tool) => tool.name === "add_question");
+  assert(addTool?.inputSchema?.properties?.question, "add_question schema missing question");
+  assert(addTool?.inputSchema?.required?.includes("question"), "add_question schema should require question");
+  assert((addTool?.inputSchema?.properties?.question?.description || "").includes("multi_select"), "add_question question schema should advertise supported types");
   assert(!addTool?._meta?.["openai/outputTemplate"], "add_question should not advertise widget output template");
   assert(addTool?.annotations?.readOnlyHint === true, "add_question should be read-only to avoid confirmation prompts");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
   assert(repairTool?.inputSchema?.properties?.repairedQuestion, "repair_question schema missing repairedQuestion");
   assert(repairTool?.inputSchema?.required?.includes("repairedQuestion"), "repair_question schema should require repairedQuestion");
+  assert((repairTool?.inputSchema?.properties?.repairedQuestion?.description || "").includes("multi_select"), "repair_question schema should advertise supported types");
   assert(repairTool?.annotations?.readOnlyHint === true, "repair_question should be read-only to avoid confirmation prompts");
 
   const resources = await rpc("resources/list", {});
@@ -147,6 +151,10 @@ async function runSmoke() {
   assert(!stagedStarted.result._meta?.ui && !stagedStarted.result._meta?.["openai/outputTemplate"], "start_quiz should not return widget launch metadata");
   assert(typeof stagedStarted.result.structuredContent.recoveryToken === "string", "start_quiz should return a recovery token for the polling widget");
   assert(stagedStarted.result.structuredContent.expectedQuestionCount === 3, "start_quiz should preserve expected question count");
+  assert(stagedStarted.result.structuredContent.supportedQuestionTypes?.includes("multi_select"), "start_quiz should advertise supported question types");
+  assert(stagedStarted.result.structuredContent.capabilities?.unsupportedQuestionTypes?.includes("multiple_select"), "start_quiz should advertise unsupported aliases");
+  assert(stagedStarted.result.structuredContent.workflow?.some((step) => step.includes("open_quiz")), "start_quiz should return the canonical workflow");
+  assert(stagedStarted.result.structuredContent.validationPolicy?.includes("add_question validates"), "start_quiz should expose validation policy");
   const firstAdd = await rpc("tools/call", {
     name: "add_question",
     arguments: {
@@ -164,6 +172,25 @@ async function runSmoke() {
   assert(firstAdd.result.structuredContent.questionCount === 1, "first add_question should store exactly one question before open_quiz");
   assert(!firstAdd.result.structuredContent.launch, "first add_question should not return a nested launch packet");
   assert(!firstAdd.result._meta?.["openai/outputTemplate"], "first add_question should not carry widget metadata");
+  assert(firstAdd.result.structuredContent.supportedQuestionTypes?.includes("ordering"), "add_question should preserve machine-readable capabilities");
+
+  const unsupportedAdd = await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: stagedDraftId,
+      question: {
+        id: "unsupported-multiple-select",
+        type: "multiple_select",
+        prompt: "Which are renderer-safe?",
+        choices: ["multi_select", "multiple_select"],
+        answer: [0]
+      }
+    }
+  });
+  assert(unsupportedAdd.result.structuredContent.ok === false, "add_question should reject unsupported question types immediately");
+  assert(unsupportedAdd.result.structuredContent.needsRepair === true, "unsupported add_question should request repair");
+  assert(JSON.stringify(unsupportedAdd.result.structuredContent.issues).includes("Unsupported question type: multiple_select"), "unsupported add_question should explain the invalid type");
+  assert(unsupportedAdd.result.structuredContent.supportedQuestionTypes?.includes("multi_select"), "unsupported add_question should return supported type list");
 
   const opened = await rpc("tools/call", {
     name: "open_quiz",
@@ -173,6 +200,10 @@ async function runSmoke() {
   assert(opened.result.structuredContent.declaredQuestionCount === 3, "open_quiz should preserve expected question count");
   assert(opened.result.structuredContent.questionCount === 1, "open_quiz should launch available questions");
   assert(opened.result.structuredContent.packetProgress.complete === false, "open_quiz partial launch should not be complete");
+  assert(opened.result.structuredContent.safeToPresentToUser === true, "open_quiz should clearly mark renderer-safe launch packets");
+  assert(opened.result.structuredContent.launchStatus === "building", "partial open_quiz launch should report building status");
+  assert(!JSON.stringify(opened.result.structuredContent.warnings || []).includes("normalized"), "launch warnings should not include routine normalization messages");
+  assert(Array.isArray(opened.result.structuredContent.normalizations), "launch should expose normalizations separately from warnings");
   const stagedRecoveryToken = opened.result._meta?.recoveryToken;
   assert(typeof stagedRecoveryToken === "string" && stagedRecoveryToken.length > 10, "open_quiz must provide a private recovery token in metadata");
   assert(opened.result.structuredContent.recoveryToken === stagedRecoveryToken, "open_quiz structured content must expose recovery token for widget polling fallback");
@@ -375,6 +406,8 @@ async function runSmoke() {
   assert(openedFinal.result._meta?.ui?.route === "quiz", "open_quiz missing launch metadata route");
   const builderRecoveryToken = openedFinal.result._meta?.recoveryToken;
   assert(typeof builderRecoveryToken === "string" && builderRecoveryToken.length > 10, "open_quiz must provide a builder recovery token in metadata");
+  assert(openedFinal.result.structuredContent.safeToPresentToUser === true, "complete open_quiz launch should be marked safe to present");
+  assert(openedFinal.result.structuredContent.launchStatus === "ready", "complete open_quiz launch should report ready status");
   const storedBuilderQuiz = await getJson("/api/quiz/builder-ordering-smoke?recoveryToken=" + encodeURIComponent(builderRecoveryToken));
   assert(storedBuilderQuiz.quiz.questions.length === 3, "add_question should continuously store all builder questions");
   assert(openedFinal.result.structuredContent.quiz.questions[1].type === "matching", "canonical matching question was not preserved");

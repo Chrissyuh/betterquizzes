@@ -64,6 +64,10 @@ assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must 
 assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");
 assert(server.includes('name: "add_question"') && server.includes("call open_quiz once to launch the widget"), "add_question must route first-question launch through open_quiz");
 assert(!server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must not attach widget launch metadata");
+assert(server.includes("SUPPORTED_QUESTION_TYPE_VALUES") && server.includes("unsupportedQuestionTypes") && server.includes("multiple_select"), "builder tools must advertise supported/unsupported question types");
+assert(server.includes("add_question validates every question against the renderer-supported type") && server.includes("Unsupported question type:"), "add_question must reject unsupported types before storing");
+assert(server.includes("safeToPresentToUser") && server.includes("launchStatus"), "launch packets must expose clear model-facing readiness flags");
+assert(server.includes("summarizeNormalizations") && server.includes("visibleWarnings"), "model-facing diagnostics must split normalizations from warnings");
 assert(server.includes('renderableQuestionCount'), "create_quiz must report renderable question count");
 assert(server.includes('componentByQuestion'), "render diagnostics must include componentByQuestion");
 assert(server.includes('normalizedFields'), "render diagnostics must include normalizedFields");
