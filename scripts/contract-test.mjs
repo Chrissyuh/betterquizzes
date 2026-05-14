@@ -35,7 +35,9 @@ for (const [label, text] of [["remote server", server], ["stable stdio server", 
 }
 assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");
-assert(server.includes('anyOf: [{ required: ["quizId", "answers"] }, { required: ["submission"] }]'), "submit_answers schema must accept fallback submission packets without top-level answers");
+assert(!server.includes('anyOf: [{ required: ["quizId", "answers"] }, { required: ["submission"] }]'), "submit_answers parameters must not use top-level anyOf");
+assert(server.includes('submission: { type: "object", additionalProperties: true'), "submit_answers schema must accept fallback submission packets without top-level answers");
+assert(server.includes('const submitAnswersAlias = tools.find((tool) => tool.name === "submit_answers");'), "record_submission alias must share the OpenAI-compatible submit schema");
 assert(server.includes('outputSchema: GRADE_OUTPUT_SCHEMA'), "grade tools must expose output schemas");
 assert(server.includes('outputSchema: INSPECT_QUIZ_OUTPUT_SCHEMA'), "inspect_quiz must expose an output schema");
 assert(server.includes('DEFAULT_WIDGET_DOMAIN = "https://app.betterquizzes.com"'), "widget domain must have a submission-ready default");
