@@ -25,9 +25,9 @@ assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input)
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "remote server must use shared builder guidance");
 assert(stableServer.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "stable stdio server must use shared builder guidance");
-assert(sharedGuidance.includes("start_quiz opens the widget immediately"), "shared builder guidance must open the widget from start_quiz");
-assert(sharedGuidance.includes("call add_question/repair_question exactly once per question"), "shared builder guidance must add one question at a time");
-assert(sharedGuidance.includes("Do not call open_quiz or finalize_quiz"), "shared builder guidance must avoid duplicate launch/finalize tools");
+assert(sharedGuidance.includes("start_quiz only creates a draft") && sharedGuidance.includes("then call open_quiz once"), "shared builder guidance must launch only after the first accepted question");
+assert(sharedGuidance.includes("call add_question exactly once for the first question") && sharedGuidance.includes("Continue add_question/repair_question exactly once per later question"), "shared builder guidance must add one question at a time");
+assert(sharedGuidance.includes("Do not call finalize_quiz"), "shared builder guidance must avoid finalize_quiz");
 assert(sharedGuidance.includes("Do not send question batches in start_quiz"), "shared builder guidance must reject start_quiz question batches");
 for (const [label, text] of [["remote server", server], ["stable stdio server", stableServer], ["SDK stdio server", sdkServer]]) {
   assert(text.includes('orderingBehavior.direction') && text.includes('"top_to_bottom"'), `${label} must instruct top_to_bottom ordering direction`);
@@ -59,10 +59,10 @@ assert(server.includes('getRenderDiagnostics'), "server must return render diagn
 assert(server.includes('buildLaunchToolResult') && server.includes('function openQuiz'), "open_quiz and create_quiz should share launch storage/result logic");
 assert(server.includes("quizRecoveryTokens") && server.includes("requireQuizRecoveryAccess(url, quizId)"), "public recovery endpoints must require quiz recovery tokens");
 assert(server.includes("quizLaunchAccessTokens") && server.includes('url.searchParams.get("launchId")'), "public recovery endpoints must accept scoped launchId fallback tokens for staged widget polling");
-assert(server.includes('"/api/quiz/latest"') && server.includes('source: "latest"'), "latest quiz recovery fallback must stay enabled for staged widget refresh");
+assert(server.includes('"/api/quiz/latest"') && server.includes('source: "latest"'), "latest quiz endpoint may remain available for local/dev diagnostics");
 assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must not expose created quiz ids");
 assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");
-assert(server.includes('name: "add_question"') && server.includes("the widget opened by start_quiz polls and refreshes automatically"), "add_question must be storage-only after start_quiz opens the widget");
+assert(server.includes('name: "add_question"') && server.includes("call open_quiz once to launch the widget"), "add_question must route first-question launch through open_quiz");
 assert(!server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must not attach widget launch metadata");
 assert(server.includes('renderableQuestionCount'), "create_quiz must report renderable question count");
 assert(server.includes('componentByQuestion'), "render diagnostics must include componentByQuestion");
@@ -75,7 +75,7 @@ assert(!server.includes("create_quiz exactly once"), "legacy create_quiz exactly
 assert(!server.includes("destructiveHint: true"), "no tool should be marked destructive");
 assert(!server.includes("openWorldHint: true"), "no tool should be marked open-world");
 
-assert(stage12Contract.includes("Normal assistant-authored quizzes are built with `start_quiz`"), "Stage 12 docs must describe the staged builder flow");
+assert(stage12Contract.includes("Normal assistant-authored quizzes are built with draft-only `start_quiz`"), "Stage 12 docs must describe the staged builder flow");
 assert(stage12Contract.includes("`create_quiz` remains a compact legacy compatibility opener"), "Stage 12 docs must demote create_quiz to legacy compatibility");
 assert(!stage12Contract.includes("create_quiz now exposes the exact nested QuizSpec v2 schema"), "Stage 12 docs must not restore stale full-schema create_quiz guidance");
 assert(!stage12Contract.includes("Complete create_quiz.inputSchema instead of quiz: object / any."), "Stage 12 docs must not claim create_quiz exposes the full contract");
@@ -99,8 +99,8 @@ assert(trialProbe.includes('callTool("add_question"'), "host trial probe must ex
 assert(trialProbe.includes('callTool("start_quiz"'), "host trial probe must open from start_quiz");
 assert(trialProbe.includes("quiz.questions.slice(1)"), "host trial probe must still add later questions after the widget is open");
 assert(trialProbe.includes("packetProgress?.complete === false"), "host trial probe must assert early launch is partial");
-assert(trialProbe.includes("updatedStoredQuiz = await fetchQuizFromServerForTrial"), "host trial probe must verify the already-open widget polling API can see later questions");
-assert(trialProbe.includes("fetchLatestQuizFromServerForTrial"), "host trial probe must verify latest-quiz fallback can see later questions");
+assert(trialProbe.includes("updatedStoredQuiz = await fetchQuizFromServerForTrial"), "host trial probe must verify token-scoped polling API can see later questions");
+assert(!trialProbe.includes("fetchLatestQuizFromServerForTrial"), "host trial probe must not depend on latest-quiz widget fallback");
 assert(trialProbe.includes("launchId: opened.result.structuredContent.launchId"), "host trial submission must preserve launch identity");
 assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "local host trial wrapper must preserve probe CLI flags");
 assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");

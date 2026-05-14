@@ -100,7 +100,7 @@ async function runSmoke() {
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(!startTool?.inputSchema?.properties?.questions, "start_quiz should not advertise bulk questions");
   assert(startTool?.annotations?.readOnlyHint === true, "start_quiz should be read-only to avoid confirmation prompts");
-  assert(startTool?._meta?.["openai/outputTemplate"], "start_quiz should open the widget immediately");
+  assert(!startTool?._meta?.["openai/outputTemplate"], "start_quiz should not open the widget before a renderable question exists");
   const addTool = listed.result.tools.find((tool) => tool.name === "add_question");
   assert(!addTool?._meta?.["openai/outputTemplate"], "add_question should not advertise widget output template");
   assert(addTool?.annotations?.readOnlyHint === true, "add_question should be read-only to avoid confirmation prompts");
@@ -144,7 +144,7 @@ async function runSmoke() {
     }
   });
   const stagedDraftId = stagedStarted.result.structuredContent.draftId;
-  assert(stagedStarted.result._meta?.ui?.route === "quiz", "start_quiz should return widget metadata");
+  assert(!stagedStarted.result._meta?.ui && !stagedStarted.result._meta?.["openai/outputTemplate"], "start_quiz should not return widget launch metadata");
   assert(typeof stagedStarted.result.structuredContent.recoveryToken === "string", "start_quiz should return a recovery token for the polling widget");
   assert(stagedStarted.result.structuredContent.expectedQuestionCount === 3, "start_quiz should preserve expected question count");
   const firstAdd = await rpc("tools/call", {
@@ -164,9 +164,6 @@ async function runSmoke() {
   assert(firstAdd.result.structuredContent.questionCount === 1, "first add_question should store exactly one question before open_quiz");
   assert(!firstAdd.result.structuredContent.launch, "first add_question should not return a nested launch packet");
   assert(!firstAdd.result._meta?.["openai/outputTemplate"], "first add_question should not carry widget metadata");
-
-  const latestBeforeOpen = await getJson("/api/quiz/latest");
-  assert(latestBeforeOpen.quiz?.questions?.length === 1, "latest quiz endpoint should expose the staged quiz for widget refresh fallback");
 
   const opened = await rpc("tools/call", {
     name: "open_quiz",
@@ -246,9 +243,6 @@ async function runSmoke() {
   const stagedStored = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
   assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
-  const stagedLatestAfterUpdates = await getJson("/api/quiz/latest");
-  assert(stagedLatestAfterUpdates.quizId === "staged-builder-smoke", "latest quiz endpoint should stay on the active staged quiz");
-  assert(stagedLatestAfterUpdates.quiz.questions.length === 3, "latest quiz endpoint should expose later staged questions to the already-open widget");
   const stagedStoredViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(opened.result.structuredContent.launchId));
   assert(stagedStoredViaLaunchId.quiz.questions.length === 3, "original launchId should authorize polling newer quiz revisions after later add_question calls");
   const stagedAfterUpdates = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));

@@ -37302,51 +37302,20 @@ function getOpenAiBridge() {
 function isChatGptWidget() {
 	return Boolean(getOpenAiBridge());
 }
-function getHostQuizPayload(options = {}) {
+function getHostQuizPayload() {
 	const bridge = getOpenAiBridge();
 	const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : void 0);
 	const bridgeCandidates = bridge ? getBridgeQuizCandidates(bridge) : [];
 	for (const candidate of bridgeCandidates) {
-		if (candidate.surface === "toolInput" && !options.allowUnsealedToolInput) continue;
 		const payload = toHostQuizPayload(candidate, "chatgpt-widget");
 		if (payload) return payload;
 	}
-	const bootstrapQuiz = findQuizDeep(bootstrap);
-	if (bootstrapQuiz) {
+	const bootstrapLaunch = findLaunchPacketShallow(bootstrap);
+	if (bootstrapLaunch?.quiz) {
 		const payload = toHostQuizPayload({
-			value: bootstrapQuiz,
-			summary: bootstrap
+			value: bootstrapLaunch.quiz,
+			summary: bootstrapLaunch
 		}, "server-bootstrap");
-		if (payload) return payload;
-	}
-	return null;
-}
-async function callHostOpenQuizForUpdates(expectedQuizId, timeoutMs = 8e3) {
-	const bridge = getOpenAiBridge();
-	if (!bridge?.callTool) return null;
-	const names = [
-		"open_quiz",
-		"betterquizzer.open_quiz",
-		"BetterQuizzes.open_quiz"
-	];
-	let lastError = null;
-	for (const name of names) try {
-		const payload = getHostQuizPayloadFromToolResult(await withTimeout(bridge.callTool(name, {}), timeoutMs, `Timed out calling ${name}`));
-		if (payload && payload.quiz.quizId === expectedQuizId) return payload;
-	} catch (error) {
-		lastError = error;
-	}
-	if (lastError instanceof Error && lastError.message.toLowerCase().includes("timed out")) throw lastError;
-	return null;
-}
-function getHostQuizPayloadFromToolResult(result) {
-	if (!result) return null;
-	const fakeBridge = {
-		toolOutput: result,
-		toolResponseMetadata: result._meta
-	};
-	for (const candidate of getBridgeQuizCandidates(fakeBridge)) {
-		const payload = toHostQuizPayload(candidate, "chatgpt-widget");
 		if (payload) return payload;
 	}
 	return null;
@@ -37368,9 +37337,9 @@ function describeHostBridgeState() {
 		candidates: candidates.map((candidate) => {
 			const summary = asRecord(candidate.summary);
 			return {
-				surface: candidate.surface ?? "sealed",
+				surface: "sealed",
 				kind: typeof summary?.kind === "string" ? summary.kind : null,
-				hasQuiz: Boolean(findQuizDeep(candidate.value))
+				hasQuiz: Boolean(asQuiz(candidate.value))
 			};
 		})
 	}, null, 2);
@@ -37557,7 +37526,7 @@ function getBridgeQuizCandidates(bridge) {
 		outputResult,
 		outputMeta,
 		resultMeta
-	]) if (surface?.quiz) candidates.push({
+	]) if (surface?.kind === "betterquizzer.launch" && surface.quiz) candidates.push({
 		value: surface.quiz,
 		summary: surface
 	});
@@ -37570,44 +37539,16 @@ function getBridgeQuizCandidates(bridge) {
 		outputMeta,
 		resultMeta
 	]) {
-		const launch = findLaunchPacketDeep(surface);
+		const launch = findLaunchPacketShallow(surface);
 		if (launch?.quiz) candidates.push({
 			value: launch.quiz,
 			summary: launch
 		});
 	}
-	for (const surface of [
-		metadata,
-		output,
-		outputResult,
-		structuredContent,
-		resultStructuredContent
-	]) {
-		const quiz = findQuizDeep(surface);
-		if (quiz) candidates.push({
-			value: quiz,
-			summary: surface
-		});
-	}
-	const toolInput = asRecord(bridge.toolInput);
-	if (toolInput?.quiz) {
-		const inputQuiz = asRecord(toolInput.quiz);
-		const inputQuestionCount = Array.isArray(inputQuiz?.questions) ? inputQuiz.questions.length : void 0;
-		candidates.push({
-			value: toolInput.quiz,
-			summary: {
-				...toolInput,
-				kind: "betterquizzer.tool_input_fallback",
-				questionCount: inputQuestionCount,
-				declaredQuestionCount: inputQuestionCount
-			},
-			surface: "toolInput"
-		});
-	}
 	return dedupeCandidates(candidates);
 }
 function toHostQuizPayload(candidate, source) {
-	const normalized = normalizeQuizForRender(findQuizDeep(candidate.value) ?? candidate.value);
+	const normalized = normalizeQuizForRender(asQuiz(candidate.value) ?? candidate.value);
 	const diagnostics = validateRenderableQuiz(normalized);
 	const validShape = normalized.schema === "betterquizzer.quiz" && normalized.version === 2 && Array.isArray(normalized.questions);
 	const launchSummary = asRecord(candidate.summary) ?? void 0;
@@ -37633,7 +37574,6 @@ function isCompleteRenderableLaunch(summaryRecord, quiz, diagnostics, source) {
 	if (!summaryRecord) return !requiresSealedLaunch;
 	if (summaryRecord.kind !== "betterquizzer.launch") {
 		const countMatches = expectedQuestionCount !== null && quiz.questions.length === expectedQuestionCount;
-		if (summaryRecord.kind === "betterquizzer.tool_input_fallback") return countMatches;
 		return asRecord(summaryRecord.renderDiagnostics)?.rendererCertified === true && countMatches;
 	}
 	if (summaryRecord.rendererCertified !== true) return false;
@@ -37681,14 +37621,14 @@ function dedupeCandidates(candidates) {
 function asRecord(value) {
 	return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
-function findLaunchPacketDeep(value, seen = /* @__PURE__ */ new Set(), depth = 0) {
+function findLaunchPacketShallow(value, seen = /* @__PURE__ */ new Set(), depth = 0) {
 	const record = asRecord(value);
 	if (record?.kind === "betterquizzer.launch" && record.quiz) return record;
-	if (depth > 6 || !value || typeof value !== "object" || seen.has(value)) return null;
+	if (depth > 4 || !value || typeof value !== "object" || seen.has(value)) return null;
 	seen.add(value);
 	if (Array.isArray(value)) {
 		for (const item of value) {
-			const found = findLaunchPacketDeep(item, seen, depth + 1);
+			const found = findLaunchPacketShallow(item, seen, depth + 1);
 			if (found) return found;
 		}
 		return null;
@@ -37699,45 +37639,9 @@ function findLaunchPacketDeep(value, seen = /* @__PURE__ */ new Set(), depth = 0
 		"_meta",
 		"metadata",
 		"toolOutput",
-		"result",
-		"content"
-	]) {
-		const found = findLaunchPacketDeep(container[key], seen, depth + 1);
-		if (found) return found;
-	}
-	for (const nested of Object.values(container)) {
-		const found = findLaunchPacketDeep(nested, seen, depth + 1);
-		if (found) return found;
-	}
-	return null;
-}
-function findQuizDeep(value, seen = /* @__PURE__ */ new Set(), depth = 0) {
-	const direct = asQuiz(value);
-	if (direct) return direct;
-	if (depth > 6 || !value || typeof value !== "object" || seen.has(value)) return null;
-	seen.add(value);
-	if (Array.isArray(value)) {
-		for (const item of value) {
-			const found = findQuizDeep(item, seen, depth + 1);
-			if (found) return found;
-		}
-		return null;
-	}
-	const record = value;
-	for (const key of [
-		"quiz",
-		"QuizSpec",
-		"structuredContent",
-		"_meta",
-		"metadata",
-		"toolOutput",
 		"result"
 	]) {
-		const found = findQuizDeep(record[key], seen, depth + 1);
-		if (found) return found;
-	}
-	for (const nested of Object.values(record)) {
-		const found = findQuizDeep(nested, seen, depth + 1);
+		const found = findLaunchPacketShallow(container[key], seen, depth + 1);
 		if (found) return found;
 	}
 	return null;
@@ -38136,7 +38040,6 @@ var WIDGET_VERSION = "V1";
 var WIDGET_VERSION_LABEL = formatWidgetVersion(WIDGET_VERSION);
 var STABLE_LAUNCH_MS = 450;
 var HYDRATION_ERROR_DELAY_MS = 3e4;
-var TOOL_INPUT_FALLBACK_DELAY_MS = 2500;
 var HYDRATION_INTERRUPTED_MS = 12e3;
 var SERVER_RECOVERY_POLL_MS = 1500;
 var SERVER_RECOVERY_TIMEOUT_MS = 3e4;
@@ -38153,6 +38056,7 @@ function App() {
 	const [importError, setImportError] = (0, import_react.useState)(null);
 	const [hydrationError, setHydrationError] = (0, import_react.useState)(null);
 	const [hydrationErrorVisible, setHydrationErrorVisible] = (0, import_react.useState)(false);
+	const [hydrationPhase, setHydrationPhase] = (0, import_react.useState)(widgetMode ? "waiting_for_launch" : "rendering");
 	const [hydrationProgress, setHydrationProgress] = (0, import_react.useState)(null);
 	const pendingLaunchRef = (0, import_react.useRef)(null);
 	const hydrationStartedAtRef = (0, import_react.useRef)(Date.now());
@@ -38168,6 +38072,7 @@ function App() {
 		setFinished(restored);
 		setImportError(null);
 		setHydrationError(null);
+		setHydrationPhase("rendering");
 		setScreen(restored ? "submission" : "quiz");
 	}
 	function loadQuiz(nextQuiz) {
@@ -38183,30 +38088,10 @@ function App() {
 		return () => window.clearTimeout(timeout);
 	}, [widgetMode]);
 	(0, import_react.useEffect)(() => {
-		if (!widgetMode || quiz) return;
-		let cancelled = false;
-		const pollLatest = async () => {
-			const latestQuiz = await fetchLatestQuizFromServer().catch(() => null);
-			if (cancelled || !latestQuiz || !Array.isArray(latestQuiz.questions) || latestQuiz.questions.length < 1) return;
-			try {
-				applyQuiz(latestQuiz, getQuizId(latestQuiz));
-				setHydrationErrorVisible(false);
-			} catch (error) {
-				setHydrationError(error instanceof Error ? error.message : String(error));
-			}
-		};
-		pollLatest();
-		const interval = window.setInterval(() => void pollLatest(), SERVER_RECOVERY_POLL_MS);
-		return () => {
-			cancelled = true;
-			window.clearInterval(interval);
-		};
-	}, [widgetMode, quiz]);
-	(0, import_react.useEffect)(() => {
 		if (!widgetMode) return;
 		const interval = window.setInterval(() => {
 			const elapsedMs = Date.now() - hydrationStartedAtRef.current;
-			const nextPayload = getHostQuizPayload({ allowUnsealedToolInput: elapsedMs >= TOOL_INPUT_FALLBACK_DELAY_MS });
+			const nextPayload = getHostQuizPayload();
 			if (nextPayload) try {
 				const prepared = prepareQuizForRender(nextPayload.quiz);
 				if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
@@ -38234,6 +38119,7 @@ function App() {
 				setImportError(null);
 				setHydrationError(null);
 				setHydrationErrorVisible(false);
+				setHydrationPhase("rendering");
 				setHydrationProgress(toHydrationProgress(currentPending.payload, currentPending.quiz));
 				setScreen(restored ? "submission" : "quiz");
 				setQuiz(currentPending.quiz);
@@ -38241,16 +38127,20 @@ function App() {
 				setHydrationError(error instanceof Error ? error.message : String(error));
 				if (!quiz) setScreen("loading");
 			}
-			if (!nextPayload && !quiz && elapsedMs >= HYDRATION_INTERRUPTED_MS) setHydrationProgress((progress) => progress ?? {
-				expectedQuestions: 0,
-				receivedQuestions: 0,
-				complete: false,
-				source: "server-recovery",
-				message: "Still waiting for the quiz from ChatGPT..."
-			});
+			if (!nextPayload && !quiz && elapsedMs >= HYDRATION_INTERRUPTED_MS) {
+				setHydrationPhase("waiting_for_launch");
+				setHydrationProgress((progress) => progress ?? {
+					expectedQuestions: 0,
+					receivedQuestions: 0,
+					complete: false,
+					source: "server-recovery",
+					message: "Still waiting for the quiz from ChatGPT..."
+				});
+			}
 			if (!nextPayload && !quiz && elapsedMs >= SERVER_RECOVERY_TIMEOUT_MS) {
 				setHydrationError(buildHydrationFailureDetails("The quiz launch did not finish before the recovery timeout."));
 				setHydrationErrorVisible(true);
+				setHydrationPhase("terminal_error");
 			}
 		}, 250);
 		return () => window.clearInterval(interval);
@@ -38287,6 +38177,7 @@ function App() {
 			} catch (error) {
 				if (cancelled) return;
 				setHydrationError(buildHydrationFailureDetails(error instanceof Error ? error.message : String(error)));
+				setHydrationPhase("terminal_error");
 				setScreen("loading");
 			}
 		};
@@ -38318,6 +38209,7 @@ function App() {
 			});
 			setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId);
 			if (update.payload?.recoveryToken) setRecoveryToken(update.payload.recoveryToken);
+			setHydrationPhase("polling_updates");
 			setQuiz(serverQuiz);
 		};
 		const interval = window.setInterval(() => void poll(), 1500);
@@ -38335,13 +38227,19 @@ function App() {
 		launchId
 	]);
 	if (screen === "import") {
-		if (widgetMode) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, { progress: hydrationProgress });
+		if (widgetMode) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, {
+			progress: hydrationProgress,
+			phase: hydrationPhase
+		});
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ImportScreen, {
 			error: importError,
 			onLoadQuiz: loadQuiz
 		});
 	}
-	if (screen === "loading") return hydrationError && hydrationErrorVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuizSetupIssue, { message: hydrationError }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, { progress: hydrationProgress });
+	if (screen === "loading") return hydrationError && hydrationErrorVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuizSetupIssue, { message: hydrationError }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, {
+		progress: hydrationProgress,
+		phase: hydrationPhase
+	});
 	if (screen === "submission" && finished) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubmissionScreen, {
 		finished,
 		widgetMode,
@@ -38350,7 +38248,10 @@ function App() {
 			setScreen(widgetMode ? "submission" : "import");
 		}
 	});
-	if (!quiz) return widgetMode ? hydrationError && hydrationErrorVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuizSetupIssue, { message: hydrationError }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, { progress: hydrationProgress }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ImportScreen, {
+	if (!quiz) return widgetMode ? hydrationError && hydrationErrorVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuizSetupIssue, { message: hydrationError }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WidgetLoading, {
+		progress: hydrationProgress,
+		phase: hydrationPhase
+	}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ImportScreen, {
 		error: "No quiz is loaded.",
 		onLoadQuiz: loadQuiz
 	});
@@ -38372,7 +38273,7 @@ function formatWidgetVersion(version) {
 	if (!trimmed) return "V1";
 	return /^v/i.test(trimmed) ? trimmed : /^V\d/i.test(trimmed) ? trimmed : `v${trimmed}`;
 }
-function WidgetLoading({ progress } = {}) {
+function WidgetLoading({ progress, phase = "waiting_for_launch" } = {}) {
 	const expected = progress?.expectedQuestions ?? 0;
 	const received = progress?.receivedQuestions ?? 0;
 	const complete = Boolean(progress?.complete || expected > 0 && received >= expected);
@@ -38391,7 +38292,7 @@ function WidgetLoading({ progress } = {}) {
 					})]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "Loading quiz…" }),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: progress?.message ?? "Still waiting for the quiz from ChatGPT..." }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: progress?.message ?? (phase === "polling_updates" ? "Loading the latest quiz update..." : "Waiting for ChatGPT to launch the quiz...") }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					className: "loading-progress-note",
 					"aria-live": "polite",
@@ -38500,33 +38401,9 @@ async function fetchQuizFromServer(quizId, recoveryToken) {
 	}
 	throw new Error("Server quiz fetch failed from " + describeServerBases() + ": " + (lastError instanceof Error ? lastError.message : String(lastError)));
 }
-async function fetchLatestQuizFromServer(expectedQuizId) {
-	const path = "/api/quiz/latest";
-	const bases = getServerBases();
-	for (const base of bases.length ? bases : [""]) try {
-		const response = await fetch((base ? base : "") + path, { headers: { accept: "application/json" } });
-		const body = await response.json().catch(() => ({}));
-		if (!response.ok) continue;
-		const record = body;
-		if (!record.quiz) continue;
-		if (expectedQuizId && (record.quizId ?? getQuizId(record.quiz)) !== expectedQuizId) continue;
-		return record.quiz;
-	} catch {}
-	return null;
-}
 async function fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken) {
-	if (recoveryToken) try {
-		return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
-	} catch {}
-	const latestQuiz = await fetchLatestQuizFromServer(quizId);
-	if (latestQuiz) return { quiz: latestQuiz };
-	const hostPayload = await callHostOpenQuizForUpdates(quizId);
-	if (hostPayload) return {
-		quiz: hostPayload.quiz,
-		payload: hostPayload
-	};
-	if (!recoveryToken) throw new Error("No recovery token or host open_quiz bridge is available for quiz updates.");
-	return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
+	if (recoveryToken) return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
+	throw new Error("No recovery token or launchId is available for token-scoped quiz updates.");
 }
 function buildHydrationFailureDetails(reason) {
 	return [

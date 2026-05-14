@@ -76,16 +76,6 @@ export type HostQuizPayload = {
 type HostCandidate = {
   value: unknown;
   summary?: unknown;
-  surface?: "sealed" | "toolInput" | "fallback";
-};
-
-export type HostQuizPayloadOptions = {
-  /**
-   * Allows a complete, locally render-certified toolInput.quiz to recover a widget
-   * when the ChatGPT/tool response was interrupted before a sealed launch packet arrived.
-   * This is intentionally opt-in so normal launches still prefer sealed tool output.
-   */
-  allowUnsealedToolInput?: boolean;
 };
 
 export function getOpenAiBridge(): OpenAiBridge | undefined {
@@ -96,61 +86,22 @@ export function isChatGptWidget(): boolean {
   return Boolean(getOpenAiBridge());
 }
 
-export function getHostQuizPayload(options: HostQuizPayloadOptions = {}): HostQuizPayload | null {
+export function getHostQuizPayload(): HostQuizPayload | null {
   const bridge = getOpenAiBridge();
   const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : undefined);
 
   const bridgeCandidates = bridge ? getBridgeQuizCandidates(bridge) : [];
   for (const candidate of bridgeCandidates) {
-    if (candidate.surface === "toolInput" && !options.allowUnsealedToolInput) continue;
     const payload = toHostQuizPayload(candidate, "chatgpt-widget");
     if (payload) return payload;
   }
 
-  const bootstrapQuiz = findQuizDeep(bootstrap);
-  if (bootstrapQuiz) {
-    const payload = toHostQuizPayload({ value: bootstrapQuiz, summary: bootstrap }, "server-bootstrap");
+  const bootstrapLaunch = findLaunchPacketShallow(bootstrap);
+  if (bootstrapLaunch?.quiz) {
+    const payload = toHostQuizPayload({ value: bootstrapLaunch.quiz, summary: bootstrapLaunch }, "server-bootstrap");
     if (payload) return payload;
   }
 
-  return null;
-}
-
-export async function callHostOpenQuizForUpdates(expectedQuizId: string, timeoutMs = 8000): Promise<HostQuizPayload | null> {
-  const bridge = getOpenAiBridge();
-  if (!bridge?.callTool) return null;
-
-  const names = [
-    "open_quiz",
-    "betterquizzer.open_quiz",
-    "BetterQuizzes.open_quiz",
-  ];
-
-  let lastError: unknown = null;
-  for (const name of names) {
-    try {
-      const result = await withTimeout(bridge.callTool(name, {}), timeoutMs, `Timed out calling ${name}`);
-      const payload = getHostQuizPayloadFromToolResult(result);
-      if (payload && payload.quiz.quizId === expectedQuizId) return payload;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (lastError instanceof Error && lastError.message.toLowerCase().includes("timed out")) throw lastError;
-  return null;
-}
-
-function getHostQuizPayloadFromToolResult(result: ToolResultLike | null | undefined): HostQuizPayload | null {
-  if (!result) return null;
-  const fakeBridge: OpenAiBridge = {
-    toolOutput: result,
-    toolResponseMetadata: result._meta,
-  };
-  for (const candidate of getBridgeQuizCandidates(fakeBridge)) {
-    const payload = toHostQuizPayload(candidate, "chatgpt-widget");
-    if (payload) return payload;
-  }
   return null;
 }
 
@@ -172,9 +123,9 @@ export function describeHostBridgeState(): string {
       candidates: candidates.map((candidate) => {
         const summary = asRecord(candidate.summary);
         return {
-          surface: candidate.surface ?? "sealed",
+          surface: "sealed",
           kind: typeof summary?.kind === "string" ? summary.kind : null,
-          hasQuiz: Boolean(findQuizDeep(candidate.value)),
+          hasQuiz: Boolean(asQuiz(candidate.value)),
         };
       }),
     },
@@ -395,46 +346,22 @@ function getBridgeQuizCandidates(bridge: OpenAiBridge): HostCandidate[] {
   const outputMeta = asRecord(output?._meta);
   const resultMeta = asRecord(outputResult?._meta);
 
-  // Preferred current launch contract: the server returns the normalized quiz in structuredContent.quiz
-  // and mirrors the same launch packet in tool response metadata for hosts that expose metadata first.
+  // Preferred launch contract: open_quiz returns a sealed betterquizzer.launch packet.
   for (const surface of [metadata, structuredContent, resultStructuredContent, output, outputResult, outputMeta, resultMeta]) {
-    if (surface?.quiz) candidates.push({ value: surface.quiz, summary: surface });
+    if (surface?.kind === "betterquizzer.launch" && surface.quiz) candidates.push({ value: surface.quiz, summary: surface });
   }
 
   // Some hosts wrap the tool result one level deeper (for example { result: { structuredContent } }).
-  // Find the nearest sealed launch packet and use that packet as the summary. The previous deep-search
-  // path found the quiz but kept the top-level wrapper as the summary, which caused the sealed-launch
-  // validator to reject valid activities and left the widget on Loading quiz forever.
   for (const surface of [metadata, output, outputResult, structuredContent, resultStructuredContent, outputMeta, resultMeta]) {
-    const launch = findLaunchPacketDeep(surface);
+    const launch = findLaunchPacketShallow(surface);
     if (launch?.quiz) candidates.push({ value: launch.quiz, summary: launch });
-  }
-
-  // Deep-search fallback for non-widget/standalone surfaces. Prefer findLaunchPacketDeep above for widget
-  // launch data because it preserves the sealed summary fields required by the renderer contract.
-  for (const surface of [metadata, output, outputResult, structuredContent, resultStructuredContent]) {
-    const quiz = findQuizDeep(surface);
-    if (quiz) candidates.push({ value: quiz, summary: surface });
-  }
-
-  // Last-resort current-call input fallback. This is only used if the host does not expose tool output yet;
-  // the value is still normalized and renderer-certified before it can be displayed.
-  const toolInput = asRecord(bridge.toolInput);
-  if (toolInput?.quiz) {
-    const inputQuiz = asRecord(toolInput.quiz);
-    const inputQuestionCount = Array.isArray(inputQuiz?.questions) ? inputQuiz.questions.length : undefined;
-    candidates.push({
-      value: toolInput.quiz,
-      summary: { ...toolInput, kind: "betterquizzer.tool_input_fallback", questionCount: inputQuestionCount, declaredQuestionCount: inputQuestionCount },
-      surface: "toolInput",
-    });
   }
 
   return dedupeCandidates(candidates);
 }
 
 function toHostQuizPayload(candidate: HostCandidate, source: HostQuizPayload["source"]): HostQuizPayload | null {
-  const rawQuiz = findQuizDeep(candidate.value) ?? candidate.value;
+  const rawQuiz = asQuiz(candidate.value) ?? candidate.value;
   const normalized = normalizeQuizForRender(rawQuiz);
   const diagnostics = validateRenderableQuiz(normalized);
   const validShape = normalized.schema === "betterquizzer.quiz" && normalized.version === 2 && Array.isArray(normalized.questions);
@@ -467,9 +394,6 @@ function isCompleteRenderableLaunch(summaryRecord: Record<string, unknown> | und
     // ChatGPT can expose a valid structuredContent wrapper without preserving kind at the same object level.
     // Accept it only when it carries renderer diagnostics/counts proving the payload is complete.
     const countMatches = expectedQuestionCount !== null && quiz.questions.length === expectedQuestionCount;
-    if (summaryRecord.kind === "betterquizzer.tool_input_fallback") {
-      return countMatches;
-    }
     const diagnosticsCertified = asRecord(summaryRecord.renderDiagnostics)?.rendererCertified === true;
     return diagnosticsCertified && countMatches;
   }
@@ -525,65 +449,29 @@ function dedupeCandidates(candidates: HostCandidate[]): HostCandidate[] {
   });
 }
 
-function isExplicitlyNormalized(record: Record<string, unknown>): boolean {
-  return record.normalized === true || record.rendererCertified === true || asRecord(record.renderDiagnostics)?.rendererCertified === true;
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
-function findLaunchPacketDeep(value: unknown, seen = new Set<unknown>(), depth = 0): Record<string, unknown> | null {
+function findLaunchPacketShallow(value: unknown, seen = new Set<unknown>(), depth = 0): Record<string, unknown> | null {
   const record = asRecord(value);
   if (record?.kind === "betterquizzer.launch" && record.quiz) return record;
-  if (depth > 6 || !value || typeof value !== "object" || seen.has(value)) return null;
+  if (depth > 4 || !value || typeof value !== "object" || seen.has(value)) return null;
   seen.add(value);
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = findLaunchPacketDeep(item, seen, depth + 1);
+      const found = findLaunchPacketShallow(item, seen, depth + 1);
       if (found) return found;
     }
     return null;
   }
 
   const container = value as Record<string, unknown>;
-  for (const key of ["structuredContent", "_meta", "metadata", "toolOutput", "result", "content"]) {
-    const found = findLaunchPacketDeep(container[key], seen, depth + 1);
+  for (const key of ["structuredContent", "_meta", "metadata", "toolOutput", "result"]) {
+    const found = findLaunchPacketShallow(container[key], seen, depth + 1);
     if (found) return found;
   }
-  for (const nested of Object.values(container)) {
-    const found = findLaunchPacketDeep(nested, seen, depth + 1);
-    if (found) return found;
-  }
-  return null;
-}
-
-function findQuizDeep(value: unknown, seen = new Set<unknown>(), depth = 0): QuizSpec | null {
-  const direct = asQuiz(value);
-  if (direct) return direct;
-  if (depth > 6 || !value || typeof value !== "object" || seen.has(value)) return null;
-  seen.add(value);
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findQuizDeep(item, seen, depth + 1);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  for (const key of ["quiz", "QuizSpec", "structuredContent", "_meta", "metadata", "toolOutput", "result"]) {
-    const found = findQuizDeep(record[key], seen, depth + 1);
-    if (found) return found;
-  }
-
-  for (const nested of Object.values(record)) {
-    const found = findQuizDeep(nested, seen, depth + 1);
-    if (found) return found;
-  }
-
   return null;
 }
 

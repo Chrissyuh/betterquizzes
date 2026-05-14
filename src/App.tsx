@@ -22,7 +22,6 @@ import {
   type SubmissionCapsule,
 } from "./shared";
 import {
-  callHostOpenQuizForUpdates,
   describeHostBridgeState,
   getHostQuizPayload,
   getPersistedDraftState,
@@ -145,6 +144,7 @@ type PendingLaunch = {
   firstSeenAt: number;
 };
 
+type HydrationPhase = "waiting_for_launch" | "rendering" | "polling_updates" | "terminal_error";
 type HydrationProgress = { expectedQuestions: number; receivedQuestions: number; renderableQuestions?: number; complete?: boolean; message?: string; source?: string };
 
 const SAMPLE_QUIZZES = [tinyDemo as QuizSpec, aphgDemo as QuizSpec, mixedTypesDemo as QuizSpec];
@@ -152,7 +152,6 @@ const WIDGET_VERSION = BETTERQUIZZER_VERSION;
 const WIDGET_VERSION_LABEL = formatWidgetVersion(WIDGET_VERSION);
 const STABLE_LAUNCH_MS = 450;
 const HYDRATION_ERROR_DELAY_MS = 30000;
-const TOOL_INPUT_FALLBACK_DELAY_MS = 2500;
 const HYDRATION_INTERRUPTED_MS = 12000;
 const SERVER_RECOVERY_POLL_MS = 1500;
 const SERVER_RECOVERY_TIMEOUT_MS = 30000;
@@ -170,6 +169,7 @@ export default function App(): ReactElement {
   const [importError, setImportError] = useState<string | null>(null);
   const [hydrationError, setHydrationError] = useState<string | null>(null);
   const [hydrationErrorVisible, setHydrationErrorVisible] = useState(false);
+  const [hydrationPhase, setHydrationPhase] = useState<HydrationPhase>(widgetMode ? "waiting_for_launch" : "rendering");
   const [hydrationProgress, setHydrationProgress] = useState<HydrationProgress | null>(null);
   const pendingLaunchRef = useRef<PendingLaunch | null>(null);
   const hydrationStartedAtRef = useRef(Date.now());
@@ -186,6 +186,7 @@ export default function App(): ReactElement {
     setFinished(restored);
     setImportError(null);
     setHydrationError(null);
+    setHydrationPhase("rendering");
     setScreen(restored ? "submission" : "quiz");
   }
 
@@ -204,31 +205,10 @@ export default function App(): ReactElement {
   }, [widgetMode]);
 
   useEffect(() => {
-    if (!widgetMode || quiz) return;
-    let cancelled = false;
-    const pollLatest = async () => {
-      const latestQuiz = await fetchLatestQuizFromServer().catch(() => null);
-      if (cancelled || !latestQuiz || !Array.isArray(latestQuiz.questions) || latestQuiz.questions.length < 1) return;
-      try {
-        applyQuiz(latestQuiz, getQuizId(latestQuiz));
-        setHydrationErrorVisible(false);
-      } catch (error) {
-        setHydrationError(error instanceof Error ? error.message : String(error));
-      }
-    };
-    void pollLatest();
-    const interval = window.setInterval(() => void pollLatest(), SERVER_RECOVERY_POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [widgetMode, quiz]);
-
-  useEffect(() => {
     if (!widgetMode) return;
     const interval = window.setInterval(() => {
       const elapsedMs = Date.now() - hydrationStartedAtRef.current;
-      const nextPayload = getHostQuizPayload({ allowUnsealedToolInput: elapsedMs >= TOOL_INPUT_FALLBACK_DELAY_MS });
+      const nextPayload = getHostQuizPayload();
       if (nextPayload) {
         try {
           const prepared = prepareQuizForRender(nextPayload.quiz);
@@ -253,6 +233,7 @@ export default function App(): ReactElement {
           setImportError(null);
           setHydrationError(null);
           setHydrationErrorVisible(false);
+          setHydrationPhase("rendering");
           setHydrationProgress(toHydrationProgress(currentPending.payload, currentPending.quiz));
           setScreen(restored ? "submission" : "quiz");
           setQuiz(currentPending.quiz);
@@ -262,6 +243,7 @@ export default function App(): ReactElement {
         }
       }
       if (!nextPayload && !quiz && elapsedMs >= HYDRATION_INTERRUPTED_MS) {
+        setHydrationPhase("waiting_for_launch");
         setHydrationProgress((progress) => progress ?? {
           expectedQuestions: 0,
           receivedQuestions: 0,
@@ -273,6 +255,7 @@ export default function App(): ReactElement {
       if (!nextPayload && !quiz && elapsedMs >= SERVER_RECOVERY_TIMEOUT_MS) {
         setHydrationError(buildHydrationFailureDetails("The quiz launch did not finish before the recovery timeout."));
         setHydrationErrorVisible(true);
+        setHydrationPhase("terminal_error");
       }
     }, 250);
     return () => window.clearInterval(interval);
@@ -312,6 +295,7 @@ export default function App(): ReactElement {
       } catch (error) {
         if (cancelled) return;
         setHydrationError(buildHydrationFailureDetails(error instanceof Error ? error.message : String(error)));
+        setHydrationPhase("terminal_error");
         setScreen("loading");
       }
     };
@@ -344,6 +328,7 @@ export default function App(): ReactElement {
       });
       setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId);
       if (update.payload?.recoveryToken) setRecoveryToken(update.payload.recoveryToken);
+      setHydrationPhase("polling_updates");
       setQuiz(serverQuiz);
     };
     const interval = window.setInterval(() => void poll(), 1500);
@@ -355,12 +340,12 @@ export default function App(): ReactElement {
   }, [widgetMode, quiz, finished, hydrationProgress, recoveryToken, launchId]);
 
   if (screen === "import") {
-    if (widgetMode) return <WidgetLoading progress={hydrationProgress} />;
+    if (widgetMode) return <WidgetLoading progress={hydrationProgress} phase={hydrationPhase} />;
     return <ImportScreen error={importError} onLoadQuiz={loadQuiz} />;
   }
 
   if (screen === "loading") {
-    return hydrationError && hydrationErrorVisible ? <QuizSetupIssue message={hydrationError} /> : <WidgetLoading progress={hydrationProgress} />;
+    return hydrationError && hydrationErrorVisible ? <QuizSetupIssue message={hydrationError} /> : <WidgetLoading progress={hydrationProgress} phase={hydrationPhase} />;
   }
 
   if (screen === "submission" && finished) {
@@ -371,7 +356,7 @@ export default function App(): ReactElement {
   }
 
   if (!quiz) {
-    return widgetMode ? (hydrationError && hydrationErrorVisible ? <QuizSetupIssue message={hydrationError} /> : <WidgetLoading progress={hydrationProgress} />) : <ImportScreen error="No quiz is loaded." onLoadQuiz={loadQuiz} />;
+    return widgetMode ? (hydrationError && hydrationErrorVisible ? <QuizSetupIssue message={hydrationError} /> : <WidgetLoading progress={hydrationProgress} phase={hydrationPhase} />) : <ImportScreen error="No quiz is loaded." onLoadQuiz={loadQuiz} />;
   }
 
   return (
@@ -397,7 +382,7 @@ function formatWidgetVersion(version: string): string {
   return /^v/i.test(trimmed) ? trimmed : /^V\d/i.test(trimmed) ? trimmed : `v${trimmed}`;
 }
 
-function WidgetLoading({ progress }: { progress?: HydrationProgress | null } = {}): ReactElement {
+function WidgetLoading({ progress, phase = "waiting_for_launch" }: { progress?: HydrationProgress | null; phase?: HydrationPhase } = {}): ReactElement {
   const expected = progress?.expectedQuestions ?? 0;
   const received = progress?.receivedQuestions ?? 0;
   const complete = Boolean(progress?.complete || (expected > 0 && received >= expected));
@@ -408,7 +393,7 @@ function WidgetLoading({ progress }: { progress?: HydrationProgress | null } = {
       <section className="card stack center-card loading-card">
         <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
         <h1>Loading quiz…</h1>
-        <p>{progress?.message ?? "Still waiting for the quiz from ChatGPT..."}</p>
+        <p>{progress?.message ?? (phase === "polling_updates" ? "Loading the latest quiz update..." : "Waiting for ChatGPT to launch the quiz...")}</p>
         <div className="loading-progress-note" aria-live="polite">
           <div className={progressClass} aria-label="Loading quiz packet" aria-busy={!complete}>
             <span style={expected > 0 ? { width: `${percent}%` } : undefined} />
@@ -487,10 +472,6 @@ function getServerBases(): string[] {
   return [...new Set(candidates)];
 }
 
-function getServerBase(): string {
-  return getServerBases()[0] || "";
-}
-
 async function fetchQuizFromServer(quizId: string, recoveryToken?: string | null): Promise<QuizSpec> {
   const query = recoveryToken ? "?recoveryToken=" + encodeURIComponent(recoveryToken) : "";
   const path = "/api/quiz/" + encodeURIComponent(quizId) + query;
@@ -514,47 +495,14 @@ async function fetchQuizFromServer(quizId: string, recoveryToken?: string | null
   throw new Error("Server quiz fetch failed from " + describeServerBases() + ": " + (lastError instanceof Error ? lastError.message : String(lastError)));
 }
 
-async function fetchLatestQuizFromServer(expectedQuizId?: string | null): Promise<QuizSpec | null> {
-  const path = "/api/quiz/latest";
-  const bases = getServerBases();
-  for (const base of bases.length ? bases : [""]) {
-    try {
-      const response = await fetch((base ? base : "") + path, { headers: { accept: "application/json" } });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) continue;
-      const record = body as { quiz?: QuizSpec; quizId?: string };
-      if (!record.quiz) continue;
-      if (expectedQuizId && (record.quizId ?? getQuizId(record.quiz)) !== expectedQuizId) continue;
-      return record.quiz;
-    } catch {
-      // Try the next server base. This is a best-effort fallback for ChatGPT shells
-      // that do not expose launch metadata to the widget frame.
-    }
-  }
-  return null;
-}
-
 async function fetchQuizUpdateForIncrementalBuild(
   quizId: string,
   recoveryToken?: string | null
 ): Promise<{ quiz: QuizSpec; payload?: HostQuizPayload }> {
   if (recoveryToken) {
-    try {
-      return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
-    } catch {
-      // Fall through to the host tool path. Some ChatGPT shells render structuredContent
-      // but do not expose tool-result _meta, so the widget has no recovery token.
-    }
+    return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
   }
-
-  const latestQuiz = await fetchLatestQuizFromServer(quizId);
-  if (latestQuiz) return { quiz: latestQuiz };
-
-  const hostPayload = await callHostOpenQuizForUpdates(quizId);
-  if (hostPayload) return { quiz: hostPayload.quiz, payload: hostPayload };
-
-  if (!recoveryToken) throw new Error("No recovery token or host open_quiz bridge is available for quiz updates.");
-  return { quiz: await fetchQuizFromServer(quizId, recoveryToken) };
+  throw new Error("No recovery token or launchId is available for token-scoped quiz updates.");
 }
 
 function buildHydrationFailureDetails(reason: string): string {

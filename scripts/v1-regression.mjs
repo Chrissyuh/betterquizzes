@@ -51,14 +51,14 @@ assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('requi
 assert(remote.includes("start_quiz with expectedQuestionCount") && remote.includes("Do not send chat progress/check-in messages while authoring"), "model instructions must prefer quiet staged authoring");
 assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Accepted question stored"), "add_question must store accepted questions continuously");
 assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");
-assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("start_quiz with expectedQuestionCount opens the widget immediately"), "staged authoring must open from start_quiz and avoid duplicate widget launches");
+assert(remote.includes("v23SyncLaunchedDraft") && remote.includes("Call add_question once for the first question, then call open_quiz once"), "staged authoring must launch from open_quiz after the first accepted question");
 assert(!remote.includes('name: "finalize_quiz"') && remote.includes("Do not call finalize_quiz for assistant-authored quizzes"), "finalize_quiz must not be advertised in the normal model tool path");
-assert(app.includes("fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken ?? launchId)") && app.includes("fetchLatestQuizFromServer(quizId)") && app.includes("shouldPollForServerQuizUpdates(quiz, hydrationProgress)") && app.includes("setQuiz(serverQuiz)"), "widget must poll stored quiz updates while questions are still generating");
-assert(app.includes("callHostOpenQuizForUpdates(quizId)") && bridge.includes("getHostQuizPayloadFromToolResult"), "widget must fall back to host open_quiz when recovery token metadata is unavailable");
+assert(app.includes("fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken ?? launchId)") && app.includes("No recovery token or launchId is available for token-scoped quiz updates") && app.includes("shouldPollForServerQuizUpdates(quiz, hydrationProgress)") && app.includes("setQuiz(serverQuiz)"), "widget must poll token-scoped stored quiz updates while questions are still generating");
+assert(!app.includes("callHostOpenQuizForUpdates(quizId)") && !bridge.includes("getHostQuizPayloadFromToolResult"), "widget must not fall back to live host open_quiz calls for updates");
 assert(app.includes("nextRevision > currentRevision") && app.includes("setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId)"), "widget must accept newer stored quiz revisions while answering");
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
 assert(app.includes("submission.launchId = launchId") && app.includes("submission.quizRevision = quiz.metadata.quizRevision"), "submissions must carry stable launch/revision identity");
-assert(app.includes('"/api/quiz/latest"') && app.includes("getRequestedRecoveryToken") && app.includes("SERVER_RECOVERY_TIMEOUT_MS"), "widget must keep latest-quiz recovery fallback for ChatGPT shells that drop launch metadata");
+assert(!app.includes('"/api/quiz/latest"') && app.includes("getRequestedRecoveryToken") && app.includes("SERVER_RECOVERY_TIMEOUT_MS"), "widget must not use latest-quiz as a generic ChatGPT hydration fallback");
 assert(app.includes("describeHostBridgeState()") && app.includes("Server bases:"), "widget hydration failures must include useful technical recovery details");
 assert(remote.includes("window.__BETTERQUIZZER_SERVER_BASES__=") && remote.includes("requestOrigin") && remote.includes("connectDomains"), "production widget bootstrap must include fallback server bases and CSP connect domains");
 assert(remote.includes('type !== "text_select"') && remote.includes("Text-select questions need segments") && remote.includes("Do not use choices for text_select"), "draft validator must not reject text_select as a choice question");
@@ -84,7 +84,7 @@ assert(/\.quiz-layout\s*\{[\s\S]*?grid-template-columns:\s*1fr\s*;/.test(styles)
 assert(/\.top-bar\s+p\s*\{[\s\S]*?max-width:\s*none\s*;/.test(styles), "header subtitle must use the available width");
 assert(/\.skip-quiz-button\s*\{[\s\S]*?min-height:\s*44px\s*;/.test(styles), "skip button must be large enough to tap");
 assert(app.includes('"choice single-choice selected"'), "single-select choices must keep letter badges");
-assert(app.includes("TOOL_INPUT_FALLBACK_DELAY_MS"), "widget must recover from interrupted ChatGPT tool responses using complete tool input after a grace period");
+assert(!app.includes("TOOL_INPUT_FALLBACK_DELAY_MS") && !bridge.includes("allowUnsealedToolInput"), "widget must not accept unsealed tool input as a launch source");
 assert(app.includes("HYDRATION_INTERRUPTED_MS"), "widget must not wait indefinitely when no quiz packet arrives");
 assert(
   app.includes("Quiz did not finish loading") ||
