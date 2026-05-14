@@ -88,14 +88,14 @@ async function runSmoke() {
   assert(!(createTool?.description || "").includes("Canonical minimal example"), "create_quiz description should not advertise legacy examples");
   const submitTool = listed.result.tools.find((tool) => tool.name === "submit_answers");
   const submitSchema = submitTool?.inputSchema || {};
-  assert(submitSchema.type === "object" && !submitSchema.anyOf && !submitSchema.oneOf && !submitSchema.allOf, "submit_answers schema must be valid OpenAI function parameters");
+  assert(submitSchema.type === "object" && !submitSchema.anyOf && !submitSchema.oneOf && !submitSchema.allOf && !submitSchema.enum && !submitSchema.not, "submit_answers schema must be valid OpenAI function parameters");
   assert(!submitSchema.required?.includes("answers"), "submit_answers schema should not always require top-level answers");
   assert(submitSchema.properties?.submission?.type === "object", "submit_answers schema should accept a complete fallback submission");
   const recordSubmissionTool = listed.result.tools.find((tool) => tool.name === "record_submission");
-  assert(recordSubmissionTool?.inputSchema?.type === "object" && !recordSubmissionTool.inputSchema.anyOf && !recordSubmissionTool.inputSchema.oneOf && !recordSubmissionTool.inputSchema.allOf, "record_submission schema must be valid OpenAI function parameters");
+  assert(recordSubmissionTool?.inputSchema?.type === "object" && !recordSubmissionTool.inputSchema.anyOf && !recordSubmissionTool.inputSchema.oneOf && !recordSubmissionTool.inputSchema.allOf && !recordSubmissionTool.inputSchema.enum && !recordSubmissionTool.inputSchema.not, "record_submission schema must be valid OpenAI function parameters");
   for (const tool of listed.result.tools) {
     assert(tool.inputSchema?.type === "object", `${tool.name} inputSchema must be a top-level object`);
-    assert(!tool.inputSchema.oneOf && !tool.inputSchema.anyOf && !tool.inputSchema.allOf && !tool.inputSchema.not, `${tool.name} inputSchema must not use top-level composition keywords`);
+    assert(!tool.inputSchema.oneOf && !tool.inputSchema.anyOf && !tool.inputSchema.allOf && !tool.inputSchema.enum && !tool.inputSchema.not, `${tool.name} inputSchema must not use top-level forbidden keywords`);
   }
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(!startTool?.inputSchema?.properties?.questions, "start_quiz should not advertise bulk questions");
