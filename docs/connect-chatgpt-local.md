@@ -31,9 +31,9 @@ https://YOUR-DEPLOYED-APP.example/mcp
 Ask the host/model to create a quiz, then verify this flow:
 
 1. `start_quiz` is selected by the model and creates a draft without opening the widget.
-2. `add_question` is called once for the first assistant-authored question and returns the widget launch packet immediately.
+2. `add_first_question` is called once for the first assistant-authored question and returns the widget launch packet immediately.
 3. `open_quiz` is available only as an idempotent recovery/reopen tool if the first launch packet is lost.
-4. Later `add_question` calls update the stored quiz one question at a time while the widget polls the token-scoped quiz endpoint for new revisions.
+4. Later storage-only `add_question` calls update the stored quiz one question at a time while the widget polls the token-scoped quiz endpoint for new revisions. These later calls do not advertise a widget output template and must not open duplicate widgets.
 5. User answers questions and gives confidence.
 6. Widget calls `submit_answers`.
 7. Model receives a SubmissionCapsule.

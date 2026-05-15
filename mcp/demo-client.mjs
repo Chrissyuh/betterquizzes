@@ -50,7 +50,7 @@ async function main() {
   const resourceUri = resources.result.resources[0].uri;
   const resource = await request("resources/read", { uri: resourceUri });
   console.log({ mimeType: resource.result.contents[0].mimeType, chars: resource.result.contents[0].text.length });
-  console.log("-> start_quiz/add_question");
+  console.log("-> start_quiz/add_first_question");
   const quiz = JSON.parse(readFileSync("src/shared/examples/tiny-demo.json", "utf8"));
   const started = await request("tools/call", {
     name: "start_quiz",
@@ -62,8 +62,8 @@ async function main() {
     }
   });
   const draftId = started.result.structuredContent.draftId;
-  const created = await request("tools/call", { name: "add_question", arguments: { draftId, question: quiz.questions[0] } });
-  if (created.result.structuredContent.kind !== "betterquizzer.launch" || created.result.structuredContent.questionCount !== 1) throw new Error("First add_question did not launch exactly one question.");
+  const created = await request("tools/call", { name: "add_first_question", arguments: { draftId, question: quiz.questions[0] } });
+  if (created.result.structuredContent.kind !== "betterquizzer.launch" || created.result.structuredContent.questionCount !== 1) throw new Error("add_first_question did not launch exactly one question.");
   for (const question of quiz.questions.slice(1)) {
     await request("tools/call", { name: "add_question", arguments: { draftId, question } });
   }

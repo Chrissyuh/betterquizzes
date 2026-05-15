@@ -66,6 +66,7 @@ async function runSmoke() {
   const toolNames = listed.result.tools.map((tool) => tool.name);
   assert(toolNames.includes("create_quiz"), "create_quiz missing");
   assert(toolNames.includes("start_quiz"), "start_quiz missing");
+  assert(toolNames.includes("add_first_question"), "add_first_question missing");
   assert(toolNames.includes("add_question"), "add_question missing");
   assert(toolNames.includes("open_quiz"), "open_quiz missing");
   assert(toolNames.includes("submit_answers"), "submit_answers missing");
@@ -101,11 +102,16 @@ async function runSmoke() {
   assert(!startTool?.inputSchema?.properties?.questions, "start_quiz should not advertise bulk questions");
   assert(startTool?.annotations?.readOnlyHint === true, "start_quiz should be read-only to avoid confirmation prompts");
   assert(!startTool?._meta?.["openai/outputTemplate"], "start_quiz should not open the widget before a renderable question exists");
+  const firstQuestionTool = listed.result.tools.find((tool) => tool.name === "add_first_question");
+  assert(firstQuestionTool?.inputSchema?.properties?.question, "add_first_question schema missing question");
+  assert(firstQuestionTool?.inputSchema?.required?.includes("question"), "add_first_question schema should require question");
+  assert(firstQuestionTool?._meta?.["openai/outputTemplate"], "add_first_question should advertise widget output template for the one widget launch");
+  assert(firstQuestionTool?.annotations?.readOnlyHint === true, "add_first_question should be read-only to avoid confirmation prompts");
   const addTool = listed.result.tools.find((tool) => tool.name === "add_question");
   assert(addTool?.inputSchema?.properties?.question, "add_question schema missing question");
   assert(addTool?.inputSchema?.required?.includes("question"), "add_question schema should require question");
   assert((addTool?.inputSchema?.properties?.question?.description || "").includes("multi_select"), "add_question question schema should advertise supported types");
-  assert(addTool?._meta?.["openai/outputTemplate"], "add_question should advertise widget output template for first-question launch");
+  assert(!addTool?._meta?.["openai/outputTemplate"], "add_question must not advertise widget output template because later calls must not open duplicate widgets");
   assert(addTool?.annotations?.readOnlyHint === true, "add_question should be read-only to avoid confirmation prompts");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
   assert(repairTool?.inputSchema?.properties?.repairedQuestion, "repair_question schema missing repairedQuestion");
@@ -153,12 +159,27 @@ async function runSmoke() {
   assert(stagedStarted.result.structuredContent.expectedQuestionCount === 3, "start_quiz should preserve expected question count");
   assert(stagedStarted.result.structuredContent.supportedQuestionTypes?.includes("multi_select"), "start_quiz should advertise supported question types");
   assert(stagedStarted.result.structuredContent.capabilities?.unsupportedQuestionTypes?.includes("multiple_select"), "start_quiz should advertise unsupported aliases");
-  assert(stagedStarted.result.structuredContent.capabilities?.launchTool === "add_question", "start_quiz capabilities should name add_question as the normal launch tool");
+  assert(stagedStarted.result.structuredContent.capabilities?.launchTool === "add_first_question", "start_quiz capabilities should name add_first_question as the normal launch tool");
+  assert(stagedStarted.result.structuredContent.capabilities?.updateTool === "add_question", "start_quiz capabilities should name add_question as the later update tool");
   assert(stagedStarted.result.structuredContent.capabilities?.recoveryTool === "open_quiz", "start_quiz capabilities should name open_quiz only as the recovery tool");
   assert(stagedStarted.result.structuredContent.workflow?.some((step) => step.includes("open_quiz")), "start_quiz should return the canonical workflow");
   assert(stagedStarted.result.structuredContent.validationPolicy?.includes("add_question validates"), "start_quiz should expose validation policy");
-  const firstAdd = await rpc("tools/call", {
+  const accidentalFirstAdd = await rpc("tools/call", {
     name: "add_question",
+    arguments: {
+      draftId: stagedDraftId,
+      question: {
+        id: "accidental-first",
+        type: "true_false",
+        prompt: "The storage-only add_question tool should not launch the first widget.",
+        answer: true
+      }
+    }
+  });
+  assert(accidentalFirstAdd.result.structuredContent.ok === false, "storage-only add_question should reject first-question launch attempts");
+  assert(accidentalFirstAdd.result.structuredContent.tool === "add_first_question", "storage-only first-question rejection should route the model to add_first_question");
+  const firstAdd = await rpc("tools/call", {
+    name: "add_first_question",
     arguments: {
       draftId: stagedDraftId,
       question: {
@@ -170,14 +191,14 @@ async function runSmoke() {
       }
     }
   });
-  assert(firstAdd.result.structuredContent.kind === "betterquizzer.launch", "first add_question should launch the widget");
-  assert(firstAdd.result.structuredContent.quizRevision === 1, "first add_question should create revision 1");
-  assert(firstAdd.result.structuredContent.questionCount === 1, "first add_question should launch exactly one question");
-  assert(firstAdd.result.structuredContent.declaredQuestionCount === 3, "first add_question launch should preserve expected question count");
-  assert(firstAdd.result.structuredContent.packetProgress.complete === false, "first add_question partial launch should not be complete");
-  assert(firstAdd.result.structuredContent.safeToPresentToUser === true, "first add_question should clearly mark renderer-safe launch packets");
-  assert(firstAdd.result.structuredContent.launchStatus === "building", "partial first add_question launch should report building status");
-  assert(firstAdd.result._meta?.ui?.route === "quiz", "first add_question should carry widget launch metadata");
+  assert(firstAdd.result.structuredContent.kind === "betterquizzer.launch", "add_first_question should launch the widget");
+  assert(firstAdd.result.structuredContent.quizRevision === 1, "add_first_question should create revision 1");
+  assert(firstAdd.result.structuredContent.questionCount === 1, "add_first_question should launch exactly one question");
+  assert(firstAdd.result.structuredContent.declaredQuestionCount === 3, "add_first_question launch should preserve expected question count");
+  assert(firstAdd.result.structuredContent.packetProgress.complete === false, "add_first_question partial launch should not be complete");
+  assert(firstAdd.result.structuredContent.safeToPresentToUser === true, "add_first_question should clearly mark renderer-safe launch packets");
+  assert(firstAdd.result.structuredContent.launchStatus === "building", "partial add_first_question launch should report building status");
+  assert(firstAdd.result._meta?.ui?.route === "quiz", "add_first_question should carry widget launch metadata");
   assert(!JSON.stringify(firstAdd.result.structuredContent.warnings || []).includes("normalized"), "launch warnings should not include routine normalization messages");
   assert(Array.isArray(firstAdd.result.structuredContent.normalizations), "launch should expose normalizations separately from warnings");
 
@@ -313,7 +334,7 @@ async function runSmoke() {
   assert(typeof builderDraftId === "string" && builderDraftId.length > 0, "start_quiz did not return a draftId");
 
   await rpc("tools/call", {
-    name: "add_question",
+    name: "add_first_question",
     arguments: {
       draftId: builderDraftId,
       question: {

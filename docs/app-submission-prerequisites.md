@@ -86,7 +86,7 @@ Check that the MCP tool metadata includes:
 - an accurate widget description
 - current version/build strings
 
-The first accepted `add_question` should return the widget launch packet for assistant-authored quizzes. Later accepted questions should update the already-launched widget through token-scoped stored-draft polling without launching a second widget. Keep `open_quiz` as the idempotent recovery/reopen tool for staged drafts and stored quizzes, and keep `create_quiz` described as a compatibility opener for complete user-supplied quiz packets.
+The first accepted `add_first_question` should return the widget launch packet for assistant-authored quizzes. Later accepted `add_question` calls should update the already-launched widget through token-scoped stored-draft polling without advertising a widget output template or launching a second widget. Keep `open_quiz` as the idempotent recovery/reopen tool for staged drafts and stored quizzes, and keep `create_quiz` described as a compatibility opener for complete user-supplied quiz packets.
 
 ## 6. Prepare user-facing submission materials
 

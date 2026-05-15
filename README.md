@@ -4,7 +4,7 @@
 
 The public app/brand name is **BetterQuizzes**. The internal schema strings such as `betterquizzer.quiz`, `betterquizzer.launch`, and `betterquizzer.submission` are intentionally preserved for compatibility with existing saved quizzes, widget state, and regression tests.
 
-BetterQuizzes is an MCP-powered quiz widget. For assistant-authored quizzes, the model builds a draft with `start_quiz`, adds the first question with `add_question`, and that first accepted question launches the widget immediately. Later accepted questions are stored continuously so they fade into the same widget while it polls for new revisions. The widget collects answers, confidence, timing, completion state, and submission state, then returns a `SubmissionCapsule` for ChatGPT to grade.
+BetterQuizzes is an MCP-powered quiz widget. For assistant-authored quizzes, the model builds a draft with `start_quiz`, adds the first question with `add_first_question`, and that accepted first question launches exactly one widget. Later accepted questions use storage-only `add_question`, so they fade into the same widget while it polls for new revisions without opening duplicate widgets. The widget collects answers, confidence, timing, completion state, and submission state, then returns a `SubmissionCapsule` for ChatGPT to grade.
 
 ## V1 focus
 
@@ -63,7 +63,7 @@ npm run host:contract:strict
 
 ```text
 start_quiz
-  -> add_question for the first question
+  -> add_first_question for the first question
   -> opens BetterQuizzes widget
 add_question
   -> stores later questions while the widget polls

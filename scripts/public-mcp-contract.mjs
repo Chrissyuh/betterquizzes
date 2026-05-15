@@ -36,15 +36,17 @@ await rpc("initialize", { protocolVersion: "2025-11-25", clientInfo: { name: "pu
 const listed = await rpc("tools/list", {});
 const tools = listed.result?.tools ?? [];
 const names = tools.map((tool) => tool.name);
-for (const required of ["start_quiz", "add_question", "open_quiz", "submit_answers", "record_submission", "record_grade"]) {
+for (const required of ["start_quiz", "add_first_question", "add_question", "open_quiz", "submit_answers", "record_submission", "record_grade"]) {
   assert(names.includes(required), `public MCP tools/list missing ${required}`);
 }
 assert(!names.includes("finalize_quiz"), "public MCP tools/list must not advertise finalize_quiz");
 
 const startTool = tools.find((tool) => tool.name === "start_quiz");
+const firstQuestionTool = tools.find((tool) => tool.name === "add_first_question");
 const addTool = tools.find((tool) => tool.name === "add_question");
 assert(!startTool?._meta?.["openai/outputTemplate"], "start_quiz must not advertise a widget output template");
-assert(addTool?._meta?.["openai/outputTemplate"], "add_question must advertise the widget output template for first-question launch");
+assert(firstQuestionTool?._meta?.["openai/outputTemplate"], "add_first_question must advertise the widget output template for the one widget launch");
+assert(!addTool?._meta?.["openai/outputTemplate"], "add_question must not advertise a widget output template because later calls must not open duplicate widgets");
 
 const quizId = `public-contract-${Date.now().toString(36)}`;
 const started = await rpc("tools/call", {
@@ -53,28 +55,29 @@ const started = await rpc("tools/call", {
 });
 const draftId = started.result?.structuredContent?.draftId;
 assert(typeof draftId === "string" && draftId, "start_quiz did not return a draftId");
-assert(started.result?.structuredContent?.capabilities?.launchTool === "add_question", "start_quiz must name add_question as the normal launch tool");
+assert(started.result?.structuredContent?.capabilities?.launchTool === "add_first_question", "start_quiz must name add_first_question as the normal launch tool");
+assert(started.result?.structuredContent?.capabilities?.updateTool === "add_question", "start_quiz must name add_question as the later update tool");
 assert(started.result?.structuredContent?.capabilities?.recoveryTool === "open_quiz", "start_quiz must name open_quiz only as the recovery tool");
 
 const firstAdd = await rpc("tools/call", {
-  name: "add_question",
+  name: "add_first_question",
   arguments: {
     draftId,
     question: {
       id: "q1",
       type: "multiple_choice",
       prompt: "Which tool launches BetterQuizzes after this rebuild?",
-      choices: ["first add_question", "finalize_quiz"],
+      choices: ["add_first_question", "finalize_quiz"],
       answer: 0
     }
   }
 });
 const launch = firstAdd.result?.structuredContent;
-assert(launch?.kind === "betterquizzer.launch", "first add_question must return a BetterQuizzes launch packet");
-assert(launch.questionCount === 1, "first add_question launch should contain one question");
-assert(launch.packetProgress?.complete === false, "first add_question launch should be partial while more questions are expected");
-assert(launch.safeToPresentToUser === true, "first add_question launch must be safe to present");
-assert(firstAdd.result?._meta?.ui?.route === "quiz", "first add_question result must include widget launch metadata");
+assert(launch?.kind === "betterquizzer.launch", "add_first_question must return a BetterQuizzes launch packet");
+assert(launch.questionCount === 1, "add_first_question launch should contain one question");
+assert(launch.packetProgress?.complete === false, "add_first_question launch should be partial while more questions are expected");
+assert(launch.safeToPresentToUser === true, "add_first_question launch must be safe to present");
+assert(firstAdd.result?._meta?.ui?.route === "quiz", "add_first_question result must include widget launch metadata");
 
 const secondAdd = await rpc("tools/call", {
   name: "add_question",

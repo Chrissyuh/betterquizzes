@@ -43,7 +43,7 @@ async function runTrial() {
   const listed = await check("MCP tools/list", () => rpc("tools/list", {}), (value) => Array.isArray(value.result?.tools));
   const tools = listed.result.tools;
   const toolNames = tools.map((tool) => tool.name);
-  for (const required of ["start_quiz", "add_question", "open_quiz", "create_quiz", "submit_answers", "inspect_quiz"]) {
+  for (const required of ["start_quiz", "add_first_question", "add_question", "open_quiz", "create_quiz", "submit_answers", "inspect_quiz"]) {
     assert(toolNames.includes(required), `${required} missing from tools/list`);
   }
 
@@ -62,10 +62,10 @@ async function runTrial() {
   const quiz = makeTrialQuiz();
   const started = await check("MCP tools/call start_quiz", () => callTool("start_quiz", { title: quiz.title, topic: quiz.subject, quizId: quiz.quizId, expectedQuestionCount: quiz.questions.length }), (value) => typeof value.result?.structuredContent?.draftId === "string");
   const draftId = started.result.structuredContent.draftId;
-  const opened = await check(`MCP tools/call add_question ${quiz.questions[0].id}`, () => callTool("add_question", { draftId, question: quiz.questions[0] }), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch" && value.result?.structuredContent?.questionCount === 1);
-  assert(opened.result?.structuredContent?.quizId === quiz.quizId, "first add_question must launch the staged quiz");
-  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "first add_question must privately hydrate the widget with the staged quiz");
-  assert(opened.result?.structuredContent?.packetProgress?.complete === false, "early add_question launch should report partial generation");
+  const opened = await check(`MCP tools/call add_first_question ${quiz.questions[0].id}`, () => callTool("add_first_question", { draftId, question: quiz.questions[0] }), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch" && value.result?.structuredContent?.questionCount === 1);
+  assert(opened.result?.structuredContent?.quizId === quiz.quizId, "add_first_question must launch the staged quiz");
+  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "add_first_question must privately hydrate the widget with the staged quiz");
+  assert(opened.result?.structuredContent?.packetProgress?.complete === false, "early add_first_question launch should report partial generation");
 
   for (const question of quiz.questions.slice(1)) {
     await check(`MCP tools/call add_question ${question.id}`, () => callTool("add_question", { draftId, question }), (value) => value.result?.structuredContent?.ok === true);
@@ -226,6 +226,6 @@ function markdownReport(report) {
   lines.push("");
   lines.push(`## Next manual step`);
   lines.push("");
-  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz`, add the first question with `add_question` so it launches the widget, add remaining questions one at a time, then verify the launched widget can poll the token-scoped stored quiz and the LLM receives and grades the `SubmissionCapsule`.");
+  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz`, add the first question with `add_first_question` so it launches exactly one widget, add remaining questions one at a time with storage-only `add_question`, then verify the launched widget can poll the token-scoped stored quiz and the LLM receives and grades the `SubmissionCapsule`.");
   return lines.join("\n");
 }

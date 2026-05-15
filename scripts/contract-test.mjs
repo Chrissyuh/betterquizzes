@@ -27,8 +27,8 @@ assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input)
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "remote server must use shared builder guidance");
 assert(stableServer.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "stable stdio server must use shared builder guidance");
-assert(sharedGuidance.includes("start_quiz only creates a draft") && sharedGuidance.includes("first accepted add_question launches the widget"), "shared builder guidance must launch from the first accepted question");
-assert(sharedGuidance.includes("call add_question exactly once for the first question") && sharedGuidance.includes("Continue add_question/repair_question exactly once per later question"), "shared builder guidance must add one question at a time");
+assert(sharedGuidance.includes("start_quiz only creates a draft") && sharedGuidance.includes("add_first_question is the only builder tool that launches the widget"), "shared builder guidance must launch only from add_first_question");
+assert(sharedGuidance.includes("call add_first_question exactly once for the first question") && sharedGuidance.includes("Continue add_question/repair_question exactly once per later question"), "shared builder guidance must add one question at a time");
 assert(sharedGuidance.includes("Do not call open_quiz or finalize_quiz"), "shared builder guidance must avoid open_quiz/finalize_quiz in the normal path");
 assert(sharedGuidance.includes("Do not send question batches in start_quiz"), "shared builder guidance must reject start_quiz question batches");
 for (const [label, text] of [["remote server", server], ["stable stdio server", stableServer], ["SDK stdio server", sdkServer]]) {
@@ -68,8 +68,10 @@ assert(server.includes("quizLaunchAccessTokens") && server.includes('url.searchP
 assert(server.includes('"/api/quiz/latest"') && server.includes('source: "latest"'), "latest quiz endpoint may remain available for local/dev diagnostics");
 assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must not expose created quiz ids");
 assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");
-assert(server.includes('name: "add_question"') && server.includes("launches the widget immediately"), "add_question must launch from the first accepted question");
-assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must attach widget launch metadata for first-question launch");
+assert(server.includes('name: "add_first_question"') && server.includes("launch exactly one widget"), "add_first_question must be the sole builder launch tool");
+assert(server.includes('name: "add_question"') && server.includes("intentionally has no widget output template"), "add_question must be storage-only after launch");
+assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must retain status metadata");
+assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v61-bridge.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
 assert(server.includes("betterquizzes-v61-bridge.html"), "widget URI must cache-bust the bridge-first hydration rewrite");
 assert(server.includes("SUPPORTED_QUESTION_TYPE_VALUES") && server.includes("unsupportedQuestionTypes") && server.includes("multiple_select"), "builder tools must advertise supported/unsupported question types");
 assert(server.includes("add_question validates every question against the renderer-supported type") && server.includes("Unsupported question type:"), "add_question must reject unsupported types before storing");
@@ -90,7 +92,7 @@ assert(bridge.includes("openai:set_globals") && bridge.includes("latestOpenAiGlo
 assert(bridge.includes("subscribeHostQuizPayload"), "widget bridge must expose event-driven launch updates");
 assert(app.includes("subscribeHostQuizPayload") && app.includes("embeddedWidgetMode"), "app hydration must boot embedded MCP Apps iframes without depending on window.openai");
 
-assert(stage12Contract.includes("Normal assistant-authored quizzes are built with draft-only `start_quiz`") && stage12Contract.includes("first accepted `add_question` launch packet"), "Stage 12 docs must describe the first-question launch flow");
+assert(stage12Contract.includes("Normal assistant-authored quizzes are built with draft-only `start_quiz`") && stage12Contract.includes("`add_first_question` launch packet"), "Stage 12 docs must describe the first-question launch flow");
 assert(stage12Contract.includes("`create_quiz` remains a compact legacy compatibility opener"), "Stage 12 docs must demote create_quiz to legacy compatibility");
 assert(!stage12Contract.includes("create_quiz now exposes the exact nested QuizSpec v2 schema"), "Stage 12 docs must not restore stale full-schema create_quiz guidance");
 assert(!stage12Contract.includes("Complete create_quiz.inputSchema instead of quiz: object / any."), "Stage 12 docs must not claim create_quiz exposes the full contract");
@@ -99,7 +101,7 @@ assert(appSubmission.tools?.open_quiz?.annotations?.readOnlyHint === true, "subm
 assert(appSubmission.tools?.open_quiz?.annotations?.destructiveHint === false, "submission metadata must mark open_quiz non-destructive");
 assert(appSubmission.tools?.open_quiz?.annotations?.openWorldHint === false, "submission metadata must mark open_quiz non-open-world");
 assert(appSubmission.tools?.open_quiz?.annotations?.idempotentHint === true, "submission metadata must mark open_quiz idempotent");
-for (const toolName of ["start_quiz", "add_question", "repair_question"]) {
+for (const toolName of ["start_quiz", "add_first_question", "add_question", "repair_question"]) {
   const annotations = appSubmission.tools?.[toolName]?.annotations;
   assert(annotations?.readOnlyHint === true, `submission metadata must mark ${toolName} read-only`);
   assert(annotations?.destructiveHint === false, `submission metadata must mark ${toolName} non-destructive`);
@@ -107,10 +109,11 @@ for (const toolName of ["start_quiz", "add_question", "repair_question"]) {
 }
 
 assert(demoClient.includes("resources.result.resources[0].uri"), "demo client must read the advertised widget resource URI");
-assert(demoClient.includes('name: "add_question"') && demoClient.includes('betterquizzer.launch'), "demo client must cover first add_question launch");
+assert(demoClient.includes('name: "add_first_question"') && demoClient.includes('betterquizzer.launch'), "demo client must cover add_first_question launch");
 assert(!demoClient.includes("betterquizzer-stage12-1.html"), "demo client must not hardcode stale widget resource aliases");
 
-assert(trialProbe.includes('callTool("add_question"'), "host trial probe must exercise add_question staged launch path");
+assert(trialProbe.includes('callTool("add_first_question"'), "host trial probe must exercise add_first_question staged launch path");
+assert(trialProbe.includes('callTool("add_question"'), "host trial probe must exercise storage-only add_question updates");
 assert(trialProbe.includes('callTool("start_quiz"'), "host trial probe must open from start_quiz");
 assert(trialProbe.includes("quiz.questions.slice(1)"), "host trial probe must still add later questions after the widget is open");
 assert(trialProbe.includes("packetProgress?.complete === false"), "host trial probe must assert early launch is partial");
