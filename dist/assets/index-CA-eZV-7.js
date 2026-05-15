@@ -38657,6 +38657,8 @@ function QuizRunner({ quiz, startedAt, launchId, recoveryToken, widgetMode, onRe
 	const [submitAttempted, setSubmitAttempted] = (0, import_react.useState)(false);
 	const [error, setError] = (0, import_react.useState)(null);
 	const [skipMode, setSkipMode] = (0, import_react.useState)(null);
+	const knownQuestionIdsRef = (0, import_react.useRef)(new Set(quiz.questions.map((question) => question.id)));
+	const [arrivingQuestionIds, setArrivingQuestionIds] = (0, import_react.useState)(() => /* @__PURE__ */ new Set());
 	const displayPolicy = normalizeDisplayPolicy(quiz.displayPolicy);
 	normalizeGradingPolicy(quiz.gradingPolicy);
 	const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
@@ -38684,6 +38686,19 @@ function QuizRunner({ quiz, startedAt, launchId, recoveryToken, widgetMode, onRe
 	(0, import_react.useEffect)(() => {
 		setCurrentIndex((index) => clampIndex(index, quiz.questions.length));
 		setDrafts((previous) => keepDraftsForQuiz(previous, quiz));
+		const known = knownQuestionIdsRef.current;
+		const incoming = quiz.questions.map((question) => question.id).filter((id) => !known.has(id));
+		if (!incoming.length) return;
+		incoming.forEach((id) => known.add(id));
+		setArrivingQuestionIds((previous) => new Set([...previous, ...incoming]));
+		const timeout = window.setTimeout(() => {
+			setArrivingQuestionIds((previous) => {
+				const next = new Set(previous);
+				incoming.forEach((id) => next.delete(id));
+				return next;
+			});
+		}, 1800);
+		return () => window.clearTimeout(timeout);
 	}, [quiz]);
 	(0, import_react.useEffect)(() => {
 		if (!widgetMode) return;
@@ -38973,6 +38988,7 @@ function QuizRunner({ quiz, startedAt, launchId, recoveryToken, widgetMode, onRe
 				expectedQuestionCount: generationStatus?.expected,
 				drafts,
 				currentIndex,
+				arrivingQuestionIds,
 				displayPolicy,
 				activityPolicy,
 				revealRequiredStatus: submitAttempted,
@@ -38984,6 +39000,7 @@ function QuizRunner({ quiz, startedAt, launchId, recoveryToken, widgetMode, onRe
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuestionCard, {
 						question: current,
 						draft: drafts[current.id],
+						isArriving: arrivingQuestionIds.has(current.id),
 						displayPolicy,
 						activityPolicy,
 						revealRequiredStatus: submitAttempted,
@@ -39112,7 +39129,7 @@ function SkipQuizScreen({ mode, widgetMode, title, answeredCount, totalCount, su
 		})
 	});
 }
-function QuestionNav({ questions, expectedQuestionCount, drafts, currentIndex, displayPolicy, activityPolicy, revealRequiredStatus, onSelect }) {
+function QuestionNav({ questions, expectedQuestionCount, drafts, currentIndex, arrivingQuestionIds, displayPolicy, activityPolicy, revealRequiredStatus, onSelect }) {
 	const plannedCount = Math.max(questions.length, Math.floor(expectedQuestionCount ?? questions.length));
 	const placeholderCount = Math.max(0, plannedCount - questions.length);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
@@ -39126,7 +39143,7 @@ function QuestionNav({ questions, expectedQuestionCount, drafts, currentIndex, d
 				const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy, revealRequiredStatus);
 				return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
-					className: `dot ${index === currentIndex ? "active" : ""} ${status}`,
+					className: `dot ${index === currentIndex ? "active" : ""} ${arrivingQuestionIds.has(question.id) ? "new-question" : ""} ${status}`,
 					onClick: () => onSelect(index),
 					children: index + 1
 				}, question.id);
@@ -39137,14 +39154,14 @@ function QuestionNav({ questions, expectedQuestionCount, drafts, currentIndex, d
 		})]
 	});
 }
-function QuestionCard({ question, draft, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }) {
+function QuestionCard({ question, draft, isArriving = false, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }) {
 	const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy, revealRequiredStatus);
 	const required = isQuestionRequired(question, activityPolicy);
 	const answerComplete = isQuestionAnswerComplete(question, draft);
 	const confidenceRequired = isConfidenceRequiredForQuestion(question, displayPolicy);
 	const confidenceValue = answerComplete && confidenceRequired ? normalizeConfidence(draft?.confidence) : void 0;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-		className: `card question-card ${status}`,
+		className: `card question-card ${isArriving ? "new-question" : ""} ${status}`,
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "question-header",

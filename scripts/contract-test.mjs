@@ -20,18 +20,22 @@ assert(server.includes('outputSchema: BUILDER_OUTPUT_SCHEMA'), "builder tools mu
 assert(!server.includes('name: "finalize_quiz"'), "finalize_quiz must not be advertised as a normal tool");
 assert(server.includes('name: "open_quiz"'), "open_quiz must be registered");
 assert(server.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "open_quiz must attach widget launch metadata");
-assert(server.includes("Do not call finalize_quiz for assistant-authored quizzes"), "model instructions must remove finalize_quiz from the normal creation path");
+assert(server.includes("Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes"), "model instructions must remove open_quiz/finalize_quiz from the normal creation path");
 assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input);'), "hidden finalize_quiz compatibility handler must remain for cached old tool callers");
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "remote server must use shared builder guidance");
 assert(stableServer.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "stable stdio server must use shared builder guidance");
-assert(sharedGuidance.includes("start_quiz only creates a draft") && sharedGuidance.includes("then call open_quiz once"), "shared builder guidance must launch only after the first accepted question");
+assert(sharedGuidance.includes("start_quiz only creates a draft") && sharedGuidance.includes("first accepted add_question launches the widget"), "shared builder guidance must launch from the first accepted question");
 assert(sharedGuidance.includes("call add_question exactly once for the first question") && sharedGuidance.includes("Continue add_question/repair_question exactly once per later question"), "shared builder guidance must add one question at a time");
-assert(sharedGuidance.includes("Do not call finalize_quiz"), "shared builder guidance must avoid finalize_quiz");
+assert(sharedGuidance.includes("Do not call open_quiz or finalize_quiz"), "shared builder guidance must avoid open_quiz/finalize_quiz in the normal path");
 assert(sharedGuidance.includes("Do not send question batches in start_quiz"), "shared builder guidance must reject start_quiz question batches");
 for (const [label, text] of [["remote server", server], ["stable stdio server", stableServer], ["SDK stdio server", sdkServer]]) {
-  assert(text.includes('orderingBehavior.direction') && text.includes('"top_to_bottom"'), `${label} must instruct top_to_bottom ordering direction`);
-  assert(text.includes("topLabel") && text.includes("bottomLabel"), `${label} must put ordering meaning in top/bottom labels`);
+  if (label === "SDK stdio server") {
+    assert(text.includes('import "./betterquizzes-app-server.mjs"'), "SDK stdio server must route through the canonical stdio server");
+  } else {
+    assert(text.includes('orderingBehavior.direction') && text.includes('"top_to_bottom"'), `${label} must instruct top_to_bottom ordering direction`);
+    assert(text.includes("topLabel") && text.includes("bottomLabel"), `${label} must put ordering meaning in top/bottom labels`);
+  }
 }
 assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");
@@ -62,8 +66,8 @@ assert(server.includes("quizLaunchAccessTokens") && server.includes('url.searchP
 assert(server.includes('"/api/quiz/latest"') && server.includes('source: "latest"'), "latest quiz endpoint may remain available for local/dev diagnostics");
 assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must not expose created quiz ids");
 assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");
-assert(server.includes('name: "add_question"') && server.includes("call open_quiz once to launch the widget"), "add_question must route first-question launch through open_quiz");
-assert(!server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must not attach widget launch metadata");
+assert(server.includes('name: "add_question"') && server.includes("launches the widget immediately"), "add_question must launch from the first accepted question");
+assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must attach widget launch metadata for first-question launch");
 assert(server.includes("SUPPORTED_QUESTION_TYPE_VALUES") && server.includes("unsupportedQuestionTypes") && server.includes("multiple_select"), "builder tools must advertise supported/unsupported question types");
 assert(server.includes("add_question validates every question against the renderer-supported type") && server.includes("Unsupported question type:"), "add_question must reject unsupported types before storing");
 assert(server.includes("safeToPresentToUser") && server.includes("launchStatus"), "launch packets must expose clear model-facing readiness flags");
@@ -79,7 +83,7 @@ assert(!server.includes("create_quiz exactly once"), "legacy create_quiz exactly
 assert(!server.includes("destructiveHint: true"), "no tool should be marked destructive");
 assert(!server.includes("openWorldHint: true"), "no tool should be marked open-world");
 
-assert(stage12Contract.includes("Normal assistant-authored quizzes are built with draft-only `start_quiz`"), "Stage 12 docs must describe the staged builder flow");
+assert(stage12Contract.includes("Normal assistant-authored quizzes are built with draft-only `start_quiz`") && stage12Contract.includes("first accepted `add_question` launch packet"), "Stage 12 docs must describe the first-question launch flow");
 assert(stage12Contract.includes("`create_quiz` remains a compact legacy compatibility opener"), "Stage 12 docs must demote create_quiz to legacy compatibility");
 assert(!stage12Contract.includes("create_quiz now exposes the exact nested QuizSpec v2 schema"), "Stage 12 docs must not restore stale full-schema create_quiz guidance");
 assert(!stage12Contract.includes("Complete create_quiz.inputSchema instead of quiz: object / any."), "Stage 12 docs must not claim create_quiz exposes the full contract");
@@ -96,7 +100,7 @@ for (const toolName of ["start_quiz", "add_question", "repair_question"]) {
 }
 
 assert(demoClient.includes("resources.result.resources[0].uri"), "demo client must read the advertised widget resource URI");
-assert(demoClient.includes('name: "open_quiz"'), "demo client must still cover explicit reopen compatibility");
+assert(demoClient.includes('name: "add_question"') && demoClient.includes('betterquizzer.launch'), "demo client must cover first add_question launch");
 assert(!demoClient.includes("betterquizzer-stage12-1.html"), "demo client must not hardcode stale widget resource aliases");
 
 assert(trialProbe.includes('callTool("add_question"'), "host trial probe must exercise add_question staged launch path");
@@ -109,9 +113,6 @@ assert(trialProbe.includes("launchId: opened.result.structuredContent.launchId")
 assert(localHostTrial.includes("const probeArgs = process.argv.slice(2)"), "local host trial wrapper must preserve probe CLI flags");
 assert(localHostTrial.includes('["scripts/trial-probe.mjs", ...probeArgs]'), "local host trial wrapper must forward probe CLI flags");
 
-assert(sdkServer.includes('"openai/widgetDomain": domain'), "SDK widget resource must advertise openai/widgetDomain");
-assert(sdkServer.includes("quizId: z.string().optional()"), "SDK submit schema must allow fallback submissions without top-level quizId");
-assert(sdkServer.includes("}).passthrough()).optional()"), "SDK submit schema must allow fallback submissions without top-level answers");
-assert(sdkServer.includes("const effectiveAnswers = Array.isArray(args.answers) ? args.answers : providedSubmission?.answers"), "SDK submit runtime must read fallback submission answers");
+assert(sdkServer.includes('import "./betterquizzes-app-server.mjs"'), "SDK stdio command must use the canonical first-question launch contract");
 
 console.log("V1 MCP/App contract static checks passed.");

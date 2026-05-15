@@ -18,8 +18,8 @@ Improve the implementation foundation:
 
 ```text
 Official SDK dependencies added
-Official SDK stdio entrypoint added
-Zod schemas used for SDK tool inputs
+SDK compatibility command preserved
+Canonical stdio server reused to prevent tool-contract drift
 MCP Apps widget metadata preserved
 Proven HTTP /mcp server kept as deployment path
 Stage 9 host-trial reports kept
@@ -37,10 +37,10 @@ The Stage 9 handmade HTTP server already passes:
 Replacing it all at once would risk breaking the deployable path before the real host connection test. Stage 11.1 therefore uses a safer migration pattern:
 
 1. Add the official SDK dependencies.
-2. Add an SDK-based stdio server.
+2. Preserve an SDK compatibility command.
 3. Keep the proven HTTP server unchanged except for Stage 11.1 metadata.
 4. Add SDK dependency/alignment tests.
-5. Move HTTP transport to the official SDK only after a real host demands it or after the stdio SDK path proves stable.
+5. Move HTTP transport to the official SDK only after a real host demands it and the canonical tool contract can be shared without drift.
 
 ## New SDK entrypoint
 
@@ -48,18 +48,7 @@ Replacing it all at once would risk breaking the deployable path before the real
 npm run mcp:sdk:stdio
 ```
 
-This starts `mcp/sdk-stdio-server.mjs`, which uses:
-
-- `McpServer` from `@modelcontextprotocol/sdk/server/mcp.js`
-- `StdioServerTransport` from `@modelcontextprotocol/sdk/server/stdio.js`
-- `zod` input schemas
-
-It registers the same core primitives:
-
-- `create_quiz`
-- `submit_answers`
-- `inspect_quiz`
-- `ui://widget/betterquizzer-stage11.html`
+This starts `mcp/sdk-stdio-server.mjs`, which now delegates to the canonical BetterQuizzes stdio server. The command remains available, but it no longer carries a separate stale tool implementation.
 
 ## New Stage 11.1 checks
 

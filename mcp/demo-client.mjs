@@ -62,9 +62,8 @@ async function main() {
     }
   });
   const draftId = started.result.structuredContent.draftId;
-  const firstAdd = await request("tools/call", { name: "add_question", arguments: { draftId, question: quiz.questions[0] } });
-  if (firstAdd.result.structuredContent.questionCount !== 1) throw new Error("First add_question did not store exactly one question.");
-  const created = await request("tools/call", { name: "open_quiz", arguments: {} });
+  const created = await request("tools/call", { name: "add_question", arguments: { draftId, question: quiz.questions[0] } });
+  if (created.result.structuredContent.kind !== "betterquizzer.launch" || created.result.structuredContent.questionCount !== 1) throw new Error("First add_question did not launch exactly one question.");
   for (const question of quiz.questions.slice(1)) {
     await request("tools/call", { name: "add_question", arguments: { draftId, question } });
   }

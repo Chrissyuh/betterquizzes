@@ -62,11 +62,10 @@ async function runTrial() {
   const quiz = makeTrialQuiz();
   const started = await check("MCP tools/call start_quiz", () => callTool("start_quiz", { title: quiz.title, topic: quiz.subject, quizId: quiz.quizId, expectedQuestionCount: quiz.questions.length }), (value) => typeof value.result?.structuredContent?.draftId === "string");
   const draftId = started.result.structuredContent.draftId;
-  const firstAdd = await check(`MCP tools/call add_question ${quiz.questions[0].id}`, () => callTool("add_question", { draftId, question: quiz.questions[0] }), (value) => value.result?.structuredContent?.ok === true && value.result?.structuredContent?.questionCount === 1 && !value.result?.structuredContent?.launch);
-  assert(firstAdd.result?.structuredContent?.quizId === quiz.quizId, "first add_question must store the staged quiz before launch");
-  const opened = await check("MCP tools/call open_quiz after first question", () => callTool("open_quiz", {}), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch" && value.result?.structuredContent?.questionCount === 1);
-  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "open_quiz must privately hydrate the widget with the staged quiz");
-  assert(opened.result?.structuredContent?.packetProgress?.complete === false, "early open_quiz launch should report partial generation");
+  const opened = await check(`MCP tools/call add_question ${quiz.questions[0].id}`, () => callTool("add_question", { draftId, question: quiz.questions[0] }), (value) => value.result?.structuredContent?.kind === "betterquizzer.launch" && value.result?.structuredContent?.questionCount === 1);
+  assert(opened.result?.structuredContent?.quizId === quiz.quizId, "first add_question must launch the staged quiz");
+  assert(opened.result?._meta?.quiz?.quizId === quiz.quizId, "first add_question must privately hydrate the widget with the staged quiz");
+  assert(opened.result?.structuredContent?.packetProgress?.complete === false, "early add_question launch should report partial generation");
 
   for (const question of quiz.questions.slice(1)) {
     await check(`MCP tools/call add_question ${question.id}`, () => callTool("add_question", { draftId, question }), (value) => value.result?.structuredContent?.ok === true);
@@ -227,6 +226,6 @@ function markdownReport(report) {
   lines.push("");
   lines.push(`## Next manual step`);
   lines.push("");
-  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz`, add the first question with `add_question`, call `open_quiz`, add remaining questions one at a time, then verify the launched widget can poll the token-scoped stored quiz and the LLM receives and grades the `SubmissionCapsule`.");
+  lines.push("Use the public `/mcp` URL in a compatible host/connector setup, build with `start_quiz`, add the first question with `add_question` so it launches the widget, add remaining questions one at a time, then verify the launched widget can poll the token-scoped stored quiz and the LLM receives and grades the `SubmissionCapsule`.");
   return lines.join("\n");
 }

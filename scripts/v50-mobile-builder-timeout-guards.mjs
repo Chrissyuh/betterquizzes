@@ -15,7 +15,7 @@ const remote = read("mcp/remote-server.mjs");
 const sharedGuidance = read("mcp/shared-authoring-guidance.mjs");
 const guidanceSurface = remote + "\n" + sharedGuidance;
 
-assert(guidanceSurface.includes("call add_question/repair_question exactly once per question") && guidanceSurface.includes("then call open_quiz once"), "one-at-a-time builder launch guidance missing");
+assert(guidanceSurface.includes("Continue add_question/repair_question exactly once per later question") && guidanceSurface.includes("first accepted add_question launches the widget"), "one-at-a-time first-question builder launch guidance missing");
 assert(guidanceSurface.includes("Do not send question batches in start_quiz"), "start_quiz batch rejection guidance missing");
 assert(guidanceSurface.includes("Do not send chat progress/check-in messages while authoring"), "quiet model instructions missing");
 assert(!remote.includes("Optional bulk question list"), "start_quiz must not advertise bulk preload schema");
@@ -25,7 +25,7 @@ assert(remote.includes("start_quiz with expectedQuestionCount creates a draft on
 assert(!remote.includes("draft,"), "builder tools should not echo full growing draft objects");
 assert(!remote.includes("draft: existingDraft"), "add_question still echoes full growing draft");
 assert(remote.includes("Required input shape: { draftId, question }"), "add_question description still unclear");
-assert(!remote.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must not carry widget launch metadata");
+assert(remote.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must carry widget launch metadata for first-question launch");
 assert(remote.toLowerCase().includes("accepted questions are stored continuously"), "model staged update rule missing");
 
 if (failures.length) {

@@ -5,7 +5,7 @@
 Stage 11.1 adopts a hybrid migration:
 
 - Add official MCP SDK dependencies.
-- Add an official SDK stdio server.
+- Keep `mcp:sdk:stdio` as a compatibility command, but route it through the canonical BetterQuizzes stdio server so it cannot advertise a stale tool contract.
 - Keep the proven handwritten HTTP `/mcp` server for deployment and host-trial testing.
 - Keep `QuizSpec` and `SubmissionCapsule` unchanged.
 

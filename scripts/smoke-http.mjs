@@ -105,7 +105,7 @@ async function runSmoke() {
   assert(addTool?.inputSchema?.properties?.question, "add_question schema missing question");
   assert(addTool?.inputSchema?.required?.includes("question"), "add_question schema should require question");
   assert((addTool?.inputSchema?.properties?.question?.description || "").includes("multi_select"), "add_question question schema should advertise supported types");
-  assert(!addTool?._meta?.["openai/outputTemplate"], "add_question should not advertise widget output template");
+  assert(addTool?._meta?.["openai/outputTemplate"], "add_question should advertise widget output template for first-question launch");
   assert(addTool?.annotations?.readOnlyHint === true, "add_question should be read-only to avoid confirmation prompts");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
   assert(repairTool?.inputSchema?.properties?.repairedQuestion, "repair_question schema missing repairedQuestion");
@@ -168,11 +168,16 @@ async function runSmoke() {
       }
     }
   });
-  assert(firstAdd.result.structuredContent.ok === true, "first add_question should store one question");
-  assert(firstAdd.result.structuredContent.questionCount === 1, "first add_question should store exactly one question before open_quiz");
-  assert(!firstAdd.result.structuredContent.launch, "first add_question should not return a nested launch packet");
-  assert(!firstAdd.result._meta?.["openai/outputTemplate"], "first add_question should not carry widget metadata");
-  assert(firstAdd.result.structuredContent.supportedQuestionTypes?.includes("ordering"), "add_question should preserve machine-readable capabilities");
+  assert(firstAdd.result.structuredContent.kind === "betterquizzer.launch", "first add_question should launch the widget");
+  assert(firstAdd.result.structuredContent.quizRevision === 1, "first add_question should create revision 1");
+  assert(firstAdd.result.structuredContent.questionCount === 1, "first add_question should launch exactly one question");
+  assert(firstAdd.result.structuredContent.declaredQuestionCount === 3, "first add_question launch should preserve expected question count");
+  assert(firstAdd.result.structuredContent.packetProgress.complete === false, "first add_question partial launch should not be complete");
+  assert(firstAdd.result.structuredContent.safeToPresentToUser === true, "first add_question should clearly mark renderer-safe launch packets");
+  assert(firstAdd.result.structuredContent.launchStatus === "building", "partial first add_question launch should report building status");
+  assert(firstAdd.result._meta?.ui?.route === "quiz", "first add_question should carry widget launch metadata");
+  assert(!JSON.stringify(firstAdd.result.structuredContent.warnings || []).includes("normalized"), "launch warnings should not include routine normalization messages");
+  assert(Array.isArray(firstAdd.result.structuredContent.normalizations), "launch should expose normalizations separately from warnings");
 
   const unsupportedAdd = await rpc("tools/call", {
     name: "add_question",
@@ -196,28 +201,21 @@ async function runSmoke() {
     name: "open_quiz",
     arguments: {}
   });
-  assert(opened.result.structuredContent.kind === "betterquizzer.launch", "open_quiz did not return a launch packet");
-  assert(opened.result.structuredContent.declaredQuestionCount === 3, "open_quiz should preserve expected question count");
-  assert(opened.result.structuredContent.questionCount === 1, "open_quiz should launch available questions");
-  assert(opened.result.structuredContent.packetProgress.complete === false, "open_quiz partial launch should not be complete");
-  assert(opened.result.structuredContent.safeToPresentToUser === true, "open_quiz should clearly mark renderer-safe launch packets");
-  assert(opened.result.structuredContent.launchStatus === "building", "partial open_quiz launch should report building status");
-  assert(!JSON.stringify(opened.result.structuredContent.warnings || []).includes("normalized"), "launch warnings should not include routine normalization messages");
-  assert(Array.isArray(opened.result.structuredContent.normalizations), "launch should expose normalizations separately from warnings");
-  const stagedRecoveryToken = opened.result._meta?.recoveryToken;
-  assert(typeof stagedRecoveryToken === "string" && stagedRecoveryToken.length > 10, "open_quiz must provide a private recovery token in metadata");
-  assert(opened.result.structuredContent.recoveryToken === stagedRecoveryToken, "open_quiz structured content must expose recovery token for widget polling fallback");
+  assert(opened.result.structuredContent.launchId === firstAdd.result.structuredContent.launchId, "open_quiz recovery should replay the first add_question launch revision");
+  const stagedRecoveryToken = firstAdd.result._meta?.recoveryToken;
+  assert(typeof stagedRecoveryToken === "string" && stagedRecoveryToken.length > 10, "first add_question must provide a private recovery token in metadata");
+  assert(firstAdd.result.structuredContent.recoveryToken === stagedRecoveryToken, "first add_question structured content must expose recovery token for widget polling fallback");
   await getJsonAllowStatus("/api/quiz/staged-builder-smoke", 403);
   const stagedAfterOpen = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedAfterOpen.quizId === "staged-builder-smoke", "token-scoped quiz endpoint should expose the opened staged quiz");
   assert(stagedAfterOpen.quiz.questions.length === 1, "token-scoped quiz endpoint should expose the current staged revision");
-  const stagedViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(opened.result.structuredContent.launchId));
+  const stagedViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(firstAdd.result.structuredContent.launchId));
   assert(stagedViaLaunchId.quiz.questions.length === 1, "launchId-scoped quiz endpoint should expose the opened staged quiz when recoveryToken metadata is unavailable");
   const replayedOpen = await rpc("tools/call", {
     name: "open_quiz",
     arguments: {}
   });
-  assert(replayedOpen.result.structuredContent.launchId === opened.result.structuredContent.launchId, "open_quiz should replay a stable launchId for the same revision");
+  assert(replayedOpen.result.structuredContent.launchId === firstAdd.result.structuredContent.launchId, "open_quiz should replay a stable launchId for the same revision");
 
   const legacyFinalizeLaunch = await rpc("tools/call", {
     name: "finalize_quiz",
@@ -244,7 +242,9 @@ async function runSmoke() {
       }
     }
   });
-  assert(secondAdd.result.structuredContent.quizRevision > opened.result.structuredContent.quizRevision, "later add_question should advance the stored quiz revision after open_quiz");
+  assert(secondAdd.result.structuredContent.ok === true, "later add_question should be storage-only");
+  assert(!secondAdd.result.structuredContent.kind, "later add_question should not return a launch packet");
+  assert(secondAdd.result.structuredContent.quizRevision > firstAdd.result.structuredContent.quizRevision, "later add_question should advance the stored quiz revision after first launch");
 
   const thirdAdd = await rpc("tools/call", {
     name: "add_question",
@@ -274,7 +274,7 @@ async function runSmoke() {
   const stagedStored = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
   assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
-  const stagedStoredViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(opened.result.structuredContent.launchId));
+  const stagedStoredViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(firstAdd.result.structuredContent.launchId));
   assert(stagedStoredViaLaunchId.quiz.questions.length === 3, "original launchId should authorize polling newer quiz revisions after later add_question calls");
   const stagedAfterUpdates = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedAfterUpdates.quiz.questions.length === 3, "token-scoped quiz endpoint should update as staged questions are added");

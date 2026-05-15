@@ -9,21 +9,8 @@ if (missingDeps.length) throw new Error(`Missing SDK dependencies: ${missingDeps
 const sdkServerPath = "mcp/sdk-stdio-server.mjs";
 if (!existsSync(sdkServerPath)) throw new Error(`${sdkServerPath} missing`);
 const sdkServer = readFileSync(sdkServerPath, "utf8");
-for (const required of [
-  "@modelcontextprotocol/sdk/server/mcp.js",
-  "@modelcontextprotocol/sdk/server/stdio.js",
-  "server.registerTool",
-  "server.registerResource",
-  "openai/outputTemplate",
-  "openai/widgetAccessible",
-  "betterquizzer.submission",
-  "launchId: z.string().optional()",
-  "quizRevision: z.number().int().min(0).optional()"
-]) {
-  if (!sdkServer.includes(required)) throw new Error(`SDK server missing expected pattern: ${required}`);
-}
-if (!sdkServer.includes('...(typeof args.launchId === "string"') || !sdkServer.includes("Number.isInteger(args.quizRevision)") || !sdkServer.includes("launchId: value.launchId || args.launchId")) {
-  throw new Error("SDK submit path must preserve launchId and quizRevision in SubmissionCapsule output.");
+if (!sdkServer.includes('import "./betterquizzes-app-server.mjs"')) {
+  throw new Error("SDK stdio command must route through the canonical BetterQuizzes stdio server to avoid tool-contract drift.");
 }
 
 const remoteServer = readFileSync("mcp/remote-server.mjs", "utf8");
@@ -41,5 +28,5 @@ console.log(JSON.stringify({
   stage: "V1",
   migration: "hard-polish",
   stableHttpTransport: "preserved",
-  checked: ["dependencies", "sdk stdio entrypoint", "tool/resource metadata", "V1 resource URI"]
+  checked: ["dependencies", "sdk stdio canonical shim", "tool/resource metadata", "V1 resource URI"]
 }, null, 2));

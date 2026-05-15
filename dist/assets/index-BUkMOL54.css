@@ -2434,6 +2434,11 @@ main,
   animation: bq-planned-question-rest 1.8s ease-in-out infinite;
 }
 
+.question-dots .new-question,
+.question-card.new-question {
+  animation: bq-question-arrival 1.1s ease-out both;
+}
+
 @keyframes bq-question-button-materialize {
   from {
     opacity: .62;
@@ -2451,6 +2456,21 @@ main,
   }
   50% {
     opacity: 1;
+  }
+}
+
+@keyframes bq-question-arrival {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(.98);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 

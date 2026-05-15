@@ -793,6 +793,8 @@ function QuizRunner({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [skipMode, setSkipMode] = useState<"prompt" | "skipped" | null>(null);
+  const knownQuestionIdsRef = useRef<Set<string>>(new Set(quiz.questions.map((question) => question.id)));
+  const [arrivingQuestionIds, setArrivingQuestionIds] = useState<Set<string>>(() => new Set());
   const displayPolicy = normalizeDisplayPolicy(quiz.displayPolicy);
   const gradingPolicy = normalizeGradingPolicy(quiz.gradingPolicy);
   const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
@@ -820,6 +822,19 @@ function QuizRunner({
   useEffect(() => {
     setCurrentIndex((index) => clampIndex(index, quiz.questions.length));
     setDrafts((previous) => keepDraftsForQuiz(previous, quiz));
+    const known = knownQuestionIdsRef.current;
+    const incoming = quiz.questions.map((question) => question.id).filter((id) => !known.has(id));
+    if (!incoming.length) return;
+    incoming.forEach((id) => known.add(id));
+    setArrivingQuestionIds((previous) => new Set([...previous, ...incoming]));
+    const timeout = window.setTimeout(() => {
+      setArrivingQuestionIds((previous) => {
+        const next = new Set(previous);
+        incoming.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, 1800);
+    return () => window.clearTimeout(timeout);
   }, [quiz]);
 
   useEffect(() => {
@@ -1069,10 +1084,10 @@ function QuizRunner({
         ) : null}
       </section>
 
-      {shouldShowQuestionNav ? <QuestionNav questions={quiz.questions} expectedQuestionCount={generationStatus?.expected} drafts={drafts} currentIndex={currentIndex} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={setCurrentIndex} /> : null}
+      {shouldShowQuestionNav ? <QuestionNav questions={quiz.questions} expectedQuestionCount={generationStatus?.expected} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={arrivingQuestionIds} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={setCurrentIndex} /> : null}
 
       <section className="main-column">
-        <QuestionCard question={current} draft={drafts[current.id]} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
+        <QuestionCard question={current} draft={drafts[current.id]} isArriving={arrivingQuestionIds.has(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
         {submitAttempted && error ? <div className="notice-box" role="status">{error}</div> : null}
         <div className={`actions split compact-actions ${quiz.questions.length <= 1 ? "single-question-actions" : ""}`}>
           {quiz.questions.length > 1 ? (
@@ -1156,6 +1171,7 @@ function QuestionNav({
   expectedQuestionCount,
   drafts,
   currentIndex,
+  arrivingQuestionIds,
   displayPolicy,
   activityPolicy,
   revealRequiredStatus,
@@ -1165,6 +1181,7 @@ function QuestionNav({
   expectedQuestionCount?: number;
   drafts: Record<string, DraftAnswer>;
   currentIndex: number;
+  arrivingQuestionIds: Set<string>;
   displayPolicy: DisplayPolicy;
   activityPolicy: ActivityPolicy;
   revealRequiredStatus: boolean;
@@ -1178,7 +1195,7 @@ function QuestionNav({
       <div className="question-dots">
         {questions.map((question, index) => {
           const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy, revealRequiredStatus);
-          return <button key={question.id} type="button" className={`dot ${index === currentIndex ? "active" : ""} ${status}`} onClick={() => onSelect(index)}>{index + 1}</button>;
+          return <button key={question.id} type="button" className={`dot ${index === currentIndex ? "active" : ""} ${arrivingQuestionIds.has(question.id) ? "new-question" : ""} ${status}`} onClick={() => onSelect(index)}>{index + 1}</button>;
         })}
         {Array.from({ length: placeholderCount }, (_, index) => (
           <span key={`planned-${questions.length + index + 1}`} className="dot planned-question" aria-hidden="true" />
@@ -1188,14 +1205,14 @@ function QuestionNav({
   );
 }
 
-function QuestionCard({ question, draft, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+function QuestionCard({ question, draft, isArriving = false, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; isArriving?: boolean; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
   const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy, revealRequiredStatus);
   const required = isQuestionRequired(question, activityPolicy);
   const answerComplete = isQuestionAnswerComplete(question, draft);
   const confidenceRequired = isConfidenceRequiredForQuestion(question, displayPolicy);
   const confidenceValue = answerComplete && confidenceRequired ? normalizeConfidence(draft?.confidence) : undefined;
   return (
-    <section className={`card question-card ${status}`}>
+    <section className={`card question-card ${isArriving ? "new-question" : ""} ${status}`}>
       <div className="question-header">
         {!required ? <span className="question-meta-label">Optional</span> : null}
       </div>
