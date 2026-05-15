@@ -1198,7 +1198,7 @@ function listedWidgetResources() {
 
 
 const PORT = Number(process.env.PORT || 8787);
-const HOST = process.env.HOST || (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
+const HOST = process.env.HOST || (process.env.PORT ? "0.0.0.0" : undefined);
 const DIST_DIR = join(process.cwd(), "dist");
 
 
@@ -1988,7 +1988,8 @@ try {
 server.listen(PORT, HOST, () => {
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : PORT;
-  const localOrigin = `http://${HOST}:${actualPort}`;
+  const displayHost = HOST || "127.0.0.1";
+  const localOrigin = `http://${displayHost}:${actualPort}`;
   const publicOrigin = cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL);
   const started = { event: "betterquizzer-http-ready", version: VERSION, resourceUri: RESOURCE_URI, url: localOrigin, mcpEndpoint: `${localOrigin}/mcp`, publicMcpEndpoint: publicOrigin ? `${publicOrigin}/mcp` : undefined };
   console.log(JSON.stringify(started));
