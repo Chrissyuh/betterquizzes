@@ -40,7 +40,8 @@ const BUILDER_CAPABILITIES = {
   supportsExplanations: true,
   supportsAnswerKeys: true,
   supportsPartialCredit: false,
-  launchTool: "open_quiz",
+  launchTool: "add_question",
+  recoveryTool: "open_quiz",
   validationPolicy: BUILDER_VALIDATION_POLICY
 };
 

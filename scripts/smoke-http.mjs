@@ -153,6 +153,8 @@ async function runSmoke() {
   assert(stagedStarted.result.structuredContent.expectedQuestionCount === 3, "start_quiz should preserve expected question count");
   assert(stagedStarted.result.structuredContent.supportedQuestionTypes?.includes("multi_select"), "start_quiz should advertise supported question types");
   assert(stagedStarted.result.structuredContent.capabilities?.unsupportedQuestionTypes?.includes("multiple_select"), "start_quiz should advertise unsupported aliases");
+  assert(stagedStarted.result.structuredContent.capabilities?.launchTool === "add_question", "start_quiz capabilities should name add_question as the normal launch tool");
+  assert(stagedStarted.result.structuredContent.capabilities?.recoveryTool === "open_quiz", "start_quiz capabilities should name open_quiz only as the recovery tool");
   assert(stagedStarted.result.structuredContent.workflow?.some((step) => step.includes("open_quiz")), "start_quiz should return the canonical workflow");
   assert(stagedStarted.result.structuredContent.validationPolicy?.includes("add_question validates"), "start_quiz should expose validation policy");
   const firstAdd = await rpc("tools/call", {

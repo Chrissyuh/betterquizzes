@@ -53,6 +53,8 @@ const started = await rpc("tools/call", {
 });
 const draftId = started.result?.structuredContent?.draftId;
 assert(typeof draftId === "string" && draftId, "start_quiz did not return a draftId");
+assert(started.result?.structuredContent?.capabilities?.launchTool === "add_question", "start_quiz must name add_question as the normal launch tool");
+assert(started.result?.structuredContent?.capabilities?.recoveryTool === "open_quiz", "start_quiz must name open_quiz only as the recovery tool");
 
 const firstAdd = await rpc("tools/call", {
   name: "add_question",
