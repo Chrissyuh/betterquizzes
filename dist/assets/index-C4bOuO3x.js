@@ -37333,11 +37333,32 @@ function getHostQuizPayload() {
 	}
 	return null;
 }
+function getHostLaunchSummary() {
+	installHostBridgeListeners();
+	const launchPackets = getBridgeLaunchPackets(getOpenAiBridge());
+	for (const launch of launchPackets) {
+		const quizId = typeof launch.quizId === "string" ? launch.quizId : void 0;
+		if (!quizId) continue;
+		return {
+			kind: "betterquizzer.launch",
+			quizId,
+			launchId: typeof launch.launchId === "string" ? launch.launchId : void 0,
+			recoveryToken: typeof launch.recoveryToken === "string" ? launch.recoveryToken : void 0,
+			quizRevision: typeof launch.quizRevision === "number" ? launch.quizRevision : void 0,
+			declaredQuestionCount: typeof launch.declaredQuestionCount === "number" ? launch.declaredQuestionCount : getExpectedQuestionCount(launch) ?? void 0,
+			questionCount: typeof launch.questionCount === "number" ? launch.questionCount : void 0,
+			uploadProgress: toUploadProgressFromSummary(launch),
+			launchSummary: launch
+		};
+	}
+	return null;
+}
 function describeHostBridgeState() {
 	installHostBridgeListeners();
 	const bridge = getOpenAiBridge();
 	const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : void 0);
 	const candidates = getBridgeQuizCandidates(bridge);
+	const launchPackets = getBridgeLaunchPackets(bridge);
 	return JSON.stringify({
 		hasOpenAiBridge: Boolean(bridge),
 		hasMcpToolResult: Boolean(latestMcpToolResult),
@@ -37350,6 +37371,14 @@ function describeHostBridgeState() {
 			widgetState: Boolean(bridge?.widgetState),
 			bootstrap: Boolean(bootstrap)
 		},
+		launchPacketCount: launchPackets.length,
+		launchPackets: launchPackets.slice(0, 3).map((launch) => ({
+			kind: typeof launch.kind === "string" ? launch.kind : null,
+			quizId: typeof launch.quizId === "string" ? launch.quizId : null,
+			launchId: typeof launch.launchId === "string" ? launch.launchId : null,
+			hasQuiz: Boolean(asQuiz(launch.quiz)),
+			hasRecoveryToken: typeof launch.recoveryToken === "string"
+		})),
 		candidateCount: candidates.length,
 		candidates: candidates.map((candidate) => {
 			const summary = asRecord(candidate.summary);
@@ -37557,10 +37586,19 @@ async function withTimeout(promise, timeoutMs, label) {
 }
 function getBridgeQuizCandidates(bridge) {
 	const candidates = [];
+	const launchPackets = getBridgeLaunchPackets(bridge);
+	for (const launch of launchPackets) if (launch.quiz) candidates.push({
+		value: launch.quiz,
+		summary: launch
+	});
+	return dedupeCandidates(candidates);
+}
+function getBridgeLaunchPackets(bridge) {
 	const bridgeOutput = asRecord(bridge?.toolOutput);
 	const bridgeGlobalsOutput = asRecord(latestOpenAiGlobals?.toolOutput);
 	const mcpOutput = asRecord(latestMcpToolResult);
 	const surfaces = [
+		bridge?.toolOutput,
 		asRecord(bridge?.toolResponseMetadata),
 		bridgeOutput,
 		asRecord(bridgeOutput?.result),
@@ -37568,6 +37606,7 @@ function getBridgeQuizCandidates(bridge) {
 		asRecord(asRecord(bridgeOutput?.result)?.structuredContent),
 		asRecord(bridgeOutput?._meta),
 		asRecord(asRecord(bridgeOutput?.result)?._meta),
+		latestOpenAiGlobals?.toolOutput,
 		asRecord(latestOpenAiGlobals?.toolResponseMetadata),
 		bridgeGlobalsOutput,
 		asRecord(bridgeGlobalsOutput?.result),
@@ -37575,6 +37614,7 @@ function getBridgeQuizCandidates(bridge) {
 		asRecord(asRecord(bridgeGlobalsOutput?.result)?.structuredContent),
 		asRecord(bridgeGlobalsOutput?._meta),
 		asRecord(asRecord(bridgeGlobalsOutput?.result)?._meta),
+		latestMcpToolResult,
 		mcpOutput,
 		asRecord(mcpOutput?.result),
 		asRecord(mcpOutput?.structuredContent),
@@ -37582,18 +37622,12 @@ function getBridgeQuizCandidates(bridge) {
 		asRecord(mcpOutput?._meta),
 		asRecord(asRecord(mcpOutput?.result)?._meta)
 	].filter(Boolean);
-	for (const surface of surfaces) if (surface?.kind === "betterquizzer.launch" && surface.quiz) candidates.push({
-		value: surface.quiz,
-		summary: surface
-	});
+	const launches = [];
 	for (const surface of surfaces) {
 		const launch = findLaunchPacketShallow(surface);
-		if (launch?.quiz) candidates.push({
-			value: launch.quiz,
-			summary: launch
-		});
+		if (launch) launches.push(launch);
 	}
-	return dedupeCandidates(candidates);
+	return dedupeLaunchPackets(launches);
 }
 function toHostQuizPayload(candidate, source) {
 	const normalized = normalizeQuizForRender(asQuiz(candidate.value) ?? candidate.value);
@@ -37647,6 +37681,18 @@ function toUploadProgress(summary, quiz, diagnostics) {
 		complete: typeof rawProgress?.complete === "boolean" ? rawProgress.complete : receivedQuestions >= expectedQuestions && diagnostics.rendererCertified
 	};
 }
+function toUploadProgressFromSummary(summary) {
+	const progress = asRecord(summary.packetProgress) ?? asRecord(summary.uploadProgress);
+	const expectedQuestions = typeof progress?.expectedQuestions === "number" && Number.isFinite(progress.expectedQuestions) ? progress.expectedQuestions : getExpectedQuestionCount(summary);
+	const receivedQuestions = typeof progress?.receivedQuestions === "number" && Number.isFinite(progress.receivedQuestions) ? progress.receivedQuestions : typeof summary.questionCount === "number" && Number.isFinite(summary.questionCount) ? summary.questionCount : null;
+	if (expectedQuestions === null || receivedQuestions === null) return void 0;
+	return {
+		expectedQuestions,
+		receivedQuestions,
+		renderableQuestions: typeof progress?.renderableQuestions === "number" && Number.isFinite(progress.renderableQuestions) ? progress.renderableQuestions : typeof summary.renderableQuestionCount === "number" && Number.isFinite(summary.renderableQuestionCount) ? summary.renderableQuestionCount : void 0,
+		complete: typeof progress?.complete === "boolean" ? progress.complete : receivedQuestions >= expectedQuestions
+	};
+}
 function getExpectedQuestionCount(summary) {
 	if (!summary) return null;
 	const progress = asRecord(summary.packetProgress) ?? asRecord(summary.uploadProgress);
@@ -37666,12 +37712,27 @@ function dedupeCandidates(candidates) {
 		return true;
 	});
 }
+function dedupeLaunchPackets(launches) {
+	const seen = /* @__PURE__ */ new Set();
+	return launches.filter((launch) => {
+		const key = [
+			typeof launch.launchId === "string" ? launch.launchId : "",
+			typeof launch.quizId === "string" ? launch.quizId : "",
+			typeof launch.quizRevision === "number" ? String(launch.quizRevision) : "",
+			asQuiz(launch.quiz) ? "quiz" : "summary"
+		].join("|");
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
 function asRecord(value) {
 	return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 function findLaunchPacketShallow(value, seen = /* @__PURE__ */ new Set(), depth = 0) {
+	if (typeof value === "string") return findLaunchPacketShallow(parseJsonish(value), seen, depth + 1);
 	const record = asRecord(value);
-	if (record?.kind === "betterquizzer.launch" && record.quiz) return record;
+	if (record?.kind === "betterquizzer.launch") return record;
 	if (depth > 4 || !value || typeof value !== "object" || seen.has(value)) return null;
 	seen.add(value);
 	if (Array.isArray(value)) {
@@ -37687,12 +37748,24 @@ function findLaunchPacketShallow(value, seen = /* @__PURE__ */ new Set(), depth 
 		"_meta",
 		"metadata",
 		"toolOutput",
-		"result"
+		"result",
+		"content",
+		"text",
+		"data"
 	]) {
 		const found = findLaunchPacketShallow(container[key], seen, depth + 1);
 		if (found) return found;
 	}
 	return null;
+}
+function parseJsonish(value) {
+	const trimmed = value.trim();
+	if (!trimmed || !/^[\[{]/.test(trimmed) || !trimmed.includes("betterquizzer.launch")) return null;
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		return null;
+	}
 }
 function asQuiz(value) {
 	const record = asRecord(value);
@@ -38209,9 +38282,47 @@ function App() {
 	}, [widgetMode, quiz]);
 	(0, import_react.useEffect)(() => {
 		if (!widgetMode || quiz) return;
+		let fetchingFromLaunchSummary = false;
+		const pollSealedLaunchSummary = async () => {
+			if (fetchingFromLaunchSummary || quiz) return;
+			const launchSummary = getHostLaunchSummary();
+			if (!launchSummary?.quizId || !(launchSummary.recoveryToken || launchSummary.launchId)) return;
+			fetchingFromLaunchSummary = true;
+			try {
+				setHydrationProgress(toHydrationProgressFromLaunchSummary(launchSummary));
+				const prepared = prepareQuizForRender(await fetchQuizFromServer(launchSummary.quizId, launchSummary.recoveryToken ?? launchSummary.launchId));
+				if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
+				const diagnostics = prepared.diagnostics;
+				if (!diagnostics.rendererCertified || diagnostics.renderableQuestionCount !== prepared.quiz.questions.length) throw new Error("Recovered launch quiz is not render-certified yet.");
+				const restored = buildFinishedFromPersistedSubmission(prepared.quiz, launchSummary.launchId);
+				setQuiz(prepared.quiz);
+				setLaunchId(launchSummary.launchId ?? getRecoveredLaunchId(prepared.quiz));
+				setRecoveryToken(launchSummary.recoveryToken ?? restored?.recoveryToken);
+				setStartedAt(restored?.session.startedAt ?? (/* @__PURE__ */ new Date()).toISOString());
+				setFinished(restored);
+				setImportError(null);
+				setHydrationError(null);
+				setHydrationErrorVisible(false);
+				setHydrationPhase("rendering");
+				setHydrationProgress({
+					expectedQuestions: launchSummary.uploadProgress?.expectedQuestions ?? launchSummary.declaredQuestionCount ?? prepared.quiz.questions.length,
+					receivedQuestions: prepared.quiz.questions.length,
+					renderableQuestions: diagnostics.renderableQuestionCount,
+					complete: launchSummary.uploadProgress?.complete ?? prepared.quiz.questions.length >= (launchSummary.declaredQuestionCount ?? prepared.quiz.questions.length),
+					source: "sealed-launch-fetch"
+				});
+				setScreen(restored ? "submission" : "quiz");
+			} catch (error) {
+				setHydrationError(buildHydrationFailureDetails(error instanceof Error ? error.message : String(error)));
+			} finally {
+				fetchingFromLaunchSummary = false;
+			}
+		};
+		pollSealedLaunchSummary();
+		const launchSummaryInterval = window.setInterval(() => void pollSealedLaunchSummary(), SERVER_RECOVERY_POLL_MS);
 		const requestedQuizId = getRequestedQuizId();
 		const requestedRecoveryToken = getRequestedRecoveryToken();
-		if (!requestedQuizId) return;
+		if (!requestedQuizId) return () => window.clearInterval(launchSummaryInterval);
 		let cancelled = false;
 		const poll = async () => {
 			try {
@@ -38248,6 +38359,7 @@ function App() {
 		return () => {
 			cancelled = true;
 			window.clearInterval(interval);
+			window.clearInterval(launchSummaryInterval);
 		};
 	}, [widgetMode, quiz]);
 	(0, import_react.useEffect)(() => {
@@ -38557,6 +38669,16 @@ function toHydrationProgress(payload, quiz) {
 		receivedQuestions,
 		renderableQuestions: fromPayload?.renderableQuestions ?? payload.renderDiagnostics?.renderableQuestionCount,
 		complete: fromPayload?.complete ?? receivedQuestions >= expectedQuestions
+	};
+}
+function toHydrationProgressFromLaunchSummary(summary) {
+	return {
+		expectedQuestions: summary.uploadProgress?.expectedQuestions ?? summary.declaredQuestionCount ?? summary.questionCount ?? 0,
+		receivedQuestions: summary.uploadProgress?.receivedQuestions ?? summary.questionCount ?? 0,
+		renderableQuestions: summary.uploadProgress?.renderableQuestions,
+		complete: summary.uploadProgress?.complete,
+		source: "sealed-launch-fetch",
+		message: "Recovering the launched quiz from BetterQuizzes..."
 	};
 }
 function launchStabilityKey(payload, quiz) {

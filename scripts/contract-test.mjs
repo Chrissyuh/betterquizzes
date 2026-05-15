@@ -27,8 +27,8 @@ assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input)
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
 assert(server.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "remote server must use shared builder guidance");
 assert(stableServer.includes('import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs"'), "stable stdio server must use shared builder guidance");
-assert(sharedGuidance.includes("start_quiz only creates a draft") && sharedGuidance.includes("add_first_question is the only builder tool that launches the widget"), "shared builder guidance must launch only from add_first_question");
-assert(sharedGuidance.includes("call add_first_question exactly once for the first question") && sharedGuidance.includes("Continue add_question/repair_question exactly once per later question"), "shared builder guidance must add one question at a time");
+assert(sharedGuidance.includes("start_quiz only creates a draft") && sharedGuidance.includes("add_first_question is the preferred builder tool that launches the widget"), "shared builder guidance must prefer add_first_question launch");
+assert(sharedGuidance.includes("call add_first_question exactly once for the first question when that tool is listed") && sharedGuidance.includes("add_question may be used for the first question as a compatibility launch path") && sharedGuidance.includes("Continue add_question/repair_question exactly once per later question"), "shared builder guidance must add one question at a time with stale-session compatibility");
 assert(sharedGuidance.includes("Do not call open_quiz or finalize_quiz"), "shared builder guidance must avoid open_quiz/finalize_quiz in the normal path");
 assert(sharedGuidance.includes("Do not send question batches in start_quiz"), "shared builder guidance must reject start_quiz question batches");
 for (const [label, text] of [["remote server", server], ["stable stdio server", stableServer], ["SDK stdio server", sdkServer]]) {

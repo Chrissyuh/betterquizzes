@@ -73,6 +73,18 @@ export type HostQuizPayload = {
   renderDiagnostics?: RenderDiagnostics;
 };
 
+export type HostLaunchSummary = {
+  kind: "betterquizzer.launch";
+  quizId: string;
+  launchId?: string;
+  recoveryToken?: string;
+  quizRevision?: number;
+  declaredQuestionCount?: number;
+  questionCount?: number;
+  uploadProgress?: { expectedQuestions: number; receivedQuestions: number; renderableQuestions?: number; complete?: boolean };
+  launchSummary: Record<string, unknown>;
+};
+
 type HostCandidate = {
   value: unknown;
   summary?: unknown;
@@ -120,11 +132,34 @@ export function getHostQuizPayload(): HostQuizPayload | null {
   return null;
 }
 
+export function getHostLaunchSummary(): HostLaunchSummary | null {
+  installHostBridgeListeners();
+  const bridge = getOpenAiBridge();
+  const launchPackets = getBridgeLaunchPackets(bridge);
+  for (const launch of launchPackets) {
+    const quizId = typeof launch.quizId === "string" ? launch.quizId : undefined;
+    if (!quizId) continue;
+    return {
+      kind: "betterquizzer.launch",
+      quizId,
+      launchId: typeof launch.launchId === "string" ? launch.launchId : undefined,
+      recoveryToken: typeof launch.recoveryToken === "string" ? launch.recoveryToken : undefined,
+      quizRevision: typeof launch.quizRevision === "number" ? launch.quizRevision : undefined,
+      declaredQuestionCount: typeof launch.declaredQuestionCount === "number" ? launch.declaredQuestionCount : getExpectedQuestionCount(launch) ?? undefined,
+      questionCount: typeof launch.questionCount === "number" ? launch.questionCount : undefined,
+      uploadProgress: toUploadProgressFromSummary(launch),
+      launchSummary: launch,
+    };
+  }
+  return null;
+}
+
 export function describeHostBridgeState(): string {
   installHostBridgeListeners();
   const bridge = getOpenAiBridge();
   const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : undefined);
   const candidates = getBridgeQuizCandidates(bridge);
+  const launchPackets = getBridgeLaunchPackets(bridge);
   return JSON.stringify(
     {
       hasOpenAiBridge: Boolean(bridge),
@@ -138,6 +173,14 @@ export function describeHostBridgeState(): string {
         widgetState: Boolean(bridge?.widgetState),
         bootstrap: Boolean(bootstrap),
       },
+      launchPacketCount: launchPackets.length,
+      launchPackets: launchPackets.slice(0, 3).map((launch) => ({
+        kind: typeof launch.kind === "string" ? launch.kind : null,
+        quizId: typeof launch.quizId === "string" ? launch.quizId : null,
+        launchId: typeof launch.launchId === "string" ? launch.launchId : null,
+        hasQuiz: Boolean(asQuiz(launch.quiz)),
+        hasRecoveryToken: typeof launch.recoveryToken === "string",
+      })),
       candidateCount: candidates.length,
       candidates: candidates.map((candidate) => {
         const summary = asRecord(candidate.summary);
@@ -390,10 +433,21 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 
 function getBridgeQuizCandidates(bridge?: OpenAiBridge): HostCandidate[] {
   const candidates: HostCandidate[] = [];
+  const launchPackets = getBridgeLaunchPackets(bridge);
+
+  for (const launch of launchPackets) {
+    if (launch.quiz) candidates.push({ value: launch.quiz, summary: launch });
+  }
+
+  return dedupeCandidates(candidates);
+}
+
+function getBridgeLaunchPackets(bridge?: OpenAiBridge): Record<string, unknown>[] {
   const bridgeOutput = asRecord(bridge?.toolOutput);
   const bridgeGlobalsOutput = asRecord(latestOpenAiGlobals?.toolOutput);
   const mcpOutput = asRecord(latestMcpToolResult);
-  const surfaces = [
+  const surfaces: unknown[] = [
+    bridge?.toolOutput,
     asRecord(bridge?.toolResponseMetadata),
     bridgeOutput,
     asRecord(bridgeOutput?.result),
@@ -401,6 +455,7 @@ function getBridgeQuizCandidates(bridge?: OpenAiBridge): HostCandidate[] {
     asRecord(asRecord(bridgeOutput?.result)?.structuredContent),
     asRecord(bridgeOutput?._meta),
     asRecord(asRecord(bridgeOutput?.result)?._meta),
+    latestOpenAiGlobals?.toolOutput,
     asRecord(latestOpenAiGlobals?.toolResponseMetadata),
     bridgeGlobalsOutput,
     asRecord(bridgeGlobalsOutput?.result),
@@ -408,26 +463,22 @@ function getBridgeQuizCandidates(bridge?: OpenAiBridge): HostCandidate[] {
     asRecord(asRecord(bridgeGlobalsOutput?.result)?.structuredContent),
     asRecord(bridgeGlobalsOutput?._meta),
     asRecord(asRecord(bridgeGlobalsOutput?.result)?._meta),
+    latestMcpToolResult,
     mcpOutput,
     asRecord(mcpOutput?.result),
     asRecord(mcpOutput?.structuredContent),
     asRecord(asRecord(mcpOutput?.result)?.structuredContent),
     asRecord(mcpOutput?._meta),
     asRecord(asRecord(mcpOutput?.result)?._meta),
-  ].filter(Boolean) as Record<string, unknown>[];
+  ].filter(Boolean);
 
-  // Preferred launch contract: the launch tool returns a sealed betterquizzer.launch packet.
-  for (const surface of surfaces) {
-    if (surface?.kind === "betterquizzer.launch" && surface.quiz) candidates.push({ value: surface.quiz, summary: surface });
-  }
-
-  // Some hosts wrap the tool result one level deeper (for example { result: { structuredContent } }).
+  const launches: Record<string, unknown>[] = [];
   for (const surface of surfaces) {
     const launch = findLaunchPacketShallow(surface);
-    if (launch?.quiz) candidates.push({ value: launch.quiz, summary: launch });
+    if (launch) launches.push(launch);
   }
 
-  return dedupeCandidates(candidates);
+  return dedupeLaunchPackets(launches);
 }
 
 function toHostQuizPayload(candidate: HostCandidate, source: HostQuizPayload["source"]): HostQuizPayload | null {
@@ -498,6 +549,26 @@ function toUploadProgress(summary: Record<string, unknown> | undefined, quiz: Qu
   return { expectedQuestions, receivedQuestions, renderableQuestions, complete };
 }
 
+function toUploadProgressFromSummary(summary: Record<string, unknown>): HostLaunchSummary["uploadProgress"] | undefined {
+  const progress = asRecord(summary.packetProgress) ?? asRecord(summary.uploadProgress);
+  const expectedQuestions = typeof progress?.expectedQuestions === "number" && Number.isFinite(progress.expectedQuestions)
+    ? progress.expectedQuestions
+    : getExpectedQuestionCount(summary);
+  const receivedQuestions = typeof progress?.receivedQuestions === "number" && Number.isFinite(progress.receivedQuestions)
+    ? progress.receivedQuestions
+    : typeof summary.questionCount === "number" && Number.isFinite(summary.questionCount)
+      ? summary.questionCount
+      : null;
+  if (expectedQuestions === null || receivedQuestions === null) return undefined;
+  const renderableQuestions = typeof progress?.renderableQuestions === "number" && Number.isFinite(progress.renderableQuestions)
+    ? progress.renderableQuestions
+    : typeof summary.renderableQuestionCount === "number" && Number.isFinite(summary.renderableQuestionCount)
+      ? summary.renderableQuestionCount
+      : undefined;
+  const complete = typeof progress?.complete === "boolean" ? progress.complete : receivedQuestions >= expectedQuestions;
+  return { expectedQuestions, receivedQuestions, renderableQuestions, complete };
+}
+
 function getExpectedQuestionCount(summary: Record<string, unknown> | null): number | null {
   if (!summary) return null;
   const progress = asRecord(summary.packetProgress) ?? asRecord(summary.uploadProgress);
@@ -519,13 +590,31 @@ function dedupeCandidates(candidates: HostCandidate[]): HostCandidate[] {
   });
 }
 
+function dedupeLaunchPackets(launches: Record<string, unknown>[]): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  return launches.filter((launch) => {
+    const key = [
+      typeof launch.launchId === "string" ? launch.launchId : "",
+      typeof launch.quizId === "string" ? launch.quizId : "",
+      typeof launch.quizRevision === "number" ? String(launch.quizRevision) : "",
+      asQuiz(launch.quiz) ? "quiz" : "summary",
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
 function findLaunchPacketShallow(value: unknown, seen = new Set<unknown>(), depth = 0): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    return findLaunchPacketShallow(parseJsonish(value), seen, depth + 1);
+  }
   const record = asRecord(value);
-  if (record?.kind === "betterquizzer.launch" && record.quiz) return record;
+  if (record?.kind === "betterquizzer.launch") return record;
   if (depth > 4 || !value || typeof value !== "object" || seen.has(value)) return null;
   seen.add(value);
 
@@ -538,11 +627,21 @@ function findLaunchPacketShallow(value: unknown, seen = new Set<unknown>(), dept
   }
 
   const container = value as Record<string, unknown>;
-  for (const key of ["structuredContent", "_meta", "metadata", "toolOutput", "result"]) {
+  for (const key of ["structuredContent", "_meta", "metadata", "toolOutput", "result", "content", "text", "data"]) {
     const found = findLaunchPacketShallow(container[key], seen, depth + 1);
     if (found) return found;
   }
   return null;
+}
+
+function parseJsonish(value: string): unknown {
+  const trimmed = value.trim();
+  if (!trimmed || !/^[\[{]/.test(trimmed) || !trimmed.includes("betterquizzer.launch")) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
 }
 
 function asQuiz(value: unknown): QuizSpec | null {

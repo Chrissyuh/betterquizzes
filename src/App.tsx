@@ -23,6 +23,7 @@ import {
 } from "./shared";
 import {
   describeHostBridgeState,
+  getHostLaunchSummary,
   getHostQuizPayload,
   getPersistedDraftState,
   getPersistedSubmissionState,
@@ -33,6 +34,7 @@ import {
   subscribeHostQuizPayload,
   submitToHost,
   type HostQuizPayload,
+  type HostLaunchSummary,
   type SubmissionBridgeState,
   type ToolResultLike,
 } from "./host/openaiBridge";
@@ -279,9 +281,52 @@ export default function App(): ReactElement {
 
   useEffect(() => {
     if (!widgetMode || quiz) return;
+    let fetchingFromLaunchSummary = false;
+    const pollSealedLaunchSummary = async () => {
+      if (fetchingFromLaunchSummary || quiz) return;
+      const launchSummary = getHostLaunchSummary();
+      if (!launchSummary?.quizId || !(launchSummary.recoveryToken || launchSummary.launchId)) return;
+      fetchingFromLaunchSummary = true;
+      try {
+        setHydrationProgress(toHydrationProgressFromLaunchSummary(launchSummary));
+        const serverQuiz = await fetchQuizFromServer(launchSummary.quizId, launchSummary.recoveryToken ?? launchSummary.launchId);
+        const prepared = prepareQuizForRender(serverQuiz);
+        if (!prepared.ok) throw new Error(formatRenderContractIssue(prepared));
+        const diagnostics = prepared.diagnostics;
+        if (!diagnostics.rendererCertified || diagnostics.renderableQuestionCount !== prepared.quiz.questions.length) {
+          throw new Error("Recovered launch quiz is not render-certified yet.");
+        }
+        const restored = buildFinishedFromPersistedSubmission(prepared.quiz, launchSummary.launchId);
+        setQuiz(prepared.quiz);
+        setLaunchId(launchSummary.launchId ?? getRecoveredLaunchId(prepared.quiz));
+        setRecoveryToken(launchSummary.recoveryToken ?? restored?.recoveryToken);
+        setStartedAt(restored?.session.startedAt ?? new Date().toISOString());
+        setFinished(restored);
+        setImportError(null);
+        setHydrationError(null);
+        setHydrationErrorVisible(false);
+        setHydrationPhase("rendering");
+        setHydrationProgress({
+          expectedQuestions: launchSummary.uploadProgress?.expectedQuestions ?? launchSummary.declaredQuestionCount ?? prepared.quiz.questions.length,
+          receivedQuestions: prepared.quiz.questions.length,
+          renderableQuestions: diagnostics.renderableQuestionCount,
+          complete: launchSummary.uploadProgress?.complete ?? prepared.quiz.questions.length >= (launchSummary.declaredQuestionCount ?? prepared.quiz.questions.length),
+          source: "sealed-launch-fetch",
+        });
+        setScreen(restored ? "submission" : "quiz");
+      } catch (error) {
+        setHydrationError(buildHydrationFailureDetails(error instanceof Error ? error.message : String(error)));
+      } finally {
+        fetchingFromLaunchSummary = false;
+      }
+    };
+    void pollSealedLaunchSummary();
+    const launchSummaryInterval = window.setInterval(() => void pollSealedLaunchSummary(), SERVER_RECOVERY_POLL_MS);
     const requestedQuizId = getRequestedQuizId();
     const requestedRecoveryToken = getRequestedRecoveryToken();
-    if (!requestedQuizId) return;
+    if (!requestedQuizId) {
+      return () => window.clearInterval(launchSummaryInterval);
+    }
     let cancelled = false;
     const poll = async () => {
       try {
@@ -320,6 +365,7 @@ export default function App(): ReactElement {
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.clearInterval(launchSummaryInterval);
     };
   }, [widgetMode, quiz]);
 
@@ -630,6 +676,19 @@ function toHydrationProgress(payload: HostQuizPayload, quiz: QuizSpec): Hydratio
     receivedQuestions,
     renderableQuestions: fromPayload?.renderableQuestions ?? payload.renderDiagnostics?.renderableQuestionCount,
     complete: fromPayload?.complete ?? receivedQuestions >= expectedQuestions,
+  };
+}
+
+function toHydrationProgressFromLaunchSummary(summary: HostLaunchSummary): HydrationProgress {
+  const expectedQuestions = summary.uploadProgress?.expectedQuestions ?? summary.declaredQuestionCount ?? summary.questionCount ?? 0;
+  const receivedQuestions = summary.uploadProgress?.receivedQuestions ?? summary.questionCount ?? 0;
+  return {
+    expectedQuestions,
+    receivedQuestions,
+    renderableQuestions: summary.uploadProgress?.renderableQuestions,
+    complete: summary.uploadProgress?.complete,
+    source: "sealed-launch-fetch",
+    message: "Recovering the launched quiz from BetterQuizzes...",
   };
 }
 

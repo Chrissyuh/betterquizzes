@@ -164,10 +164,20 @@ async function runSmoke() {
   assert(stagedStarted.result.structuredContent.capabilities?.recoveryTool === "open_quiz", "start_quiz capabilities should name open_quiz only as the recovery tool");
   assert(stagedStarted.result.structuredContent.workflow?.some((step) => step.includes("open_quiz")), "start_quiz should return the canonical workflow");
   assert(stagedStarted.result.structuredContent.validationPolicy?.includes("add_question validates"), "start_quiz should expose validation policy");
+  const compatibilityStarted = await rpc("tools/call", {
+    name: "start_quiz",
+    arguments: {
+      title: "Compatibility Builder Smoke",
+      topic: "QA",
+      quizId: "compat-builder-smoke",
+      expectedQuestionCount: 2
+    }
+  });
+  const compatibilityDraftId = compatibilityStarted.result.structuredContent.draftId;
   const accidentalFirstAdd = await rpc("tools/call", {
     name: "add_question",
     arguments: {
-      draftId: stagedDraftId,
+      draftId: compatibilityDraftId,
       question: {
         id: "accidental-first",
         type: "true_false",
@@ -176,8 +186,8 @@ async function runSmoke() {
       }
     }
   });
-  assert(accidentalFirstAdd.result.structuredContent.ok === false, "storage-only add_question should reject first-question launch attempts");
-  assert(accidentalFirstAdd.result.structuredContent.tool === "add_first_question", "storage-only first-question rejection should route the model to add_first_question");
+  assert(accidentalFirstAdd.result.structuredContent.kind === "betterquizzer.launch", "first add_question should still launch for stale ChatGPT sessions that do not expose add_first_question");
+  assert(accidentalFirstAdd.result.structuredContent.compatibilityLaunch === true, "first add_question compatibility launch should be clearly marked");
   const firstAdd = await rpc("tools/call", {
     name: "add_first_question",
     arguments: {

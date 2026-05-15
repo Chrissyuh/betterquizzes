@@ -147,7 +147,8 @@ type: "object",
 const SUPPORTED_QUESTION_TYPE_VALUES = ["multiple_choice", "multi_select", "true_false", "fill_blank", "short_answer", "long_response", "multi_typing", "multi_write_vertical", "text_select", "matching", "ordering", "numeric"];
 const BUILDER_WORKFLOW = [
   "Call start_quiz to create a draft only.",
-  "Call add_first_question exactly once for the first accepted/renderable question; this launches the only widget.",
+  "Call add_first_question exactly once for the first accepted/renderable question when that tool is visible; this launches the only widget.",
+  "If the current ChatGPT session has stale tool metadata and does not list add_first_question, call add_question for the first question as a compatibility launch path.",
   "Continue add_question or repair_question silently for later questions; those storage-only tools never launch another widget.",
   "Use open_quiz only to recover or reopen an already stored quiz.",
   "Do not call finalize_quiz for normal assistant-authored quizzes."
@@ -359,7 +360,7 @@ const OPEN_TOOL_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, open
 const V23_BUILDER_TOOL_DEFS = [
   {
     name: "start_quiz",
-    description: "Start a BetterQuizzes draft and return a draftId. For normal assistant-authored quizzes, set expectedQuestionCount, then call add_first_question exactly once for the first question. The accepted add_first_question launches the only widget. Continue add_question/repair_question silently for later questions; those storage-only tools update the launched widget through polling and never open another widget. Do not call open_quiz or finalize_quiz for the normal first-question creation path." + V2_BUILDER_INSTRUCTIONS,
+    description: "Start a BetterQuizzes draft and return a draftId. For normal assistant-authored quizzes, set expectedQuestionCount, then call add_first_question exactly once for the first question when that tool is visible. The accepted add_first_question launches the only widget. If this ChatGPT session has stale tool metadata and does not expose add_first_question, add_question may be used for the first question as a compatibility launch path. Continue add_question/repair_question silently for later questions; those storage-only tools update the launched widget through polling and never open another widget. Do not call open_quiz or finalize_quiz for the normal first-question creation path." + V2_BUILDER_INSTRUCTIONS,
     inputSchema: START_QUIZ_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
@@ -883,18 +884,6 @@ function addQuestion(input = {}, options = {}) {
     });
   }
 
-  if (wouldAppendFirstQuestion && !launchFirstQuestion) {
-    return v23TextResponse({
-      ok: false,
-      needsRepair: false,
-      tool: "add_first_question",
-      issues: ["The first accepted question must be sent with add_first_question so ChatGPT opens exactly one widget. add_question is storage-only for later questions."],
-      question,
-      ...builderContractFields(),
-      next: "Call add_first_question with the same draftId and question. After that succeeds, continue with add_question for later questions only."
-    });
-  }
-
   if (shouldReplace) {
     let replaceIndex = Number.isInteger(input.replaceIndex) ? input.replaceIndex : -1;
 
@@ -915,11 +904,22 @@ function addQuestion(input = {}, options = {}) {
   v23QuizDrafts.set(draftId, existingDraft);
   globalThis.__betterQuizzesV23LatestDraftId = draftId;
 
-  if (launchFirstQuestion && !shouldReplace && existingDraft.questions.length === 1) {
+  if ((launchFirstQuestion || wouldAppendFirstQuestion) && !shouldReplace && existingDraft.questions.length === 1) {
     const firstLaunch = buildLaunchToolResult(renderCheck, {
       expectedQuestionCount: existingDraft.expectedQuestionCount,
       recoveryToken: existingDraft.recoveryToken
     });
+    if (!launchFirstQuestion) {
+      firstLaunch.structuredContent = {
+        ...firstLaunch.structuredContent,
+        compatibilityLaunch: true,
+        next: "This first question launched through the add_question compatibility path because the current ChatGPT session did not expose add_first_question. Continue with add_question once per later question; refresh/reconnect the app metadata when possible so future sessions use add_first_question."
+      };
+      firstLaunch._meta = {
+        ...firstLaunch._meta,
+        compatibilityLaunch: true
+      };
+    }
     const launch = firstLaunch.structuredContent ?? {};
     existingDraft.quizId = launch.quizId ?? existingDraft.quizId;
     existingDraft.recoveryToken = launch.recoveryToken ?? existingDraft.recoveryToken;
@@ -944,6 +944,25 @@ function addQuestion(input = {}, options = {}) {
     ...builderContractFields(),
     next: "Accepted question stored. The launched widget will poll this update automatically. Continue add_question silently once per later question; do not call open_quiz or finalize_quiz for this normal quiz."
   });
+  if (stored) {
+    response._meta = {
+      kind: "betterquizzer.launch",
+      launchId: stored.launchId,
+      quizId: stored.quizId,
+      quizRevision: stored.quizRevision,
+      recoveryToken: stored.recoveryToken,
+      declaredQuestionCount: stored.expectedQuestionCount,
+      questionCount: stored.quiz?.questions?.length,
+      packetProgress: {
+        expectedQuestions: stored.expectedQuestionCount,
+        receivedQuestions: stored.quiz?.questions?.length ?? existingDraft.questions.length,
+        complete: stored.complete
+      },
+      quiz: toPublicQuiz(stored.quiz),
+      quietUpdate: true,
+      ui: { route: "quiz" }
+    };
+  }
 
   return response;
 }
@@ -1703,7 +1722,7 @@ BetterQuizzes V40 workflow guidance:
 
 BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
-2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount; this creates a draft only. Call add_first_question once for the first question; add_first_question is the only builder tool that launches the widget. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted later questions are stored continuously and the already-launched widget refreshes from the stored draft. Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. Do not send chat progress/check-in messages while authoring; only speak if blocked by an unrepaired error. Do not send question batches in start_quiz. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
+2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount; this creates a draft only. Call add_first_question once for the first question when that tool is visible; add_first_question is the preferred builder tool that launches the widget. If the current ChatGPT session has stale tool metadata and does not list add_first_question, call add_question for the first question as a compatibility launch path. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted later questions are stored continuously and the already-launched widget refreshes from the stored draft. Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. Do not send chat progress/check-in messages while authoring; only speak if blocked by an unrepaired error. Do not send question batches in start_quiz. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
 3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless repairing older input.
 4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, and numeric. Use multi_write_vertical when a prompt needs any number of separate written answers, text_select when the user should select words/segments inside a passage, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall.
 5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based choice indexes and may have any number of correct answers; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; multi_typing and multi_write_vertical fields may have any number of fields/answers and use response/answer objects keyed by field id; text_select uses segments:[{id,text,selectable?}], optional selectionPolicy, and answer:string[] of selected segment ids. Use text_select only for a passage with context, usually at least two sentences or 120 characters, and at least three plausible selectable segments; do not make one sentence with one obvious highlighted answer. Do not use choices for text_select. Ordering answer is ordered item ids in visual top-to-bottom order. orderingBehavior.direction must always be "top_to_bottom"; never use first_to_last or other conceptual values there. Put conceptual meaning in orderingBehavior.topLabel and orderingBehavior.bottomLabel; matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]. Do not author matching as pairs unless repairing old input.
