@@ -78,19 +78,34 @@ type HostCandidate = {
   summary?: unknown;
 };
 
+const HOST_BRIDGE_UPDATE_EVENT = "betterquizzer:host-bridge-update";
+let hostBridgeListenersInstalled = false;
+let latestMcpToolInput: unknown = null;
+let latestMcpToolResult: ToolResultLike | null = null;
+let latestOpenAiGlobals: Record<string, unknown> | null = null;
+
 export function getOpenAiBridge(): OpenAiBridge | undefined {
+  installHostBridgeListeners();
   return typeof window !== "undefined" ? window.openai : undefined;
 }
 
 export function isChatGptWidget(): boolean {
-  return Boolean(getOpenAiBridge());
+  return Boolean(getOpenAiBridge() || latestMcpToolResult || latestOpenAiGlobals);
+}
+
+export function subscribeHostQuizPayload(listener: () => void): () => void {
+  installHostBridgeListeners();
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(HOST_BRIDGE_UPDATE_EVENT, listener);
+  return () => window.removeEventListener(HOST_BRIDGE_UPDATE_EVENT, listener);
 }
 
 export function getHostQuizPayload(): HostQuizPayload | null {
+  installHostBridgeListeners();
   const bridge = getOpenAiBridge();
   const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : undefined);
 
-  const bridgeCandidates = bridge ? getBridgeQuizCandidates(bridge) : [];
+  const bridgeCandidates = getBridgeQuizCandidates(bridge);
   for (const candidate of bridgeCandidates) {
     const payload = toHostQuizPayload(candidate, "chatgpt-widget");
     if (payload) return payload;
@@ -106,12 +121,16 @@ export function getHostQuizPayload(): HostQuizPayload | null {
 }
 
 export function describeHostBridgeState(): string {
+  installHostBridgeListeners();
   const bridge = getOpenAiBridge();
   const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : undefined);
-  const candidates = bridge ? getBridgeQuizCandidates(bridge) : [];
+  const candidates = getBridgeQuizCandidates(bridge);
   return JSON.stringify(
     {
       hasOpenAiBridge: Boolean(bridge),
+      hasMcpToolResult: Boolean(latestMcpToolResult),
+      hasMcpToolInput: Boolean(latestMcpToolInput),
+      hasOpenAiSetGlobals: Boolean(latestOpenAiGlobals),
       surfaces: {
         toolInput: Boolean(bridge?.toolInput),
         toolOutput: Boolean(bridge?.toolOutput),
@@ -132,6 +151,39 @@ export function describeHostBridgeState(): string {
     null,
     2
   );
+}
+
+function installHostBridgeListeners(): void {
+  if (hostBridgeListenersInstalled || typeof window === "undefined") return;
+  hostBridgeListenersInstalled = true;
+
+  window.addEventListener("message", (event: MessageEvent) => {
+    if (event.source !== window.parent) return;
+    const message = asRecord(event.data);
+    if (!message || message.jsonrpc !== "2.0" || typeof message.method !== "string") return;
+
+    if (message.method === "ui/notifications/tool-result") {
+      latestMcpToolResult = asToolResultLike(message.params) ?? { structuredContent: asRecord(message.params)?.structuredContent, _meta: asRecord(message.params)?._meta };
+      notifyHostBridgeUpdate();
+    }
+
+    if (message.method === "ui/notifications/tool-input") {
+      latestMcpToolInput = message.params;
+      notifyHostBridgeUpdate();
+    }
+  }, { passive: true });
+
+  window.addEventListener("openai:set_globals", (event: Event) => {
+    const customEvent = event as CustomEvent<unknown>;
+    const detail = asRecord(customEvent.detail);
+    latestOpenAiGlobals = asRecord(detail?.globals) ?? detail;
+    notifyHostBridgeUpdate();
+  });
+}
+
+function notifyHostBridgeUpdate(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(HOST_BRIDGE_UPDATE_EVENT));
 }
 
 export function persistWidgetState(state: unknown): void {
@@ -336,23 +388,41 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
-function getBridgeQuizCandidates(bridge: OpenAiBridge): HostCandidate[] {
+function getBridgeQuizCandidates(bridge?: OpenAiBridge): HostCandidate[] {
   const candidates: HostCandidate[] = [];
-  const metadata = asRecord(bridge.toolResponseMetadata);
-  const output = asRecord(bridge.toolOutput);
-  const outputResult = asRecord(output?.result);
-  const structuredContent = asRecord(output?.structuredContent);
-  const resultStructuredContent = asRecord(outputResult?.structuredContent);
-  const outputMeta = asRecord(output?._meta);
-  const resultMeta = asRecord(outputResult?._meta);
+  const bridgeOutput = asRecord(bridge?.toolOutput);
+  const bridgeGlobalsOutput = asRecord(latestOpenAiGlobals?.toolOutput);
+  const mcpOutput = asRecord(latestMcpToolResult);
+  const surfaces = [
+    asRecord(bridge?.toolResponseMetadata),
+    bridgeOutput,
+    asRecord(bridgeOutput?.result),
+    asRecord(bridgeOutput?.structuredContent),
+    asRecord(asRecord(bridgeOutput?.result)?.structuredContent),
+    asRecord(bridgeOutput?._meta),
+    asRecord(asRecord(bridgeOutput?.result)?._meta),
+    asRecord(latestOpenAiGlobals?.toolResponseMetadata),
+    bridgeGlobalsOutput,
+    asRecord(bridgeGlobalsOutput?.result),
+    asRecord(bridgeGlobalsOutput?.structuredContent),
+    asRecord(asRecord(bridgeGlobalsOutput?.result)?.structuredContent),
+    asRecord(bridgeGlobalsOutput?._meta),
+    asRecord(asRecord(bridgeGlobalsOutput?.result)?._meta),
+    mcpOutput,
+    asRecord(mcpOutput?.result),
+    asRecord(mcpOutput?.structuredContent),
+    asRecord(asRecord(mcpOutput?.result)?.structuredContent),
+    asRecord(mcpOutput?._meta),
+    asRecord(asRecord(mcpOutput?.result)?._meta),
+  ].filter(Boolean) as Record<string, unknown>[];
 
-  // Preferred launch contract: open_quiz returns a sealed betterquizzer.launch packet.
-  for (const surface of [metadata, structuredContent, resultStructuredContent, output, outputResult, outputMeta, resultMeta]) {
+  // Preferred launch contract: the launch tool returns a sealed betterquizzer.launch packet.
+  for (const surface of surfaces) {
     if (surface?.kind === "betterquizzer.launch" && surface.quiz) candidates.push({ value: surface.quiz, summary: surface });
   }
 
   // Some hosts wrap the tool result one level deeper (for example { result: { structuredContent } }).
-  for (const surface of [metadata, output, outputResult, structuredContent, resultStructuredContent, outputMeta, resultMeta]) {
+  for (const surface of surfaces) {
     const launch = findLaunchPacketShallow(surface);
     if (launch?.quiz) candidates.push({ value: launch.quiz, summary: launch });
   }

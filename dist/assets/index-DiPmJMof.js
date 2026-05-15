@@ -37296,16 +37296,29 @@ function asPartial(value) {
 }
 //#endregion
 //#region src/host/openaiBridge.ts
+var HOST_BRIDGE_UPDATE_EVENT = "betterquizzer:host-bridge-update";
+var hostBridgeListenersInstalled = false;
+var latestMcpToolInput = null;
+var latestMcpToolResult = null;
+var latestOpenAiGlobals = null;
 function getOpenAiBridge() {
+	installHostBridgeListeners();
 	return typeof window !== "undefined" ? window.openai : void 0;
 }
 function isChatGptWidget() {
-	return Boolean(getOpenAiBridge());
+	return Boolean(getOpenAiBridge() || latestMcpToolResult || latestOpenAiGlobals);
+}
+function subscribeHostQuizPayload(listener) {
+	installHostBridgeListeners();
+	if (typeof window === "undefined") return () => {};
+	window.addEventListener(HOST_BRIDGE_UPDATE_EVENT, listener);
+	return () => window.removeEventListener(HOST_BRIDGE_UPDATE_EVENT, listener);
 }
 function getHostQuizPayload() {
+	installHostBridgeListeners();
 	const bridge = getOpenAiBridge();
 	const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : void 0);
-	const bridgeCandidates = bridge ? getBridgeQuizCandidates(bridge) : [];
+	const bridgeCandidates = getBridgeQuizCandidates(bridge);
 	for (const candidate of bridgeCandidates) {
 		const payload = toHostQuizPayload(candidate, "chatgpt-widget");
 		if (payload) return payload;
@@ -37321,11 +37334,15 @@ function getHostQuizPayload() {
 	return null;
 }
 function describeHostBridgeState() {
+	installHostBridgeListeners();
 	const bridge = getOpenAiBridge();
 	const bootstrap = asRecord(typeof window !== "undefined" ? window.__BETTERQUIZZER_BOOTSTRAP__ : void 0);
-	const candidates = bridge ? getBridgeQuizCandidates(bridge) : [];
+	const candidates = getBridgeQuizCandidates(bridge);
 	return JSON.stringify({
 		hasOpenAiBridge: Boolean(bridge),
+		hasMcpToolResult: Boolean(latestMcpToolResult),
+		hasMcpToolInput: Boolean(latestMcpToolInput),
+		hasOpenAiSetGlobals: Boolean(latestOpenAiGlobals),
 		surfaces: {
 			toolInput: Boolean(bridge?.toolInput),
 			toolOutput: Boolean(bridge?.toolOutput),
@@ -37343,6 +37360,35 @@ function describeHostBridgeState() {
 			};
 		})
 	}, null, 2);
+}
+function installHostBridgeListeners() {
+	if (hostBridgeListenersInstalled || typeof window === "undefined") return;
+	hostBridgeListenersInstalled = true;
+	window.addEventListener("message", (event) => {
+		if (event.source !== window.parent) return;
+		const message = asRecord(event.data);
+		if (!message || message.jsonrpc !== "2.0" || typeof message.method !== "string") return;
+		if (message.method === "ui/notifications/tool-result") {
+			latestMcpToolResult = asToolResultLike(message.params) ?? {
+				structuredContent: asRecord(message.params)?.structuredContent,
+				_meta: asRecord(message.params)?._meta
+			};
+			notifyHostBridgeUpdate();
+		}
+		if (message.method === "ui/notifications/tool-input") {
+			latestMcpToolInput = message.params;
+			notifyHostBridgeUpdate();
+		}
+	}, { passive: true });
+	window.addEventListener("openai:set_globals", (event) => {
+		const detail = asRecord(event.detail);
+		latestOpenAiGlobals = asRecord(detail?.globals) ?? detail;
+		notifyHostBridgeUpdate();
+	});
+}
+function notifyHostBridgeUpdate() {
+	if (typeof window === "undefined") return;
+	window.dispatchEvent(new CustomEvent(HOST_BRIDGE_UPDATE_EVENT));
 }
 function persistWidgetState(state) {
 	const bridge = getOpenAiBridge();
@@ -37511,34 +37557,36 @@ async function withTimeout(promise, timeoutMs, label) {
 }
 function getBridgeQuizCandidates(bridge) {
 	const candidates = [];
-	const metadata = asRecord(bridge.toolResponseMetadata);
-	const output = asRecord(bridge.toolOutput);
-	const outputResult = asRecord(output?.result);
-	const structuredContent = asRecord(output?.structuredContent);
-	const resultStructuredContent = asRecord(outputResult?.structuredContent);
-	const outputMeta = asRecord(output?._meta);
-	const resultMeta = asRecord(outputResult?._meta);
-	for (const surface of [
-		metadata,
-		structuredContent,
-		resultStructuredContent,
-		output,
-		outputResult,
-		outputMeta,
-		resultMeta
-	]) if (surface?.kind === "betterquizzer.launch" && surface.quiz) candidates.push({
+	const bridgeOutput = asRecord(bridge?.toolOutput);
+	const bridgeGlobalsOutput = asRecord(latestOpenAiGlobals?.toolOutput);
+	const mcpOutput = asRecord(latestMcpToolResult);
+	const surfaces = [
+		asRecord(bridge?.toolResponseMetadata),
+		bridgeOutput,
+		asRecord(bridgeOutput?.result),
+		asRecord(bridgeOutput?.structuredContent),
+		asRecord(asRecord(bridgeOutput?.result)?.structuredContent),
+		asRecord(bridgeOutput?._meta),
+		asRecord(asRecord(bridgeOutput?.result)?._meta),
+		asRecord(latestOpenAiGlobals?.toolResponseMetadata),
+		bridgeGlobalsOutput,
+		asRecord(bridgeGlobalsOutput?.result),
+		asRecord(bridgeGlobalsOutput?.structuredContent),
+		asRecord(asRecord(bridgeGlobalsOutput?.result)?.structuredContent),
+		asRecord(bridgeGlobalsOutput?._meta),
+		asRecord(asRecord(bridgeGlobalsOutput?.result)?._meta),
+		mcpOutput,
+		asRecord(mcpOutput?.result),
+		asRecord(mcpOutput?.structuredContent),
+		asRecord(asRecord(mcpOutput?.result)?.structuredContent),
+		asRecord(mcpOutput?._meta),
+		asRecord(asRecord(mcpOutput?.result)?._meta)
+	].filter(Boolean);
+	for (const surface of surfaces) if (surface?.kind === "betterquizzer.launch" && surface.quiz) candidates.push({
 		value: surface.quiz,
 		summary: surface
 	});
-	for (const surface of [
-		metadata,
-		output,
-		outputResult,
-		structuredContent,
-		resultStructuredContent,
-		outputMeta,
-		resultMeta
-	]) {
+	for (const surface of surfaces) {
 		const launch = findLaunchPacketShallow(surface);
 		if (launch?.quiz) candidates.push({
 			value: launch.quiz,
@@ -38046,7 +38094,8 @@ var SERVER_RECOVERY_TIMEOUT_MS = 3e4;
 function App() {
 	const routeWidgetMode = (0, import_react.useMemo)(() => isWidgetRoute(), []);
 	const bootstrapWidgetMode = (0, import_react.useMemo)(() => hasBetterQuizzesBootstrap(), []);
-	const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode);
+	const embeddedWidgetMode = (0, import_react.useMemo)(() => bqV40IsChatGptHost(), []);
+	const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode || embeddedWidgetMode);
 	const [screen, setScreen] = (0, import_react.useState)(widgetMode ? "loading" : "import");
 	const [quiz, setQuiz] = (0, import_react.useState)(null);
 	const [launchId, setLaunchId] = (0, import_react.useState)(void 0);
@@ -38086,6 +38135,19 @@ function App() {
 		if (!widgetMode) return;
 		const timeout = window.setTimeout(() => setHydrationErrorVisible(true), HYDRATION_ERROR_DELAY_MS);
 		return () => window.clearTimeout(timeout);
+	}, [widgetMode]);
+	(0, import_react.useEffect)(() => {
+		if (!widgetMode) return;
+		return subscribeHostQuizPayload(() => {
+			pendingLaunchRef.current = null;
+			setHydrationProgress((progress) => progress ?? {
+				expectedQuestions: 0,
+				receivedQuestions: 0,
+				complete: false,
+				source: "mcp-apps-bridge",
+				message: "Receiving quiz launch from ChatGPT..."
+			});
+		});
 	}, [widgetMode]);
 	(0, import_react.useEffect)(() => {
 		if (!widgetMode) return;

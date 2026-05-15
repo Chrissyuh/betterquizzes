@@ -30,6 +30,7 @@ import {
   persistWidgetState,
   persistSubmissionState,
   sendSubmissionFollowUp,
+  subscribeHostQuizPayload,
   submitToHost,
   type HostQuizPayload,
   type SubmissionBridgeState,
@@ -159,7 +160,8 @@ const SERVER_RECOVERY_TIMEOUT_MS = 30000;
 export default function App(): ReactElement {
   const routeWidgetMode = useMemo(() => isWidgetRoute(), []);
   const bootstrapWidgetMode = useMemo(() => hasBetterQuizzesBootstrap(), []);
-  const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode);
+  const embeddedWidgetMode = useMemo(() => bqV40IsChatGptHost(), []);
+  const widgetMode = Boolean(isChatGptWidget() || bootstrapWidgetMode || routeWidgetMode || embeddedWidgetMode);
   const [screen, setScreen] = useState<Screen>(widgetMode ? "loading" : "import");
   const [quiz, setQuiz] = useState<QuizSpec | null>(null);
   const [launchId, setLaunchId] = useState<string | undefined>(undefined);
@@ -202,6 +204,20 @@ export default function App(): ReactElement {
     if (!widgetMode) return;
     const timeout = window.setTimeout(() => setHydrationErrorVisible(true), HYDRATION_ERROR_DELAY_MS);
     return () => window.clearTimeout(timeout);
+  }, [widgetMode]);
+
+  useEffect(() => {
+    if (!widgetMode) return;
+    return subscribeHostQuizPayload(() => {
+      pendingLaunchRef.current = null;
+      setHydrationProgress((progress) => progress ?? {
+        expectedQuestions: 0,
+        receivedQuestions: 0,
+        complete: false,
+        source: "mcp-apps-bridge",
+        message: "Receiving quiz launch from ChatGPT...",
+      });
+    });
   }, [widgetMode]);
 
   useEffect(() => {

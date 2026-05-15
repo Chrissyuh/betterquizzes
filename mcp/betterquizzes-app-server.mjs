@@ -174,7 +174,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v60-polling.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v60-polling.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question...", "openai/toolInvocation/invoked": "Question added" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v61-bridge.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v61-bridge.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question...", "openai/toolInvocation/invoked": "Question added" }
   },
   {
     name: "repair_question",
@@ -189,7 +189,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: OPEN_QUIZ_INPUT_SCHEMA,
     outputSchema: LAUNCH_OUTPUT_SCHEMA,
     annotations: OPEN_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v60-polling.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v60-polling.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz ready" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v61-bridge.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v61-bridge.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz ready" }
   }
 ];
 
@@ -871,7 +871,7 @@ function handleV23BuilderTool(name, input = {}) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v60-polling.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v61-bridge.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,

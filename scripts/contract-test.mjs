@@ -10,6 +10,8 @@ const appSubmission = JSON.parse(readFileSync("chatgpt-app-submission.json", "ut
 const demoClient = readFileSync("mcp/demo-client.mjs", "utf8");
 const trialProbe = readFileSync("scripts/trial-probe.mjs", "utf8");
 const localHostTrial = readFileSync("scripts/local-host-trial.mjs", "utf8");
+const app = readFileSync("src/App.tsx", "utf8");
+const bridge = readFileSync("src/host/openaiBridge.ts", "utf8");
 function assert(value, message) { if (!value) throw new Error(message); }
 
 assert(server.includes('const VERSION = "V1"'), "server version must be V1");
@@ -68,6 +70,7 @@ assert(server.includes("createdQuizzesHidden: true"), "public quiz listing must 
 assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata must include the private recovery token for the widget");
 assert(server.includes('name: "add_question"') && server.includes("launches the widget immediately"), "add_question must launch from the first accepted question");
 assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must attach widget launch metadata for first-question launch");
+assert(server.includes("betterquizzes-v61-bridge.html"), "widget URI must cache-bust the bridge-first hydration rewrite");
 assert(server.includes("SUPPORTED_QUESTION_TYPE_VALUES") && server.includes("unsupportedQuestionTypes") && server.includes("multiple_select"), "builder tools must advertise supported/unsupported question types");
 assert(server.includes("add_question validates every question against the renderer-supported type") && server.includes("Unsupported question type:"), "add_question must reject unsupported types before storing");
 assert(server.includes("safeToPresentToUser") && server.includes("launchStatus"), "launch packets must expose clear model-facing readiness flags");
@@ -82,6 +85,10 @@ assert(!server.includes('"openai/outputTemplate": RESOURCE_URI,\n      "openai/w
 assert(!server.includes("create_quiz exactly once"), "legacy create_quiz exactly-once guidance must not remain");
 assert(!server.includes("destructiveHint: true"), "no tool should be marked destructive");
 assert(!server.includes("openWorldHint: true"), "no tool should be marked open-world");
+assert(bridge.includes("ui/notifications/tool-result") && bridge.includes("ui/notifications/tool-input"), "widget bridge must listen for MCP Apps tool-result/tool-input notifications");
+assert(bridge.includes("openai:set_globals") && bridge.includes("latestOpenAiGlobals"), "widget bridge must preserve ChatGPT window.openai compatibility globals");
+assert(bridge.includes("subscribeHostQuizPayload"), "widget bridge must expose event-driven launch updates");
+assert(app.includes("subscribeHostQuizPayload") && app.includes("embeddedWidgetMode"), "app hydration must boot embedded MCP Apps iframes without depending on window.openai");
 
 assert(stage12Contract.includes("Normal assistant-authored quizzes are built with draft-only `start_quiz`") && stage12Contract.includes("first accepted `add_question` launch packet"), "Stage 12 docs must describe the first-question launch flow");
 assert(stage12Contract.includes("`create_quiz` remains a compact legacy compatibility opener"), "Stage 12 docs must demote create_quiz to legacy compatibility");
