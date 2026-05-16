@@ -22,7 +22,8 @@ assert(server.includes('outputSchema: LAUNCH_OUTPUT_SCHEMA'), "create_quiz must 
 assert(server.includes('outputSchema: BUILDER_OUTPUT_SCHEMA'), "builder tools must expose output schemas");
 assert(!server.includes('name: "finalize_quiz"'), "finalize_quiz must not be advertised as a normal tool");
 assert(server.includes('name: "open_quiz"'), "open_quiz must be registered");
-assert(server.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "open_quiz must attach widget launch metadata");
+assert(server.includes('name: "add_first_question"') && server.includes('"openai/toolInvocation/invoking": "Opening quiz..."'), "add_first_question must attach the only widget launch metadata");
+assert(server.includes('name: "open_quiz"') && server.includes('This tool intentionally does not advertise a widget template'), "open_quiz must be recovery-only and not advertise a widget template");
 assert(server.includes("Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes"), "model instructions must remove open_quiz/finalize_quiz from the normal creation path");
 assert(server.includes('if (name === "finalize_quiz") return finalizeQuiz(input);'), "hidden finalize_quiz compatibility handler must remain for cached old tool callers");
 assert(server.includes("OPEN_TOOL_ANNOTATIONS") && server.includes("idempotentHint: true"), "open_quiz must be idempotent");
@@ -40,7 +41,7 @@ for (const [label, text] of [["remote server", server], ["stable stdio server", 
     assert(text.includes("topLabel") && text.includes("bottomLabel"), `${label} must put ordering meaning in top/bottom labels`);
   }
 }
-assert(server.includes("Open Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility opener");
+assert(server.includes("Validate Existing Complete Quiz Packet"), "create_quiz must be demoted to compatibility validator");
 assert(server.includes('outputSchema: SUBMISSION_OUTPUT_SCHEMA'), "submit_answers must expose an output schema");
 assert(!server.includes('anyOf: [{ required: ["quizId", "answers"] }, { required: ["submission"] }]'), "submit_answers parameters must not use top-level anyOf");
 assert(server.includes('submission: { type: "object", additionalProperties: true'), "submit_answers schema must accept fallback submission packets without top-level answers");
@@ -73,6 +74,8 @@ assert(server.includes('name: "add_first_question"') && server.includes("launch 
 assert(server.includes('name: "add_question"') && server.includes("intentionally has no widget output template"), "add_question must be storage-only after launch");
 assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must retain status metadata");
 assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
+assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
+assert(server.includes('"openai/toolInvocation/invoking": "Validating quiz..."') && !server.includes('"openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Validating quiz..."'), "compatibility create_quiz must not advertise an output template");
 assert(server.includes("betterquizzes-v62-fastload.html"), "widget URI must cache-bust the fast-load resource rewrite");
 assert(server.includes("betterquizzes-v61-bridge.html"), "v61 widget URI must remain a compatibility alias");
 assert(server.includes('rel="modulepreload"') && server.includes('type="module" src='), "widget resource should externalize hashed JS/CSS assets");

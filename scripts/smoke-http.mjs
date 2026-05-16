@@ -77,13 +77,14 @@ async function runSmoke() {
   }
   assert(!toolNames.includes("finalize_quiz"), "finalize_quiz should not be advertised in normal tools/list");
   const openTool = listed.result.tools.find((tool) => tool.name === "open_quiz");
-  assert(openTool._meta?.["openai/outputTemplate"], "open_quiz missing widget output template");
+  assert(!openTool._meta?.["openai/outputTemplate"], "open_quiz must not advertise widget output template because recovery must not open duplicate widgets");
   assert(openTool.annotations?.readOnlyHint === true, "open_quiz should be read-only");
   assert(openTool.annotations?.idempotentHint === true, "open_quiz should be idempotent");
   assert(!openTool.inputSchema?.required?.length, "open_quiz should not require arguments");
   const createTool = listed.result.tools.find((tool) => tool.name === "create_quiz");
   const createSchemaJson = JSON.stringify(createTool?.inputSchema || {});
   assert(createTool?.inputSchema?.properties?.quiz?.properties?.questions?.items?.additionalProperties === true, "create_quiz should advertise compact question objects");
+  assert(!createTool?._meta?.["openai/outputTemplate"], "create_quiz must not advertise widget output template because assistant-authored quizzes must use the one-widget builder flow");
   assert(!createSchemaJson.includes('"oneOf"'), "create_quiz input schema should stay compact");
   assert((createTool?.description || "").length < 500, "create_quiz description should stay compact");
   assert(!(createTool?.description || "").includes("Canonical minimal example"), "create_quiz description should not advertise legacy examples");

@@ -44,9 +44,13 @@ assert(!names.includes("finalize_quiz"), "public MCP tools/list must not adverti
 const startTool = tools.find((tool) => tool.name === "start_quiz");
 const firstQuestionTool = tools.find((tool) => tool.name === "add_first_question");
 const addTool = tools.find((tool) => tool.name === "add_question");
+const openTool = tools.find((tool) => tool.name === "open_quiz");
+const createTool = tools.find((tool) => tool.name === "create_quiz");
 assert(!startTool?._meta?.["openai/outputTemplate"], "start_quiz must not advertise a widget output template");
 assert(firstQuestionTool?._meta?.["openai/outputTemplate"], "add_first_question must advertise the widget output template for the one widget launch");
 assert(!addTool?._meta?.["openai/outputTemplate"], "add_question must not advertise a widget output template because later calls must not open duplicate widgets");
+assert(!openTool?._meta?.["openai/outputTemplate"], "open_quiz must not advertise a widget output template because recovery must not open duplicate widgets");
+assert(!createTool?._meta?.["openai/outputTemplate"], "create_quiz must not advertise a widget output template in the assistant-authored quiz path");
 
 const quizId = `public-contract-${Date.now().toString(36)}`;
 const started = await rpc("tools/call", {

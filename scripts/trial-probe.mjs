@@ -48,9 +48,13 @@ async function runTrial() {
   }
 
   assert(!toolNames.includes("finalize_quiz"), "finalize_quiz must not be advertised in tools/list");
+  const firstQuestionTool = tools.find((tool) => tool.name === "add_first_question");
   const openTool = tools.find((tool) => tool.name === "open_quiz");
-  const resourceUri = openTool?._meta?.["openai/outputTemplate"] || openTool?._meta?.ui?.resourceUri;
-  assert(typeof resourceUri === "string" && resourceUri.startsWith("ui://"), "open_quiz must expose a UI resource URI");
+  const createTool = tools.find((tool) => tool.name === "create_quiz");
+  const resourceUri = firstQuestionTool?._meta?.["openai/outputTemplate"] || firstQuestionTool?._meta?.ui?.resourceUri;
+  assert(typeof resourceUri === "string" && resourceUri.startsWith("ui://"), "add_first_question must expose the one widget UI resource URI");
+  assert(!openTool?._meta?.["openai/outputTemplate"] && !openTool?._meta?.ui?.resourceUri, "open_quiz must not expose a UI resource URI because recovery must not open duplicate widgets");
+  assert(!createTool?._meta?.["openai/outputTemplate"] && !createTool?._meta?.ui?.resourceUri, "create_quiz must not expose a UI resource URI in the assistant-authored quiz path");
 
   const resources = await check("MCP resources/list", () => rpc("resources/list", {}), (value) => Array.isArray(value.result?.resources));
   assert(resources.result.resources.some((resource) => resource.uri === resourceUri), "resources/list must include the widget resource");
@@ -107,7 +111,7 @@ async function getJson(pathname) {
 }
 
 async function fetchQuizFromServerForTrial(quizId, accessToken, queryKey = "recoveryToken") {
-  assert(typeof accessToken === "string" && accessToken.length > 0, "open_quiz must expose a recovery token or launchId for widget polling");
+  assert(typeof accessToken === "string" && accessToken.length > 0, "launch metadata must expose a recovery token or launchId for widget polling");
   const payload = await getJson(`/api/quiz/${encodeURIComponent(quizId)}?${queryKey}=${encodeURIComponent(accessToken)}`);
   assert(payload?.quiz, "polling API response must include quiz");
   return payload.quiz;
