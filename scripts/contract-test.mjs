@@ -104,12 +104,17 @@ assert(appSubmission.tools?.open_quiz?.annotations?.readOnlyHint === true, "subm
 assert(appSubmission.tools?.open_quiz?.annotations?.destructiveHint === false, "submission metadata must mark open_quiz non-destructive");
 assert(appSubmission.tools?.open_quiz?.annotations?.openWorldHint === false, "submission metadata must mark open_quiz non-open-world");
 assert(appSubmission.tools?.open_quiz?.annotations?.idempotentHint === true, "submission metadata must mark open_quiz idempotent");
+assert(!JSON.stringify(appSubmission.test_cases).includes("start_quiz, add_question, open_quiz"), "submission test cases must not describe stale open_quiz launch flow");
+assert(JSON.stringify(appSubmission.test_cases).includes("add_first_question"), "submission test cases must describe current add_first_question launch flow");
+assert(JSON.stringify(appSubmission.negative_test_cases).includes("sensitive personal information"), "submission metadata must include sensitive-data negative test");
+assert(JSON.stringify(appSubmission.negative_test_cases).includes("durable classroom gradebook"), "submission metadata must include durable-gradebook negative test");
 for (const toolName of ["start_quiz", "add_first_question", "add_question", "repair_question"]) {
   const annotations = appSubmission.tools?.[toolName]?.annotations;
   assert(annotations?.readOnlyHint === true, `submission metadata must mark ${toolName} read-only`);
   assert(annotations?.destructiveHint === false, `submission metadata must mark ${toolName} non-destructive`);
   assert(annotations?.openWorldHint === false, `submission metadata must mark ${toolName} non-open-world`);
 }
+assert(readFileSync("scripts/submission-readiness.mjs", "utf8").includes("support@betterquizzes.example"), "submission readiness script must block the support email placeholder");
 
 assert(demoClient.includes("resources.result.resources[0].uri"), "demo client must read the advertised widget resource URI");
 assert(demoClient.includes('name: "add_first_question"') && demoClient.includes('betterquizzer.launch'), "demo client must cover add_first_question launch");

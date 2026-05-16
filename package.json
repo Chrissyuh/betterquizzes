@@ -24,6 +24,7 @@
     "host:public:strict": "node scripts/public-host-smoke.mjs --strict",
     "host:contract": "node scripts/public-mcp-contract.mjs",
     "host:contract:strict": "node scripts/public-mcp-contract.mjs --strict",
+    "submission:readiness": "node scripts/submission-readiness.mjs",
     "deploy:package": "node scripts/deploy-package-check.mjs",
     "tunnel:help": "node scripts/tunnel-help.mjs",
     "build:strict": "tsc --noEmit && vite build",

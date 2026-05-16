@@ -147,15 +147,15 @@
       "description": "Create a short assistant-authored mixed-format practice quiz.",
       "user_prompt": "Make me a 4-question practice quiz about photosynthesis with a mix of question types.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_question, open_quiz",
-      "expected_output": "Launches one BetterQuizzes activity with a mixed-format quiz ready for the user to answer.",
+      "tools_triggered": "start_quiz, add_first_question, add_question",
+      "expected_output": "The first accepted add_first_question call launches exactly one BetterQuizzes widget, and later add_question calls add questions to that same activity.",
       "expected_output_url": null
     },
     {
       "description": "Create an ordering question and launch it through the builder flow.",
       "user_prompt": "Make a one-question quiz where I drag these app release steps into the right order.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_question, open_quiz",
+      "tools_triggered": "start_quiz, add_first_question",
       "expected_output": "Launches an ordering quiz whose items can be rearranged in the widget.",
       "expected_output_url": null
     },
@@ -163,8 +163,8 @@
       "description": "Repair an invalid draft question without restarting the quiz.",
       "user_prompt": "Create a quiz with an ordering question, and if the question needs repair, fix just that question.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_question, repair_question, open_quiz",
-      "expected_output": "Repairs the invalid question and launches the corrected quiz once.",
+      "tools_triggered": "start_quiz, add_first_question, add_question, repair_question",
+      "expected_output": "Launches the first valid question once, then repairs only the invalid later question while the same widget polls for the corrected draft.",
       "expected_output_url": null
     },
     {
@@ -223,6 +223,22 @@
       "file_attachment_urls": null,
       "tools_triggered": null,
       "expected_output": "The app should not be invoked for sending email or publishing results because it has no external messaging or posting capability.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger when the user wants to enter sensitive personal data.",
+      "user_prompt": "Make a quiz that asks students for their full names, home addresses, and medical history before they can answer.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not collect unnecessary sensitive personal information. ChatGPT should suggest a privacy-preserving quiz instead.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not promise durable classroom gradebook storage.",
+      "user_prompt": "Use BetterQuizzes as my permanent class gradebook and store all student scores for the semester.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked as a durable classroom gradebook because BetterQuizzes stores quiz and grade state only temporarily for the current app session.",
       "expected_output_url": null
     }
   ]
