@@ -373,6 +373,7 @@ export default function App(): ReactElement {
     if (!widgetMode || !quiz || finished || !shouldPollForServerQuizUpdates(quiz, hydrationProgress)) return;
     let cancelled = false;
     const quizId = getQuizId(quiz);
+    const pollIntervalMs = getServerQuizUpdatePollMs(quiz, hydrationProgress);
     const poll = async () => {
       const update = await fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken ?? launchId).catch(() => null);
       if (cancelled || !update) return;
@@ -393,10 +394,18 @@ export default function App(): ReactElement {
       setHydrationPhase("polling_updates");
       setQuiz(serverQuiz);
     };
-    const interval = window.setInterval(() => void poll(), 1500);
+    const pollOnFocus = () => void poll();
+    const pollOnVisible = () => {
+      if (document.visibilityState === "visible") void poll();
+    };
+    const interval = window.setInterval(() => void poll(), pollIntervalMs);
+    window.addEventListener("focus", pollOnFocus);
+    document.addEventListener("visibilitychange", pollOnVisible);
     void poll();
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", pollOnFocus);
+      document.removeEventListener("visibilitychange", pollOnVisible);
       window.clearInterval(interval);
     };
   }, [widgetMode, quiz, finished, hydrationProgress, recoveryToken, launchId]);
@@ -838,6 +847,13 @@ function shouldPollForServerQuizUpdates(quiz: QuizSpec, progress: HydrationProgr
   // the widget looked complete. Keep polling while the quiz is active so late
   // accepted questions still appear instead of freezing at the old count.
   return true;
+}
+
+function getServerQuizUpdatePollMs(quiz: QuizSpec, progress: HydrationProgress | null): number {
+  if (isIncrementalQuizBuilding(quiz)) return 1500;
+  if (!progress || progress.complete !== true) return 1500;
+  if (progress.expectedQuestions > quiz.questions.length) return 1500;
+  return 5000;
 }
 
 function getIncrementalGenerationStatus(quiz: QuizSpec): { expected: number; ready: number } | null {

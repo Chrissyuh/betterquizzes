@@ -124,6 +124,17 @@ async function runSmoke() {
 
   const resource = await rpc("resources/read", { uri: resources.result.resources[0].uri });
   assert(resource.result.contents[0].text.includes("BetterQuizzes") || resource.result.contents[0].text.includes("root"), "widget resource did not return HTML");
+  const widgetHtml = resource.result.contents[0].text;
+  assert(widgetHtml.length < 100_000, "widget resource should be a small external-asset bootstrap, not an inlined bundle");
+  assert(widgetHtml.includes('rel="stylesheet"') && widgetHtml.includes('type="module" src='), "widget resource should load external CSS and JS assets");
+  assert(!widgetHtml.includes("katex.renderToString"), "widget resource should not inline the full application JavaScript bundle");
+  const aliasResource = await rpc("resources/read", { uri: "ui://widget/betterquizzes-v61-bridge.html" });
+  assert(aliasResource.result.contents[0].uri === resources.result.resources[0].uri, "v61 widget URI should remain a compatibility alias for the current resource");
+  const jsAssetUrl = widgetHtml.match(/https?:\/\/[^"]+\/assets\/[^"]+\.js/)?.[0];
+  const cssAssetUrl = widgetHtml.match(/https?:\/\/[^"]+\/assets\/[^"]+\.css/)?.[0];
+  assert(jsAssetUrl && cssAssetUrl, "widget resource should reference absolute JS and CSS asset URLs");
+  await assertImmutableGzipAsset(jsAssetUrl);
+  await assertImmutableGzipAsset(cssAssetUrl);
 
   const quiz = {
     schema: "betterquizzer.quiz",
@@ -566,6 +577,16 @@ async function getJsonAllowStatus(pathname, expectedStatus) {
   const response = await fetch(`${baseUrl}${pathname}`);
   if (response.status !== expectedStatus) throw new Error(`GET ${pathname} expected ${expectedStatus}, received ${response.status}`);
   return response.json();
+}
+
+async function assertImmutableGzipAsset(assetUrl) {
+  const response = await fetch(assetUrl, { headers: { "Accept-Encoding": "gzip" } });
+  if (!response.ok) throw new Error(`GET ${assetUrl} failed: ${response.status}`);
+  const cacheControl = response.headers.get("cache-control") || "";
+  assert(cacheControl.includes("max-age=31536000") && cacheControl.includes("immutable"), `${assetUrl} missing immutable cache headers`);
+  assert(response.headers.get("etag"), `${assetUrl} missing ETag`);
+  assert(response.headers.get("last-modified"), `${assetUrl} missing Last-Modified`);
+  assert(response.headers.get("content-encoding") === "gzip", `${assetUrl} should gzip text assets when requested`);
 }
 
 let nextId = 1;

@@ -176,7 +176,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v61-bridge.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v61-bridge.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v62-fastload.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
   },
   {
     name: "add_question",
@@ -199,7 +199,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: OPEN_QUIZ_INPUT_SCHEMA,
     outputSchema: LAUNCH_OUTPUT_SCHEMA,
     annotations: OPEN_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v61-bridge.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v61-bridge.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz ready" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v62-fastload.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz ready" }
   }
 ];
 
@@ -915,10 +915,11 @@ function handleV23BuilderTool(name, input = {}) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v61-bridge.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v62-fastload.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v61-bridge.html",
   "ui://widget/betterquizzes-v59-refresh.html",
   "ui://widget/betterquizzes-v58-clean.html",
   "ui://widget/betterquizzes-v1-build-bqv1p1.html",
@@ -1382,12 +1383,13 @@ function inspectQuiz(id, quizId) {
 function buildWidgetResource(requestedUri = RESOURCE_URI) {
   const origin = publicOrigin();
   const domain = widgetDomain();
-  const connectDomains = uniqueDomains(origin || domain);
-  const resourceDomains = uniqueDomains(domain, origin);
+  const assetBase = chooseWidgetAssetBase({ origin, domain });
+  const connectDomains = uniqueDomains(origin || domain, assetBase);
+  const resourceDomains = uniqueDomains(domain, origin, assetBase);
   return {
     uri: RESOURCE_URI,
     mimeType: RESOURCE_MIME_TYPE,
-    text: widgetHtml(),
+    text: widgetHtml({ assetBase }),
     _meta: {
       ui: {
         prefersBorder: true,
@@ -1405,7 +1407,7 @@ function buildWidgetResource(requestedUri = RESOURCE_URI) {
   };
 }
 
-function widgetHtml() {
+function widgetHtml(options = {}) {
   const assetsDir = join(process.cwd(), "dist", "assets");
   if (!existsSync(assetsDir)) {
     return `<div style="font-family:system-ui;padding:1rem"><h2>BetterQuizzes widget build missing</h2><p>Run <code>npm run build</code>, then restart the MCP server.</p></div>`;
@@ -1414,8 +1416,9 @@ function widgetHtml() {
   const js = files.find((file) => file.endsWith(".js"));
   const css = files.find((file) => file.endsWith(".css"));
   if (!js) return `<div>BetterQuizzes JavaScript bundle not found.</div>`;
-  const jsText = readFileSync(join(assetsDir, js), "utf8");
-  const cssText = css ? readFileSync(join(assetsDir, css), "utf8") : "";
+  const jsSrc = widgetAssetUrl(options.assetBase, js);
+  const cssHref = css ? widgetAssetUrl(options.assetBase, css) : "";
+  const cssLink = cssHref ? `<link rel="stylesheet" href="${escapeHtmlAttr(cssHref)}">` : "";
   return `
 <script>
 window.__BETTERQUIZZER_FORCE_WIDGET__=true;
@@ -1426,8 +1429,9 @@ window.addEventListener("error",function(e){var root=document.getElementById("ro
 window.addEventListener("unhandledrejection",function(e){var root=document.getElementById("root");if(root&&!root.dataset.bqMounted){root.innerHTML='<main class="shell narrow"><section class="card stack fatal-widget-error"><p class="eyebrow">BetterQuizzes V1</p><h1>Widget promise failed</h1><pre class="error-box"></pre></section></main>';var pre=root.querySelector("pre");if(pre)pre.textContent=String(e.reason&&e.reason.message||e.reason||"Unknown rejection");}});
 </script>
 <div id="root"><main class="shell narrow"><section class="card stack"><p class="eyebrow">BetterQuizzes V1</p><h1>Loading quiz…</h1><p>If this stays here, the widget bundle did not mount.</p></section></main></div>
-<style>${cssText}</style>
-<script type="module">${jsText}</script>
+${cssLink}
+<link rel="modulepreload" href="${escapeHtmlAttr(jsSrc)}">
+<script type="module" src="${escapeHtmlAttr(jsSrc)}"></script>
 `.trim();
 }
 
@@ -1441,6 +1445,22 @@ function buildWidgetBootstrap() {
 
 function safeScriptJson(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+function chooseWidgetAssetBase({ requestOrigin, origin, domain } = {}) {
+  return cleanOrigin(requestOrigin) || cleanOrigin(origin) || cleanOrigin(domain);
+}
+
+function widgetAssetUrl(assetBase, filename) {
+  const base = cleanOrigin(assetBase);
+  return `${base}/assets/${filename}`;
+}
+
+function escapeHtmlAttr(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
 }
 
 function loadBuiltInQuizzes() {

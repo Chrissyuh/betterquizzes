@@ -71,8 +71,11 @@ assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata 
 assert(server.includes('name: "add_first_question"') && server.includes("launch exactly one widget"), "add_first_question must be the sole builder launch tool");
 assert(server.includes('name: "add_question"') && server.includes("intentionally has no widget output template"), "add_question must be storage-only after launch");
 assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must retain status metadata");
-assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v61-bridge.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
-assert(server.includes("betterquizzes-v61-bridge.html"), "widget URI must cache-bust the bridge-first hydration rewrite");
+assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
+assert(server.includes("betterquizzes-v62-fastload.html"), "widget URI must cache-bust the fast-load resource rewrite");
+assert(server.includes("betterquizzes-v61-bridge.html"), "v61 widget URI must remain a compatibility alias");
+assert(server.includes('rel="modulepreload"') && server.includes('type="module" src='), "widget resource should externalize hashed JS/CSS assets");
+assert(server.includes("max-age=31536000, immutable") && server.includes("gzipSync"), "static assets should be immutable and gzip-capable");
 assert(server.includes("SUPPORTED_QUESTION_TYPE_VALUES") && server.includes("unsupportedQuestionTypes") && server.includes("multiple_select"), "builder tools must advertise supported/unsupported question types");
 assert(server.includes("add_question validates every question against the renderer-supported type") && server.includes("Unsupported question type:"), "add_question must reject unsupported types before storing");
 assert(server.includes("safeToPresentToUser") && server.includes("launchStatus"), "launch packets must expose clear model-facing readiness flags");

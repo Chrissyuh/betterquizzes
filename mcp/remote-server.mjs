@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { randomUUID } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { V2_BUILDER_INSTRUCTIONS } from "./shared-authoring-guidance.mjs";
 
 // BEGIN BETTERQUIZZES V23 BUILDER REPAIR
@@ -372,7 +373,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v61-bridge.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v61-bridge.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v62-fastload.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
   },
   {
     name: "add_question",
@@ -395,7 +396,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: OPEN_QUIZ_INPUT_SCHEMA,
     outputSchema: LAUNCH_OUTPUT_SCHEMA,
     annotations: OPEN_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v61-bridge.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v61-bridge.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz ready" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v62-fastload.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz ready" }
   }
 ];
 
@@ -1213,10 +1214,11 @@ function bqV40PracticeRequiredWarning(quiz) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v61-bridge.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v62-fastload.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v61-bridge.html",
   "ui://widget/betterquizzes-v59-refresh.html",
   "ui://widget/betterquizzes-v58-clean.html",
   "ui://widget/betterquizzes-v1-build-bqv1p1.html",
@@ -1883,7 +1885,15 @@ function requireQuizRecoveryAccess(url, quizId) {
 }
 
 function publicOriginFrom(url) {
-  return publicOrigin() || (url.protocol + "//" + url.host);
+  const requestOrigin = cleanOrigin(url.protocol + "//" + url.host);
+  const configuredOrigin = publicOrigin();
+  if (configuredOrigin && isLocalRequestHost(url.hostname)) return configuredOrigin;
+  return requestOrigin || configuredOrigin;
+}
+
+function isLocalRequestHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".localhost");
 }
 
 function requestOriginFrom(request, url) {
@@ -2020,7 +2030,7 @@ try {
     }
 
     if (request.method === "GET") {
-      return serveStatic(response, url.pathname);
+      return serveStatic(request, response, url.pathname);
     }
 
     sendJson(response, 405, { error: "Method not allowed" });
@@ -2347,13 +2357,14 @@ function buildWidgetResource(requestedUri = RESOURCE_URI, context = {}) {
   const origin = publicOrigin();
   const requestOrigin = cleanOrigin(context.requestOrigin);
   const domain = widgetDomain();
-  const serverBases = uniqueDomains(origin, requestOrigin);
-  const connectDomains = uniqueDomains(...serverBases, origin || domain);
-  const resourceDomains = uniqueDomains(domain, ...serverBases);
+  const assetBase = chooseWidgetAssetBase({ requestOrigin, origin, domain });
+  const serverBases = uniqueDomains(origin, requestOrigin, assetBase);
+  const connectDomains = uniqueDomains(...serverBases, origin || domain, assetBase);
+  const resourceDomains = uniqueDomains(domain, assetBase, ...serverBases);
   return {
     uri: RESOURCE_URI,
     mimeType: RESOURCE_MIME_TYPE,
-    text: widgetHtml({ serverBases }),
+    text: widgetHtml({ serverBases, assetBase }),
     _meta: {
       ui: { prefersBorder: true, domain, csp: { connectDomains, resourceDomains } },
       "openai/widgetDescription": "BetterQuizzes V1 displays an LLM-created quiz, collects answers and confidence, then submits a structured capsule back for LLM grading.",
@@ -2376,8 +2387,9 @@ function widgetHtml(options = {}) {
   const js = files.find((file) => file.endsWith(".js"));
   const css = files.find((file) => file.endsWith(".css"));
   if (!js) return `<div>BetterQuizzes JavaScript bundle not found.</div>`;
-  const jsText = readFileSync(join(assetsDir, js), "utf8");
-  const cssText = css ? readFileSync(join(assetsDir, css), "utf8") : "";
+  const jsSrc = widgetAssetUrl(options.assetBase, js);
+  const cssHref = css ? widgetAssetUrl(options.assetBase, css) : "";
+  const cssLink = cssHref ? `<link rel="stylesheet" href="${escapeHtmlAttr(cssHref)}">` : "";
   return `<script>
 window.__BETTERQUIZZER_FORCE_WIDGET__=true;
 window.__BETTERQUIZZER_WIDGET_VERSION__=${safeScriptJson(VERSION)};
@@ -2388,8 +2400,9 @@ window.addEventListener("error",function(e){var root=document.getElementById("ro
 window.addEventListener("unhandledrejection",function(e){var root=document.getElementById("root");if(root&&!root.dataset.bqMounted){root.innerHTML='<main class="shell narrow"><section class="card stack fatal-widget-error"><p class="eyebrow">BetterQuizzes V1</p><h1>Widget promise failed</h1><pre class="error-box"></pre></section></main>';var pre=root.querySelector("pre");if(pre)pre.textContent=String(e.reason&&e.reason.message||e.reason||"Unknown rejection");}});
 </script>
 <div id="root"><main class="shell narrow"><section class="card stack"><p class="eyebrow">BetterQuizzes V1</p><h1>Loading quiz…</h1><p>If this stays here, the widget bundle did not mount.</p></section></main></div>
-<style>${cssText}</style>
-<script type="module">${jsText}</script>`;
+${cssLink}
+<link rel="modulepreload" href="${escapeHtmlAttr(jsSrc)}">
+<script type="module" src="${escapeHtmlAttr(jsSrc)}"></script>`;
 }
 
 function buildWidgetBootstrap(options = {}) {
@@ -2404,6 +2417,22 @@ function buildWidgetBootstrap(options = {}) {
 
 function safeScriptJson(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+function chooseWidgetAssetBase({ requestOrigin, origin, domain } = {}) {
+  return cleanOrigin(requestOrigin) || cleanOrigin(origin) || cleanOrigin(domain);
+}
+
+function widgetAssetUrl(assetBase, filename) {
+  const base = cleanOrigin(assetBase);
+  return `${base}/assets/${filename}`;
+}
+
+function escapeHtmlAttr(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
 }
 
 function loadBuiltInQuizzes() {
@@ -2919,7 +2948,7 @@ function debugVersion(url) {
     name: "betterquizzes",
     version: VERSION,
     stage: "V1",
-    build: "bqv1p2",
+    build: "bqv1p4-fastload",
     protocolVersion: PROTOCOL_VERSION,
     publicOrigin: origin,
     widgetResource: RESOURCE_URI,
@@ -3011,23 +3040,59 @@ function readBody(request) {
   });
 }
 
-function serveStatic(response, pathname) {
+function serveStatic(request, response, pathname) {
   if (!existsSync(DIST_DIR)) return sendJson(response, 404, { error: "dist missing; run npm run build first" });
   const safePath = normalize(decodeURIComponent(pathname)).replace(/^(\.\.(\/|\\|$))+/, "");
   const filePath = safePath === "/" || safePath === "." ? join(DIST_DIR, "index.html") : join(DIST_DIR, safePath);
   if (!filePath.startsWith(DIST_DIR)) return sendJson(response, 403, { error: "forbidden" });
   if (!existsSync(filePath) || !statSync(filePath).isFile()) {
     const fallback = join(DIST_DIR, "index.html");
-    if (existsSync(fallback)) return sendFile(response, fallback);
+    if (existsSync(fallback)) return sendFile(request, response, fallback);
     return sendJson(response, 404, { error: "not found" });
   }
-  return sendFile(response, filePath);
+  return sendFile(request, response, filePath);
 }
 
-function sendFile(response, filePath) {
+function sendFile(request, response, filePath) {
   const type = contentType(filePath);
-  response.writeHead(200, { "Content-Type": type });
-  response.end(readFileSync(filePath));
+  const stat = statSync(filePath);
+  const etag = `W/"${stat.size}-${Math.floor(stat.mtimeMs)}"`;
+  const immutableAsset = isImmutableAsset(filePath);
+  const cacheControl = immutableAsset ? "public, max-age=31536000, immutable" : "no-cache";
+  const headers = {
+    "Content-Type": type,
+    "Cache-Control": cacheControl,
+    "ETag": etag,
+    "Last-Modified": stat.mtime.toUTCString()
+  };
+
+  if (request.headers["if-none-match"] === etag) {
+    response.writeHead(304, headers);
+    response.end();
+    return;
+  }
+
+  let body = readFileSync(filePath);
+  if (shouldGzipFile(filePath, request)) {
+    body = gzipSync(body);
+    headers["Content-Encoding"] = "gzip";
+    headers["Vary"] = "Accept-Encoding";
+  }
+  headers["Content-Length"] = String(body.length);
+  response.writeHead(200, headers);
+  response.end(body);
+}
+
+function isImmutableAsset(filePath) {
+  const assetsDir = normalize(join(DIST_DIR, "assets"));
+  const normalized = normalize(filePath);
+  return normalized === assetsDir || normalized.startsWith(assetsDir + "\\") || normalized.startsWith(assetsDir + "/");
+}
+
+function shouldGzipFile(filePath, request) {
+  const acceptsGzip = /\bgzip\b/i.test(String(request.headers["accept-encoding"] || ""));
+  if (!acceptsGzip) return false;
+  return [".html", ".js", ".css", ".json", ".svg"].includes(extname(filePath).toLowerCase());
 }
 
 function contentType(filePath) {
