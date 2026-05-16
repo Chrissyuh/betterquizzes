@@ -1884,8 +1884,8 @@ function requireQuizRecoveryAccess(url, quizId) {
   return null;
 }
 
-function publicOriginFrom(url) {
-  const requestOrigin = cleanOrigin(url.protocol + "//" + url.host);
+function publicOriginFrom(url, request) {
+  const requestOrigin = request ? requestOriginFrom(request, url) : cleanOrigin(url.protocol + "//" + url.host);
   const configuredOrigin = publicOrigin();
   if (configuredOrigin && isLocalRequestHost(url.hostname)) return configuredOrigin;
   return requestOrigin || configuredOrigin;
@@ -1983,15 +1983,15 @@ try {
 
 
     if (request.method === "GET" && (url.pathname === "/.well-known/betterquizzes.json" || url.pathname === "/.well-known/betterquizzer.json")) {
-      return sendJson(response, 200, appManifest(url));
+      return sendJson(response, 200, appManifest(url, request));
     }
 
     if (request.method === "GET" && (url.pathname === "/.well-known/mcp-app.json" || url.pathname === "/mcp-inspector.json")) {
-      return sendJson(response, 200, appManifest(url));
+      return sendJson(response, 200, appManifest(url, request));
     }
 
     if (request.method === "GET" && (url.pathname === "/connector-card.json" || url.pathname === "/.well-known/ai-plugin.json")) {
-      return sendJson(response, 200, connectorCard(url));
+      return sendJson(response, 200, connectorCard(url, request));
     }
 
 
@@ -2966,8 +2966,8 @@ function debugVersion(url) {
   };
 }
 
-function connectorCard(url) {
-  const origin = publicOriginFrom(url);
+function connectorCard(url, request) {
+  const origin = publicOriginFrom(url, request);
   return {
     name: "BetterQuizzes",
     description: "Open LLM-created quizzes in a clean interface, collect answers and confidence, and return a structured SubmissionCapsule for LLM grading.",
@@ -2983,8 +2983,8 @@ function connectorCard(url) {
   };
 }
 
-function appManifest(url) {
-  const origin = publicOriginFrom(url);
+function appManifest(url, request) {
+  const origin = publicOriginFrom(url, request);
   return {
     name: "BetterQuizzes",
     title: "BetterQuizzes",
