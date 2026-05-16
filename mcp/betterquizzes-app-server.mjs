@@ -63,9 +63,9 @@ const ADD_QUESTION_INPUT_SCHEMA = {
   properties: {
     draftId: { type: "string", description: "Draft id returned by start_quiz." },
     question: { type: "object", additionalProperties: true, description: `Required. One BetterQuizzes v2 question object. Supported type values: ${SUPPORTED_QUESTION_TYPE_VALUES.join(", ")}. Use multi_select, not multiple_select, for multiple-answer questions.` },
-    repairedQuestion: { type: "object", additionalProperties: true, description: "Replacement question for repair_question compatibility; repair_question should normally use repairedQuestion." },
+    repairedQuestion: { type: "object", additionalProperties: true, description: "Corrected question object for repair_question compatibility; repair_question should normally use repairedQuestion." },
     replace: { type: "boolean", description: "Replace an existing question instead of appending." },
-    repair: { type: "boolean", description: "Whether this call is repairing a rejected question." },
+    repair: { type: "boolean", description: "Whether this call is app-local cleanup for a rejected draft question." },
     replaceQuestionId: { type: "string" },
     replaceIndex: { type: "integer", minimum: 0 },
     reason: { type: "string" }
@@ -78,11 +78,11 @@ const REPAIR_QUESTION_INPUT_SCHEMA = {
   additionalProperties: true,
   properties: {
     draftId: { type: "string", description: "Draft id returned by start_quiz." },
-    repairedQuestion: { type: "object", additionalProperties: true, description: `Required. Replacement BetterQuizzes v2 question object. Supported type values: ${SUPPORTED_QUESTION_TYPE_VALUES.join(", ")}. Use multi_select, not multiple_select, for multiple-answer questions.` },
-    replace: { type: "boolean", const: true, description: "Set true to replace the bad question." },
-    replaceQuestionId: { type: "string", description: "Id of the question being replaced." },
-    replaceIndex: { type: "integer", minimum: 0, description: "Zero-based index of the question being replaced." },
-    reason: { type: "string" }
+    repairedQuestion: { type: "object", additionalProperties: true, description: `Required. Corrected BetterQuizzes v2 question object for this in-memory draft. Supported type values: ${SUPPORTED_QUESTION_TYPE_VALUES.join(", ")}. Use multi_select, not multiple_select, for multiple-answer questions.` },
+    replace: { type: "boolean", const: true, description: "Compatibility flag for app-local draft cleanup; true updates the invalid draft question." },
+    replaceQuestionId: { type: "string", description: "Question id to update in the current in-memory draft." },
+    replaceIndex: { type: "integer", minimum: 0, description: "Zero-based draft index to update if no question id is available." },
+    reason: { type: "string", description: "Optional brief validation reason for the draft cleanup; do not show this to the user." }
   },
   required: ["draftId", "repairedQuestion"]
 };
@@ -159,6 +159,7 @@ const SUBMISSION_OUTPUT_SCHEMA = { type: "object", properties: { kind: { const: 
 const GRADE_OUTPUT_SCHEMA = { type: "object", properties: { ok: { type: "boolean" }, grade: { anyOf: [GENERIC_OBJECT_SCHEMA, { type: "null" }] } }, additionalProperties: true };
 const INSPECT_QUIZ_OUTPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, title: { type: "string" }, questionCount: { type: "integer", minimum: 0 }, renderableQuestionCount: { type: "integer", minimum: 0 }, unrenderableQuestions: { type: "array", items: GENERIC_OBJECT_SCHEMA }, warnings: { type: "array", items: { type: "string" } }, renderDiagnostics: GENERIC_OBJECT_SCHEMA, types: { type: "array", items: { type: "string" } } }, additionalProperties: true };
 const DRAFT_TOOL_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: false };
+const REPAIR_TOOL_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true };
 const OPEN_TOOL_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true };
 
 const V23_BUILDER_TOOL_DEFS = [
@@ -188,10 +189,12 @@ const V23_BUILDER_TOOL_DEFS = [
   },
   {
     name: "repair_question",
-    description: "Replace or repair one invalid or incomplete question in an incremental BetterQuizzes draft. Required repair input shape: { draftId, repairedQuestion, replace:true, replaceQuestionId? }. Matching canonical shape is left/right arrays; optional grading keys use answer:[{leftId,rightId}]. Legacy pairs/matches/items are normalized.",
+    title: "Update Draft Question",
+    description: "Use this when one accepted BetterQuizzes draft question needs app-local validation cleanup before it can render. This updates only the current in-memory draft: no external services, no publishing, no durable records, and no new widget. Required input shape: { draftId, repairedQuestion, replace:true, replaceQuestionId? }. Matching canonical shape is left/right arrays; optional grading keys use answer:[{leftId,rightId}]. Legacy pairs/matches/items are normalized.",
     inputSchema: REPAIR_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
-    annotations: DRAFT_TOOL_ANNOTATIONS
+    annotations: REPAIR_TOOL_ANNOTATIONS,
+    _meta: { "openai/toolInvocation/invoking": "Updating draft...", "openai/toolInvocation/invoked": "Draft updated" }
   },
   {
     name: "open_quiz",
@@ -536,12 +539,12 @@ function v23RepairRequest(question, issues, context = {}) {
 function v23RepairInstruction(question) {
   const type = v23QuestionType(question).toLowerCase();
   if (type.includes("matching")) {
-    return "Repair this one matching question and call repair_question with {draftId, repairedQuestion, replace:true}. Use canonical matching shape exactly: {id,type:'matching',prompt,left:[{id,text}],right:[{id,text}],answer:[{leftId,rightId}]}. Do not use pairs for new matching questions.";
+    return "Silently update this one matching draft question by calling repair_question with {draftId, repairedQuestion, replace:true}. This is app-local cleanup only. Use canonical matching shape exactly: {id,type:'matching',prompt,left:[{id,text}],right:[{id,text}],answer:[{leftId,rightId}]}. Do not use pairs for new matching questions.";
   }
   if (type === "text_select") {
-    return "Repair this one text_select question and call repair_question with {draftId, repairedQuestion, replace:true}. Use canonical text_select shape exactly: {id,type:'text_select',prompt,segments:[{id,text,selectable?}],selectionPolicy:{mode},answer:['segmentId']}. Use text_select only for a passage with at least two sentences or meaningful context and at least three plausible selectable segments. Do not use choices for text_select, and do not make the correct phrase the only plausible selectable phrase.";
+    return "Silently update this one text_select draft question by calling repair_question with {draftId, repairedQuestion, replace:true}. This is app-local cleanup only. Use canonical text_select shape exactly: {id,type:'text_select',prompt,segments:[{id,text,selectable?}],selectionPolicy:{mode},answer:['segmentId']}. Use text_select only for a passage with at least two sentences or meaningful context and at least three plausible selectable segments. Do not use choices for text_select, and do not make the correct phrase the only plausible selectable phrase.";
   }
-  return "Repair this one question and call repair_question with {draftId, repairedQuestion, replace:true}. Keep BetterQuizzes v2 compatibility.";
+  return "Silently update this one draft question by calling repair_question with {draftId, repairedQuestion, replace:true}. This is app-local cleanup only. Keep BetterQuizzes v2 compatibility.";
 }
 
 function startQuiz(input = {}) {
@@ -829,7 +832,7 @@ function finalizeQuiz(input = {}) {
       ...builderContractFields(),
       repairRequest: {
         instruction:
-          "Repair the invalid questions one at a time using repair_question. Accepted repaired questions are stored automatically."
+          "Silently update invalid draft questions one at a time using repair_question. Accepted corrected questions are stored automatically."
       }
     });
   }
@@ -868,7 +871,7 @@ function finalizeQuiz(input = {}) {
       ...builderContractFields(),
       repairRequest: {
         instruction:
-          "Repair the invalid or unrenderable questions using repair_question. Accepted repaired questions are stored automatically; do not restart the quiz unless the draft is missing."
+          "Silently update invalid or unrenderable draft questions using repair_question. Accepted corrected questions are stored automatically; do not restart the quiz unless the draft is missing."
       }
     });
   }
@@ -963,11 +966,11 @@ function uniqueDomains(...domains) {
 
 const MODEL_INSTRUCTIONS = `BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes when a student wants an interactive study quiz, practice drill, diagnostic check, self-test, survey, or practice activity inside ChatGPT. Do not use it for plain explanations, flashcards, emailing/publishing results, or durable classroom gradebooks.
-2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount; this creates a draft only. Call add_first_question once for the first question when that tool is visible; add_first_question is the preferred builder tool that launches the widget. If the current ChatGPT session has stale tool metadata and does not list add_first_question, call add_question for the first question as a compatibility launch path. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted later questions are stored continuously and the already-launched widget refreshes from the stored draft. Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. Do not send chat progress/check-in messages while authoring; only speak if blocked by an unrepaired error. Do not send question batches in start_quiz. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
-3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless repairing older input.
+2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount; this creates a draft only. Call add_first_question once for the first question when that tool is visible; add_first_question is the preferred builder tool that launches the widget. If the current ChatGPT session has stale tool metadata and does not list add_first_question, call add_question for the first question as a compatibility launch path. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted later questions are stored continuously and the already-launched widget refreshes from the stored draft. Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. Do not send chat progress/check-in messages while authoring; only speak if blocked by a draft cleanup error. Do not send question batches in start_quiz. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
+3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless normalizing older input.
 4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, and numeric. Use multi_write_vertical when a prompt needs any number of separate written answers, text_select when the user should select words/segments inside a passage, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall.
-5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based indexes and can have any number of correct answers; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; multi_typing and multi_write_vertical fields may have any number of fields/answers and use response/answer objects keyed by field id; text_select uses segments:[{id,text,selectable?}], optional selectionPolicy, and answer:string[] of selected segment ids. Use text_select only for a passage with context, usually at least two sentences or 120 characters, and at least three plausible selectable segments; do not make one sentence with one obvious highlighted answer. Do not use choices for text_select. Ordering answer is ordered item ids in visual top-to-bottom order. orderingBehavior.direction must always be "top_to_bottom"; never use first_to_last or other conceptual values there. Put conceptual meaning in orderingBehavior.topLabel and orderingBehavior.bottomLabel; matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]. Do not author matching as pairs unless repairing old input.
-6. Each advertised question type has renderer certification. If add_question asks for repair, call repair_question for the specific bad question instead of restarting the whole quiz. If create_quiz returns renderDiagnostics.unrenderableQuestions or rendererCertified=false, prefer repairing the draft with the builder; only retry create_quiz once when you already have a complete top-level quiz packet. Do not keep retrying blindly.
+5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based indexes and can have any number of correct answers; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; multi_typing and multi_write_vertical fields may have any number of fields/answers and use response/answer objects keyed by field id; text_select uses segments:[{id,text,selectable?}], optional selectionPolicy, and answer:string[] of selected segment ids. Use text_select only for a passage with context, usually at least two sentences or 120 characters, and at least three plausible selectable segments; do not make one sentence with one obvious highlighted answer. Do not use choices for text_select. Ordering answer is ordered item ids in visual top-to-bottom order. orderingBehavior.direction must always be "top_to_bottom"; never use first_to_last or other conceptual values there. Put conceptual meaning in orderingBehavior.topLabel and orderingBehavior.bottomLabel; matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]. Do not author matching as pairs unless normalizing old input.
+6. Each advertised question type has renderer certification. If add_question requests cleanup, call repair_question silently for the specific bad question instead of restarting the whole quiz. If create_quiz returns renderDiagnostics.unrenderableQuestions or rendererCertified=false, prefer updating the draft with the builder; only retry create_quiz once when you already have a complete top-level quiz packet. Do not keep retrying blindly.
 7. Required questions should be rare. BetterQuizzes is usually AI practice, not a school-grade test. Default to activityPolicy.defaultAnswerRequired=false with allowSkipQuiz=true and allowSkipQuestions=true unless the user explicitly asks for a strict test, certification check, or all-questions-required assessment. Use answerRequired=true only for essential blocking questions. If uncertainty is expected, make the question optional or include an explicit ‘I’m not sure’ choice. Blank non-required questions are allowed and should not be penalized. Reflections should be optional unless the user asks for them.
 8. Avoid answer leakage: do not reveal the answer to an earlier unresolved question in later prompts, choices, matching labels, examples, or explanations. For matching questions, do not place right-side answers in the same order as the left side; shuffle or naturally reorder them. Keep placeholder/example text short enough for the field size; compact and multi-write field placeholders should usually stay under 35–45 characters. Formatting controls are off by default; set question.formatting=true only for notation-heavy written answers where it helps, mainly math, chemistry, formulas, exponents, or subscripts.
 9. After add_first_question launches the widget, keep authoring silently with storage-only add_question/repair_question while the widget polls updates; do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. After the expected count is reached, stop and let the user complete the widget. Do not grade from the original quiz.

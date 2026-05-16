@@ -48,12 +48,14 @@
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": true
       },
       "justifications": {
-        "read_only_justification": "Repairs or replaces one question only in an in-memory BetterQuizzes draft for the current app session; it does not publish, persist, or modify external user data.",
+        "read_only_justification": "Updates one invalid or incomplete question only inside the current in-memory BetterQuizzes draft; it does not publish, persist, or modify external user data.",
         "open_world_justification": "Does not publish content or modify any external service.",
-        "destructive_justification": "Does not delete, revoke access, or perform irreversible actions."
+        "destructive_justification": "Does not delete, revoke access, or perform irreversible actions.",
+        "idempotent_justification": "Repeating the same corrected question update for the same draft target produces the same draft question state."
       }
     },
     "open_quiz": {
@@ -164,7 +166,7 @@
       "user_prompt": "Create a quiz with an ordering question, and if the question needs repair, fix just that question.",
       "file_attachment_urls": null,
       "tools_triggered": "start_quiz, add_first_question, add_question, repair_question",
-      "expected_output": "Launches the first valid question once, then repairs only the invalid later question while the same widget polls for the corrected draft.",
+      "expected_output": "Launches the first valid question once, then updates only the invalid later question while the same widget polls for the corrected draft.",
       "expected_output_url": null
     },
     {
