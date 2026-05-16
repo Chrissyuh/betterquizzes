@@ -561,6 +561,9 @@ button.primary {
   font-size: .8rem;
   font-weight: 750;
 }
+.question-number-label {
+  color: #1d2939;
+}
 .tag-row, .type-pill, .subtle-badge { display: none !important; }
 .badge {
   border-radius: 8px;
@@ -604,6 +607,27 @@ button.primary {
   border-radius: 12px;
   padding: .85rem 1rem;
   font-weight: 700;
+}
+.incomplete-submit-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .9rem;
+  align-items: center;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #12325c;
+  border-radius: 14px;
+  padding: .9rem 1rem;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, .08);
+}
+.incomplete-submit-panel p {
+  margin: .2rem 0 0;
+  color: #475467;
+  font-weight: 650;
+}
+.incomplete-submit-panel .actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .confidence-section {
@@ -1211,6 +1235,13 @@ button.primary {
   .nav-card {
     position: static;
     top: auto;
+  }
+  .incomplete-submit-panel {
+    grid-template-columns: 1fr;
+  }
+  .incomplete-submit-panel .actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }
 

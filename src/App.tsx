@@ -887,6 +887,7 @@ function QuizRunner({
   const [submitting, setSubmitting] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [incompleteSubmitPrompt, setIncompleteSubmitPrompt] = useState(false);
   const [skipMode, setSkipMode] = useState<"prompt" | "skipped" | null>(null);
   const knownQuestionIdsRef = useRef<Set<string>>(new Set(quiz.questions.map((question) => question.id)));
   const [arrivingQuestionIds, setArrivingQuestionIds] = useState<Set<string>>(() => new Set());
@@ -902,11 +903,9 @@ function QuizRunner({
     }, 40);
     return () => window.clearTimeout(id);
   }, [currentIndex]);
-  const requiredQuestions = quiz.questions.filter((question) => isQuestionRequired(question, activityPolicy));
   const completeQuestionCount = quiz.questions.filter((question) => isQuestionDoneForNavigation(question, drafts[question.id], displayPolicy)).length;
   const allQuestionsDone = quiz.questions.length > 0 && completeQuestionCount === quiz.questions.length;
-  const isLastQuestion = quiz.questions.length > 0 && currentIndex === quiz.questions.length - 1;
-  const submitLooksReady = allQuestionsDone || isLastQuestion;
+  const submitLooksReady = allQuestionsDone;
   const submitIssue = getSubmitIssue(quiz, drafts, displayPolicy, activityPolicy, startedAt);
   const generationStatus = getIncrementalGenerationStatus(quiz);
   const progressTotal = generationStatus?.expected ?? quiz.questions.length;
@@ -968,6 +967,7 @@ function QuizRunner({
   }, [quiz, currentIndex]);
 
   function updateDraft(questionId: string, patch: Partial<DraftAnswer>): void {
+    setIncompleteSubmitPrompt(false);
     setDrafts((previous) => {
       const now = Date.now();
       const previousDraft = previous[questionId] ?? { response: null, firstSeenAt: now, lastUpdatedAt: now };
@@ -984,6 +984,35 @@ function QuizRunner({
       void question;
       return { ...previous, [questionId]: merged };
     });
+  }
+
+  function firstIncompleteQuestionIndex(): number {
+    const index = quiz.questions.findIndex((question) => !isQuestionDoneForNavigation(question, drafts[question.id], displayPolicy));
+    return index >= 0 ? index : currentIndex;
+  }
+
+  function reviewUnfinished(): void {
+    setSubmitAttempted(true);
+    setIncompleteSubmitPrompt(false);
+    setError(null);
+    setCurrentIndex(firstIncompleteQuestionIndex());
+  }
+
+  function requestSubmit(): void {
+    if (submitting) return;
+    setSubmitAttempted(true);
+    const records = makeAnswerRecords(quiz, drafts, startedAt);
+    const completion = buildCompletionSummary(quiz, records, displayPolicy, activityPolicy);
+    if (activityPolicy.submitRequiresRequiredAnswers && !completion.isComplete) {
+      void finish();
+      return;
+    }
+    if (!allQuestionsDone) {
+      setError(null);
+      setIncompleteSubmitPrompt(true);
+      return;
+    }
+    void finish();
   }
 
   function skipQuiz(): void {
@@ -1009,6 +1038,7 @@ function QuizRunner({
   async function finish(options: { allowIncomplete?: boolean } = {}): Promise<void> {
     if (submitting) return;
     setSubmitAttempted(true);
+    setIncompleteSubmitPrompt(false);
     const records = makeAnswerRecords(quiz, drafts, startedAt);
     const completion = buildCompletionSummary(quiz, records, displayPolicy, activityPolicy);
     if (activityPolicy.submitRequiresRequiredAnswers && !completion.isComplete && !options.allowIncomplete) {
@@ -1182,8 +1212,20 @@ function QuizRunner({
       {shouldShowQuestionNav ? <QuestionNav questions={quiz.questions} expectedQuestionCount={generationStatus?.expected} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={arrivingQuestionIds} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={setCurrentIndex} /> : null}
 
       <section className="main-column">
-        <QuestionCard question={current} draft={drafts[current.id]} isArriving={arrivingQuestionIds.has(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
+        <QuestionCard question={current} questionIndex={currentIndex} questionCount={quiz.questions.length} plannedQuestionCount={progressTotal} draft={drafts[current.id]} isArriving={arrivingQuestionIds.has(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
         {submitAttempted && error ? <div className="notice-box" role="status">{error}</div> : null}
+        {incompleteSubmitPrompt ? (
+          <section className="incomplete-submit-panel" role="alert" aria-live="assertive">
+            <div>
+              <strong>Submit with {completeQuestionCount} of {quiz.questions.length} questions complete?</strong>
+              <p>Unfinished answers will be sent blank for ChatGPT to grade or ignore based on the quiz instructions.</p>
+            </div>
+            <div className="actions">
+              <button type="button" onClick={reviewUnfinished}>Review unfinished</button>
+              <button className="primary" type="button" disabled={submitting} onClick={() => void finish({ allowIncomplete: true })}>Submit anyway</button>
+            </div>
+          </section>
+        ) : null}
         <div className={`actions split compact-actions ${quiz.questions.length <= 1 ? "single-question-actions" : ""}`}>
           {quiz.questions.length > 1 ? (
             <div className="actions">
@@ -1192,7 +1234,7 @@ function QuizRunner({
             </div>
           ) : null}
           <div className="submit-column">
-            <button className={submitLooksReady ? "primary submit-ready" : "submit-not-ready"} type="button" disabled={submitting} title={submitAttempted && submitIssue ? submitIssue : !allQuestionsDone ? "You can submit, but unfinished questions remain." : undefined} onClick={() => void finish()}>{submitting ? "Submitting..." : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
+            <button className={submitLooksReady ? "primary submit-ready" : "submit-not-ready"} type="button" disabled={submitting} title={submitAttempted && submitIssue ? submitIssue : !allQuestionsDone ? "You can submit, but unfinished questions remain." : undefined} onClick={requestSubmit}>{submitting ? "Submitting..." : widgetMode ? "Submit to ChatGPT" : "Create submission"}</button>
           </div>
         </div>
       </section>
@@ -1300,15 +1342,17 @@ function QuestionNav({
   );
 }
 
-function QuestionCard({ question, draft, isArriving = false, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; isArriving?: boolean; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+function QuestionCard({ question, questionIndex, questionCount, plannedQuestionCount, draft, isArriving = false, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }: { question: Question; questionIndex: number; questionCount: number; plannedQuestionCount: number; draft: DraftAnswer | undefined; isArriving?: boolean; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
   const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy, revealRequiredStatus);
   const required = isQuestionRequired(question, activityPolicy);
   const answerComplete = isQuestionAnswerComplete(question, draft);
   const confidenceRequired = isConfidenceRequiredForQuestion(question, displayPolicy);
   const confidenceValue = answerComplete && confidenceRequired ? normalizeConfidence(draft?.confidence) : undefined;
+  const visibleTotal = Math.max(questionCount, plannedQuestionCount);
   return (
     <section className={`card question-card ${isArriving ? "new-question" : ""} ${status}`}>
       <div className="question-header">
+        <span className="question-meta-label question-number-label">Question {questionIndex + 1} of {visibleTotal}</span>
         {!required ? <span className="question-meta-label">Optional</span> : null}
       </div>
       <h2><RichInline text={question.prompt} /></h2>
@@ -2632,14 +2676,24 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
 function MatchingInput({ question, response, onChange }: { question: Extract<Question, { type: "matching" }>; response: MatchingPair[]; onChange: (value: MatchingPair[]) => void }): ReactElement {
   const leftItems = getMatchingSide(question, "left");
   const rightItems = useMemo(() => getStableShuffledItems(getMatchingSide(question, "right"), question.id), [question]);
+  const uniqueRightItems = isUniqueMatchingQuestion(question);
   function setPair(leftId: string, rightId: string): void {
-    const without = response.filter((pair) => pair.leftId !== leftId);
+    const without = response.filter((pair) => pair.leftId !== leftId && (!uniqueRightItems || !rightId || pair.rightId !== rightId));
     onChange(rightId ? [...without, { leftId, rightId }] : without);
   }
   if (!leftItems.length || !rightItems.length) {
     return <QuestionRenderWarning question={question} detail="This matching question needs valid left and right item lists." />;
   }
-  return <div className="match-list">{leftItems.map((left) => <label key={left.id} className="match-row"><span><RichInline text={left.text} /></span><select value={response.find((pair) => pair.leftId === left.id)?.rightId ?? ""} onChange={(event) => setPair(left.id, event.currentTarget.value)}><option value="">Choose match...</option>{rightItems.map((right) => <option key={right.id} value={right.id}>{right.text}</option>)}</select></label>)}</div>;
+  return <div className="match-list">{leftItems.map((left) => {
+    const selectedRightId = response.find((pair) => pair.leftId === left.id)?.rightId ?? "";
+    const selectedByOtherRows = new Set(response.filter((pair) => pair.leftId !== left.id).map((pair) => pair.rightId));
+    const visibleRightItems = uniqueRightItems ? rightItems.filter((right) => right.id === selectedRightId || !selectedByOtherRows.has(right.id)) : rightItems;
+    return <label key={left.id} className="match-row"><span><RichInline text={left.text} /></span><select value={selectedRightId} onChange={(event) => setPair(left.id, event.currentTarget.value)}><option value="">Choose match...</option>{visibleRightItems.map((right) => <option key={right.id} value={right.id}>{right.text}</option>)}</select></label>;
+  })}</div>;
+}
+
+function isUniqueMatchingQuestion(question: Extract<Question, { type: "matching" }>): boolean {
+  return question.matchingBehavior?.rightItemReuse === "unique";
 }
 
 function getStableShuffledItems<T extends { id: string }>(items: T[], seed: string): T[] {
@@ -3061,9 +3115,12 @@ function sanitizeMatchingPairs(question: Extract<Question, { type: "matching" }>
   const leftIds = new Set(getMatchingSide(question, "left").map((item) => item.id));
   const rightIds = new Set(getMatchingSide(question, "right").map((item) => item.id));
   const seenLeft = new Set<string>();
+  const seenRight = new Set<string>();
+  const uniqueRightItems = isUniqueMatchingQuestion(question);
   return response.filter((pair) => {
-    if (!leftIds.has(pair.leftId) || !rightIds.has(pair.rightId) || seenLeft.has(pair.leftId)) return false;
+    if (!leftIds.has(pair.leftId) || !rightIds.has(pair.rightId) || seenLeft.has(pair.leftId) || (uniqueRightItems && seenRight.has(pair.rightId))) return false;
     seenLeft.add(pair.leftId);
+    seenRight.add(pair.rightId);
     return true;
   });
 }
@@ -3303,7 +3360,8 @@ function isQuestionAnswerComplete(question: Question, draft: DraftAnswer | undef
       const leftItems = getMatchingSide(question, "left");
       const rightIds = new Set(getMatchingSide(question, "right").map((item) => item.id));
       const pairs = isMatchingPairs(response) ? response : [];
-      return leftItems.length > 0 && leftItems.every((left) => pairs.some((pair) => pair.leftId === left.id && rightIds.has(pair.rightId)));
+      if (!leftItems.length || !leftItems.every((left) => pairs.some((pair) => pair.leftId === left.id && rightIds.has(pair.rightId)))) return false;
+      return !isUniqueMatchingQuestion(question) || new Set(pairs.map((pair) => pair.rightId)).size === pairs.length;
     }
     case "ordering": {
       const items = getOrderingItems(question);

@@ -15,7 +15,7 @@ const remote = read("mcp/remote-server.mjs");
 const sharedGuidance = read("mcp/shared-authoring-guidance.mjs");
 const guidanceSurface = remote + "\n" + sharedGuidance;
 
-assert(guidanceSurface.includes("Continue add_question/repair_question exactly once per later question") && guidanceSurface.includes("add_first_question is the preferred builder tool that launches the widget") && guidanceSurface.includes("add_question may be used for the first question as a compatibility launch path"), "one-at-a-time add_first_question builder launch guidance missing");
+assert(guidanceSurface.includes("Continue add_question/repair_question exactly once per later question") && guidanceSurface.includes("As soon as the first renderable question is ready, call add_first_question") && guidanceSurface.includes("add_question may be used for the first question as a compatibility launch path"), "one-at-a-time add_first_question builder launch guidance missing");
 assert(guidanceSurface.includes("Do not send question batches in start_quiz"), "start_quiz batch rejection guidance missing");
 assert(guidanceSurface.includes("Do not send chat progress/check-in messages while authoring"), "quiet model instructions missing");
 assert(!remote.includes("Optional bulk question list"), "start_quiz must not advertise bulk preload schema");

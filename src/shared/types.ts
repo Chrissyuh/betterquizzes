@@ -206,7 +206,11 @@ export type TextSelectQuestion = BaseQuestion & {
 
 export type MatchItem = { id: string; text: string };
 export type MatchingPair = { leftId: string; rightId: string };
-export type MatchingQuestion = BaseQuestion & { type: "matching"; left: MatchItem[]; right: MatchItem[]; answer?: MatchingPair[] };
+export type MatchingBehavior = {
+  /** Defaults to allow_reuse. Set unique when each right-side item should be used at most once. */
+  rightItemReuse?: "allow_reuse" | "unique";
+};
+export type MatchingQuestion = BaseQuestion & { type: "matching"; left: MatchItem[]; right: MatchItem[]; answer?: MatchingPair[]; matchingBehavior?: MatchingBehavior };
 export type OrderingItem = { id: string; text: string };
 export type OrderingQuestion = BaseQuestion & { type: "ordering"; items: OrderingItem[]; answer?: string[]; orderingBehavior?: OrderingBehavior };
 export type NumericQuestion = BaseQuestion & { type: "numeric"; answer?: number; tolerance?: number; unit?: string };
