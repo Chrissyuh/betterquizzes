@@ -1,4 +1,5 @@
 export const V2_BUILDER_INSTRUCTION_LINES = [
+  "Use BetterQuizzes when a student wants an interactive study quiz, practice drill, diagnostic check, or self-test inside ChatGPT. Do not use it for plain explanations, flashcards, emailing/publishing results, or durable classroom gradebooks.",
   "V45 ORDERING CHECKLIST BEFORE add_question: if type is ordering, use items and orderingBehavior.direction exactly top_to_bottom. Answer item ids are optional unless the user asks for grading keys.",
   "V45 ORDERING WARNING: orderingBehavior.direction is never conceptual. Never use first_to_last, chronological, sequence, most_to_least, least_to_most, closest_to_farthest, left_to_right, or horizontal.",
   "V45 ORDERING LABELS: write conceptual meaning only in orderingBehavior.topLabel and orderingBehavior.bottomLabel, such as First/Last or Most/Least.",

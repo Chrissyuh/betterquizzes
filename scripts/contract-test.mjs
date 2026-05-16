@@ -15,6 +15,7 @@ const bridge = readFileSync("src/host/openaiBridge.ts", "utf8");
 function assert(value, message) { if (!value) throw new Error(message); }
 
 assert(server.includes('const VERSION = "V1"'), "server version must be V1");
+assert(server.includes("Interactive study quizzes for ChatGPT") && server.includes("Create interactive AI-generated study quizzes"), "public manifest/card metadata must use student-focused discovery copy");
 assert(server.includes('ui://widget/betterquizzes-v1-build-bqv1p1.html'), "widget URI must be versioned for V1");
 assert(server.includes('CREATE_QUIZ_INPUT_SCHEMA'), "create_quiz must use a named input schema");
 assert(server.includes('outputSchema: LAUNCH_OUTPUT_SCHEMA'), "create_quiz must expose an output schema");
@@ -104,6 +105,8 @@ assert(appSubmission.tools?.open_quiz?.annotations?.readOnlyHint === true, "subm
 assert(appSubmission.tools?.open_quiz?.annotations?.destructiveHint === false, "submission metadata must mark open_quiz non-destructive");
 assert(appSubmission.tools?.open_quiz?.annotations?.openWorldHint === false, "submission metadata must mark open_quiz non-open-world");
 assert(appSubmission.tools?.open_quiz?.annotations?.idempotentHint === true, "submission metadata must mark open_quiz idempotent");
+assert(appSubmission.app_info?.subtitle === "Interactive study quizzes", "submission metadata must use student-focused subtitle");
+assert(appSubmission.app_info?.description?.includes("practice drills") && appSubmission.app_info?.description?.includes("ChatGPT grading feedback"), "submission metadata must explain the student study value");
 assert(!JSON.stringify(appSubmission.test_cases).includes("start_quiz, add_question, open_quiz"), "submission test cases must not describe stale open_quiz launch flow");
 assert(JSON.stringify(appSubmission.test_cases).includes("add_first_question"), "submission test cases must describe current add_first_question launch flow");
 assert(JSON.stringify(appSubmission.negative_test_cases).includes("sensitive personal information"), "submission metadata must include sensitive-data negative test");

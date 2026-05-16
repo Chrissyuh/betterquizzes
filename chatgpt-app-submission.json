@@ -3,8 +3,8 @@
   "schema_version": 1,
   "app_info": {
     "display_name": "BetterQuizzes",
-    "subtitle": "Interactive quizzes",
-    "description": "BetterQuizzes lets ChatGPT build mixed-format practice quizzes, open them in an interactive widget, collect answers with confidence and timing, and return a structured submission for grading and feedback.",
+    "subtitle": "Interactive study quizzes",
+    "description": "BetterQuizzes helps students study with interactive ChatGPT-made quizzes, practice drills, diagnostic checks, and self-tests. It supports varied question types, confidence ratings, one-widget quiz delivery, structured submissions, and ChatGPT grading feedback.",
     "category": "EDUCATION"
   },
   "tools": {

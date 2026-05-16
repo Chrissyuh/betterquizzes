@@ -1723,7 +1723,7 @@ BetterQuizzes V40 workflow guidance:
 - Practice quizzes should rarely make every question required.
 
 BetterQuizzes model instructions V1 renderer-certified contract:
-1. Use BetterQuizzes only when the user wants an interactive quiz, drill, diagnostic, survey, or practice activity.
+1. Use BetterQuizzes when a student wants an interactive study quiz, practice drill, diagnostic check, self-test, survey, or practice activity inside ChatGPT. Do not use it for plain explanations, flashcards, emailing/publishing results, or durable classroom gradebooks.
 2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount; this creates a draft only. Call add_first_question once for the first question when that tool is visible; add_first_question is the preferred builder tool that launches the widget. If the current ChatGPT session has stale tool metadata and does not list add_first_question, call add_question for the first question as a compatibility launch path. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted later questions are stored continuously and the already-launched widget refreshes from the stored draft. Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. Do not send chat progress/check-in messages while authoring; only speak if blocked by an unrepaired error. Do not send question batches in start_quiz. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
 3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless repairing older input.
 4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, and numeric. Use multi_write_vertical when a prompt needs any number of separate written answers, text_select when the user should select words/segments inside a passage, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall.
@@ -2970,7 +2970,7 @@ function connectorCard(url, request) {
   const origin = publicOriginFrom(url, request);
   return {
     name: "BetterQuizzes",
-    description: "Open LLM-created quizzes in a clean interface, collect answers and confidence, and return a structured SubmissionCapsule for LLM grading.",
+    description: "Create interactive AI-generated study quizzes in ChatGPT with varied question types, confidence ratings, one-widget delivery, structured submissions, and AI grading.",
     mcpEndpoint: origin + "/mcp",
     health: origin + "/healthz",
     manifest: origin + "/.well-known/mcp-app.json",
@@ -2978,7 +2978,7 @@ function connectorCard(url, request) {
     connectorSetup: {
       connectorName: "BetterQuizzes",
       connectorUrl: origin + "/mcp",
-      instructions: "Use this HTTPS /mcp URL when creating a connector in ChatGPT developer mode. For assistant-authored quizzes, the model should use start_quiz with expectedQuestionCount, add the first question with add_first_question, let that tool launch the widget once, then continue add_question once per later question. Accepted questions are stored continuously. Use create_quiz only for an already complete user-supplied QuizSpec v2 packet, then grade from the SubmissionCapsule returned by submit_answers."
+      instructions: "Use this HTTPS /mcp URL when creating a ChatGPT app in Developer Mode. BetterQuizzes is for interactive study quizzes, practice drills, diagnostic checks, and self-tests. For assistant-authored quizzes, use start_quiz with expectedQuestionCount, add the first question with add_first_question, let that tool launch the widget once, then continue add_question once per later question. Do not use BetterQuizzes for plain explanations, flashcards, emailing/publishing results, or permanent gradebooks. Use create_quiz only for an already complete user-supplied QuizSpec v2 packet, then grade from the SubmissionCapsule returned by submit_answers."
     }
   };
 }
@@ -2990,7 +2990,7 @@ function appManifest(url, request) {
     title: "BetterQuizzes",
     version: VERSION,
     stage: "V1",
-    description: "A neutral LLM-controlled quiz UI that returns structured answer submissions for model grading and tutoring.",
+    description: "Interactive study quizzes for ChatGPT: varied AI-generated question types, confidence ratings, one-widget answer collection, structured submissions, and ChatGPT grading feedback.",
     protocolVersion: PROTOCOL_VERSION,
     supportedProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
     transport: { type: "streamable-http", endpoint: origin + "/mcp", stateless: true },

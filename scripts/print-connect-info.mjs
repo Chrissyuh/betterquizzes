@@ -24,7 +24,7 @@ if (wantsPublic) {
   } else {
     console.log(`\nChatGPT connector setup values:`);
     console.log(`  Connector name: BetterQuizzes`);
-    console.log(`  Description: Open LLM-created quizzes in a clean interface, collect answers and confidence, and return a structured SubmissionCapsule for LLM grading.`);
+    console.log(`  Description: Create interactive AI-generated study quizzes in ChatGPT with varied question types, confidence ratings, structured submissions, and AI grading.`);
     console.log(`  Connector URL: ${publicBase}/mcp`);
   }
 } else {
