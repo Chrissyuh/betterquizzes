@@ -312,6 +312,57 @@ async function runSmoke() {
   const stagedAfterUpdates = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedAfterUpdates.quiz.questions.length === 3, "token-scoped quiz endpoint should update as staged questions are added");
 
+  const lateStarted = await rpc("tools/call", {
+    name: "start_quiz",
+    arguments: {
+      title: "Late Extra Question Smoke",
+      topic: "QA",
+      quizId: "late-extra-question-smoke",
+      expectedQuestionCount: 2
+    }
+  });
+  const lateDraftId = lateStarted.result.structuredContent.draftId;
+  const lateFirst = await rpc("tools/call", {
+    name: "add_first_question",
+    arguments: {
+      draftId: lateDraftId,
+      question: {
+        id: "late-q1",
+        type: "multiple_choice",
+        prompt: "Which revision should launch?",
+        choices: ["First", "Final"],
+        answer: 0
+      }
+    }
+  });
+  await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: lateDraftId,
+      question: {
+        id: "late-q2",
+        type: "true_false",
+        prompt: "The expected count can be reached before the model is done authoring.",
+        answer: true
+      }
+    }
+  });
+  const lateThird = await rpc("tools/call", {
+    name: "add_question",
+    arguments: {
+      draftId: lateDraftId,
+      question: {
+        id: "late-q3",
+        type: "true_false",
+        prompt: "A late true-or-false question should still reach the active widget.",
+        answer: true
+      }
+    }
+  });
+  assert(lateThird.result.structuredContent.ok === true, "late extra true_false question should be accepted");
+  const lateStoredViaOriginalLaunch = await getJson("/api/quiz/late-extra-question-smoke?launchId=" + encodeURIComponent(lateFirst.result.structuredContent.launchId));
+  assert(lateStoredViaOriginalLaunch.quiz.questions.length === 3, "original launchId should keep polling access to late questions added after expected count");
+
   const badTextSelect = await rpc("tools/call", {
     name: "add_question",
     arguments: {

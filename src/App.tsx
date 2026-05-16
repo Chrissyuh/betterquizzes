@@ -832,8 +832,12 @@ function isIncrementalQuizBuilding(quiz: QuizSpec): boolean {
 
 function shouldPollForServerQuizUpdates(quiz: QuizSpec, progress: HydrationProgress | null): boolean {
   if (isIncrementalQuizBuilding(quiz)) return true;
-  if (!progress || progress.complete === true) return false;
-  return progress.expectedQuestions > quiz.questions.length;
+  if (!progress) return true;
+  if (progress.expectedQuestions > quiz.questions.length) return true;
+  // The model can underestimate expectedQuestionCount and keep authoring after
+  // the widget looked complete. Keep polling while the quiz is active so late
+  // accepted questions still appear instead of freezing at the old count.
+  return true;
 }
 
 function getIncrementalGenerationStatus(quiz: QuizSpec): { expected: number; ready: number } | null {

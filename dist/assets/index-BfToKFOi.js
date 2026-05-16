@@ -38816,8 +38816,9 @@ function isIncrementalQuizBuilding(quiz) {
 }
 function shouldPollForServerQuizUpdates(quiz, progress) {
 	if (isIncrementalQuizBuilding(quiz)) return true;
-	if (!progress || progress.complete === true) return false;
-	return progress.expectedQuestions > quiz.questions.length;
+	if (!progress) return true;
+	if (progress.expectedQuestions > quiz.questions.length) return true;
+	return true;
 }
 function getIncrementalGenerationStatus(quiz) {
 	const record = quiz;
