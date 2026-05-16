@@ -60,7 +60,7 @@ npm run host:contract:strict
 npm run submission:readiness
 ```
 
-`submission:readiness` is a final release gate. It should fail until `https://app.betterquizzes.com` resolves, the hosted manifest advertises that domain, and the legal pages use a real support email instead of the placeholder.
+`submission:readiness` is a final release gate. It checks that `https://quizzes.trybettertools.com` resolves, the hosted manifest advertises that domain, and the legal pages publish the production support email.
 
 ## Core flow
 

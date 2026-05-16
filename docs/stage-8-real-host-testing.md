@@ -59,12 +59,12 @@ https://YOUR-TUNNEL-HOST/mcp
 
 ## Deployment workflow
 
-For a deployed host, set `PUBLIC_BASE_URL` to the production HTTPS origin. The canonical submission origin is `https://app.betterquizzes.com`; the Render URL is only a fallback while DNS and custom-domain routing are being verified.
+For a deployed host, set `PUBLIC_BASE_URL` to the production HTTPS origin. The canonical submission origin is `https://quizzes.trybettertools.com`; the Render URL is only a fallback while DNS and custom-domain routing are being verified.
 
 Example:
 
 ```text
-PUBLIC_BASE_URL=https://app.betterquizzes.com
+PUBLIC_BASE_URL=https://quizzes.trybettertools.com
 ```
 
 Then run:
@@ -79,7 +79,7 @@ Before submission, also run:
 npm run submission:readiness
 ```
 
-That check is expected to fail until the custom domain resolves and the support email placeholder has been replaced.
+That check is expected to fail if the custom domain does not resolve or old placeholder support copy returns.
 
 ## What the public host smoke test checks
 

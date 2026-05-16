@@ -7,7 +7,7 @@
 For development, ngrok is fine. For submission, use the canonical custom domain:
 
 ```text
-https://app.betterquizzes.com
+https://quizzes.trybettertools.com
 ```
 
 Render may remain the backing host, but `https://betterquizzes.onrender.com` is only a deployment fallback and validation aid. Do not submit the app with the Render URL as the final public app URL unless the custom domain plan is intentionally abandoned.
@@ -16,7 +16,7 @@ The production command should run the HTTP MCP server:
 
 ```bash
 npm run build
-PUBLIC_BASE_URL=https://app.betterquizzes.com npm run serve:prod
+PUBLIC_BASE_URL=https://quizzes.trybettertools.com npm run serve:prod
 ```
 
 Required public endpoints from this project:
@@ -34,17 +34,17 @@ Submission should use a URL that will not change between reviews or after approv
 Set one of these environment variables on the host:
 
 ```bash
-PUBLIC_BASE_URL=https://app.betterquizzes.com
+PUBLIC_BASE_URL=https://quizzes.trybettertools.com
 # or
-PUBLIC_ORIGIN=https://app.betterquizzes.com
+PUBLIC_ORIGIN=https://quizzes.trybettertools.com
 
 # Required for app submission widget templates.
-WIDGET_DOMAIN=https://app.betterquizzes.com
+WIDGET_DOMAIN=https://quizzes.trybettertools.com
 ```
 
 Then verify that the server logs show the public MCP endpoint correctly. For submission, `WIDGET_DOMAIN` must be a stable HTTPS origin that you control. Do not use a temporary tunnel for this value.
 
-The custom domain must resolve before submission. `app.betterquizzes.com` is currently a release blocker until DNS points to the deployed host and strict public checks pass on that domain.
+The custom domain must resolve before submission. `quizzes.trybettertools.com` is currently a release blocker until DNS points to the deployed host and strict public checks pass on that domain.
 
 ## 3. Rebuild before every hosted release
 
@@ -77,7 +77,7 @@ npm run submission:readiness
 For public host validation, run after setting `PUBLIC_BASE_URL`:
 
 ```bash
-set PUBLIC_BASE_URL=https://app.betterquizzes.com
+set PUBLIC_BASE_URL=https://quizzes.trybettertools.com
 npm run host:contract:strict
 npm run host:public:strict
 npm run trial:public
@@ -113,7 +113,7 @@ Likely required or strongly recommended:
 - explanation of data handling
 - age/safety positioning if the app may be used by students
 
-The current legal pages intentionally use `support@betterquizzes.example` as a placeholder. Replace it with the real support email before submission; `npm run submission:readiness` must fail while the placeholder remains.
+The legal pages publish `support@trybettertools.com` as the support email. Keep this address working before submission; `npm run submission:readiness` fails if old placeholder support copy returns.
 
 ## 7. Privacy and data handling
 
@@ -161,4 +161,4 @@ Before submitting, test:
 
 ## 10. Submission-readiness rule of thumb
 
-Do not submit while using ngrok or the Render fallback URL as the final URL. Submit when BetterQuizzes is on `https://app.betterquizzes.com`, the public strict tests pass on that domain, the real support email is published, privacy/support materials exist, and a fresh ChatGPT chat can launch and submit a quiz without local-only dependencies.
+Do not submit while using ngrok or the Render fallback URL as the final URL. Submit when BetterQuizzes is on `https://quizzes.trybettertools.com`, the public strict tests pass on that domain, the real support email is published, privacy/support materials exist, and a fresh ChatGPT chat can launch and submit a quiz without local-only dependencies.

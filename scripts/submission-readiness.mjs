@@ -2,9 +2,15 @@
 import { readFileSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 
-const CANONICAL_ORIGIN = "https://app.betterquizzes.com";
-const CANONICAL_HOST = "app.betterquizzes.com";
-const SUPPORT_PLACEHOLDER = "support@betterquizzes.example";
+const CANONICAL_ORIGIN = "https://quizzes.trybettertools.com";
+const CANONICAL_HOST = "quizzes.trybettertools.com";
+const STALE_CANONICAL_ORIGIN = "https://app.betterquizzes.com";
+const SUPPORT_EMAIL = "support@trybettertools.com";
+const SUPPORT_PLACEHOLDERS = [
+  "support@betterquizzes.example",
+  "support@example.com",
+  "support@trybettertools.example"
+];
 const RESOURCE_URI = "ui://widget/betterquizzes-v62-fastload.html";
 const failures = [];
 
@@ -67,6 +73,7 @@ function checkLegalAndSubmissionFiles() {
 
   const appSubmission = JSON.parse(read("chatgpt-app-submission.json"));
   const serialized = JSON.stringify(appSubmission);
+  check(!serialized.includes(STALE_CANONICAL_ORIGIN), "submission metadata must not use the stale app.betterquizzes.com URL.");
   check(!serialized.includes("start_quiz, add_question, open_quiz"), "submission test cases must not describe the stale add_question/open_quiz launch flow.");
   check(serialized.includes("add_first_question"), "submission test cases must describe the add_first_question launch flow.");
   check(serialized.includes("durable classroom gradebook"), "negative tests must reject durable classroom gradebook use.");
@@ -80,7 +87,10 @@ function checkSupportReleaseBlocker() {
     read("public/terms.html"),
     read("public/terms/index.html")
   ].join("\n");
-  check(!legalText.includes(SUPPORT_PLACEHOLDER), `replace ${SUPPORT_PLACEHOLDER} with the real support email before submission.`);
+  check(legalText.includes(SUPPORT_EMAIL), `legal pages must publish ${SUPPORT_EMAIL}.`);
+  for (const placeholder of SUPPORT_PLACEHOLDERS) {
+    check(!legalText.includes(placeholder), `replace ${placeholder} with the real support email before submission.`);
+  }
 }
 
 await checkDns();

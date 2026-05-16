@@ -46,7 +46,7 @@ assert(server.includes('submission: { type: "object", additionalProperties: true
 assert(server.includes('const submitAnswersAlias = tools.find((tool) => tool.name === "submit_answers");'), "record_submission alias must share the OpenAI-compatible submit schema");
 assert(server.includes('outputSchema: GRADE_OUTPUT_SCHEMA'), "grade tools must expose output schemas");
 assert(server.includes('outputSchema: INSPECT_QUIZ_OUTPUT_SCHEMA'), "inspect_quiz must expose an output schema");
-assert(server.includes('DEFAULT_WIDGET_DOMAIN = "https://app.betterquizzes.com"'), "widget domain must have a submission-ready default");
+assert(server.includes('DEFAULT_WIDGET_DOMAIN = "https://quizzes.trybettertools.com"'), "widget domain must have a submission-ready default");
 assert(server.includes('"openai/widgetDomain": domain'), "widget resource must advertise openai/widgetDomain");
 assert(server.includes("ui: { prefersBorder: true, domain, csp:"), "widget resource must expose ui.domain metadata");
 assert(server.includes("resource_domains: resourceDomains"), "legacy widget CSP metadata must use explicit resource domains");
@@ -114,7 +114,8 @@ for (const toolName of ["start_quiz", "add_first_question", "add_question", "rep
   assert(annotations?.destructiveHint === false, `submission metadata must mark ${toolName} non-destructive`);
   assert(annotations?.openWorldHint === false, `submission metadata must mark ${toolName} non-open-world`);
 }
-assert(readFileSync("scripts/submission-readiness.mjs", "utf8").includes("support@betterquizzes.example"), "submission readiness script must block the support email placeholder");
+assert(readFileSync("scripts/submission-readiness.mjs", "utf8").includes("SUPPORT_EMAIL = \"support@trybettertools.com\""), "submission readiness script must require the production support email");
+assert(readFileSync("scripts/submission-readiness.mjs", "utf8").includes("support@betterquizzes.example"), "submission readiness script must still block the old support email placeholder");
 
 assert(demoClient.includes("resources.result.resources[0].uri"), "demo client must read the advertised widget resource URI");
 assert(demoClient.includes('name: "add_first_question"') && demoClient.includes('betterquizzer.launch'), "demo client must cover add_first_question launch");

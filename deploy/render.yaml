@@ -12,8 +12,8 @@ services:
       - key: NODE_ENV
         value: production
       - key: PUBLIC_BASE_URL
-        value: https://app.betterquizzes.com
+        value: https://quizzes.trybettertools.com
       - key: PUBLIC_ORIGIN
-        value: https://app.betterquizzes.com
+        value: https://quizzes.trybettertools.com
       - key: WIDGET_DOMAIN
-        value: https://app.betterquizzes.com
+        value: https://quizzes.trybettertools.com

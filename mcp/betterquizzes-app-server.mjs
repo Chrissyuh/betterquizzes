@@ -947,7 +947,7 @@ function cleanOrigin(value) {
   return String(value).trim().replace(/\/$/, "");
 }
 
-const DEFAULT_WIDGET_DOMAIN = "https://app.betterquizzes.com";
+const DEFAULT_WIDGET_DOMAIN = "https://quizzes.trybettertools.com";
 
 function publicOrigin() {
   return cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL);
