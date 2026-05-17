@@ -15,6 +15,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v63-uxfix.html"'), "current UX fixes must use a v63 widget URI so ChatGPT does not reuse the v62 cached resource");
+assert(remote.includes("betterquizzes-v62-fastload.html"), "v62 fast-load URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzer-stage12-7-0-build-bq1270.html"), "12.7.0 alias must remain active");
 assert(remote.includes("declaredQuestionCount"), "launch packet must declare expected question count");
 assert(remote.includes("packetProgress"), "launch packet must include upload progress metadata");
@@ -127,6 +129,7 @@ assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronge
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
 assert(app.includes("Skip this quiz"), "skip action must use clearer label");
+assert(app.includes("Skip this quiz") && remote.includes("betterquizzes-v63-uxfix.html"), "Skip this quiz UX must ship with a widget URI cache bust");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");

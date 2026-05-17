@@ -74,10 +74,11 @@ assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata 
 assert(server.includes('name: "add_first_question"') && server.includes("launch exactly one widget"), "add_first_question must be the sole builder launch tool");
 assert(server.includes('name: "add_question"') && server.includes("intentionally has no widget output template"), "add_question must be storage-only after launch");
 assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must retain status metadata");
-assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
-assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v62-fastload.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
+assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v63-uxfix.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
+assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v63-uxfix.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
 assert(server.includes('"openai/toolInvocation/invoking": "Validating quiz..."') && !server.includes('"openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Validating quiz..."'), "compatibility create_quiz must not advertise an output template");
-assert(server.includes("betterquizzes-v62-fastload.html"), "widget URI must cache-bust the fast-load resource rewrite");
+assert(server.includes("betterquizzes-v63-uxfix.html"), "widget URI must cache-bust the UX-fix resource rewrite");
+assert(server.includes("betterquizzes-v62-fastload.html"), "v62 widget URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v61-bridge.html"), "v61 widget URI must remain a compatibility alias");
 assert(server.includes('rel="modulepreload"') && server.includes('type="module" src='), "widget resource should externalize hashed JS/CSS assets");
 assert(server.includes("max-age=31536000, immutable") && server.includes("gzipSync"), "static assets should be immutable and gzip-capable");
