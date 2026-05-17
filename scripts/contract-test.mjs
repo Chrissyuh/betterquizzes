@@ -16,6 +16,7 @@ function assert(value, message) { if (!value) throw new Error(message); }
 
 assert(server.includes('const VERSION = "V1"'), "server version must be V1");
 assert(server.includes("Interactive study quizzes for ChatGPT") && server.includes("Create interactive AI-generated study quizzes"), "public manifest/card metadata must use student-focused discovery copy");
+assert(server.includes("/.well-known/openai-apps-challenge") && server.includes("OPENAI_APPS_CHALLENGE_TOKEN"), "server must expose OpenAI Apps domain verification challenge endpoint");
 assert(server.includes('ui://widget/betterquizzes-v1-build-bqv1p1.html'), "widget URI must be versioned for V1");
 assert(server.includes('CREATE_QUIZ_INPUT_SCHEMA'), "create_quiz must use a named input schema");
 assert(server.includes('outputSchema: LAUNCH_OUTPUT_SCHEMA'), "create_quiz must expose an output schema");

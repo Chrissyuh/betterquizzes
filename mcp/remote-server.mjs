@@ -1953,6 +1953,18 @@ try {
       return sendJson(response, 200, debugVersion(url));
     }
 
+    if (request.method === "GET" && url.pathname === "/.well-known/openai-apps-challenge") {
+      const token = String(process.env.OPENAI_APPS_CHALLENGE_TOKEN || "").trim();
+      if (!token) {
+        response.writeHead(404, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store, max-age=0" });
+        response.end("OpenAI Apps challenge token is not configured.");
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store, max-age=0" });
+      response.end(token);
+      return;
+    }
+
 
     if (request.method === "GET" && (url.pathname === "/.well-known/betterquizzes.json" || url.pathname === "/.well-known/betterquizzer.json")) {
       return sendJson(response, 200, appManifest(url, request));
