@@ -3589,3 +3589,108 @@ button.drag-handle:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .question-dots .new-question, .question-card.new-question { animation: none; }
 }
+
+/* V67 screenshot polish: remove extra vertical weight on mobile widget captures. */
+@media (max-width: 560px) {
+  .shell,
+  .shell.narrow,
+  .quiz-layout {
+    width: 100% !important;
+    padding: .35rem !important;
+  }
+
+  .quiz-layout {
+    gap: .45rem !important;
+  }
+
+  .card,
+  .top-bar,
+  .nav-card,
+  .question-card,
+  .result-hero {
+    border-radius: 13px !important;
+  }
+
+  .top-bar {
+    padding: .62rem .68rem !important;
+    gap: .38rem !important;
+  }
+
+  .top-bar .eyebrow-row {
+    margin-bottom: .12rem;
+  }
+
+  .top-bar h1 {
+    font-size: clamp(1.05rem, 5.3vw, 1.45rem) !important;
+    line-height: 1.08 !important;
+    margin: 0 !important;
+  }
+
+  .progress-shell {
+    height: 7px !important;
+  }
+
+  .generation-status-strip {
+    margin-top: .42rem !important;
+    padding: .28rem .48rem !important;
+    font-size: .76rem !important;
+  }
+
+  .nav-card {
+    padding: .42rem .48rem !important;
+  }
+
+  .question-dots {
+    gap: .25rem !important;
+  }
+
+  .dot {
+    min-width: 29px !important;
+    min-height: 29px !important;
+    font-size: .78rem !important;
+  }
+
+  .main-column {
+    gap: .5rem !important;
+  }
+
+  .question-card {
+    gap: .55rem !important;
+    padding: .68rem !important;
+  }
+
+  .question-meta-label {
+    font-size: .68rem !important;
+    padding: .22rem .42rem !important;
+  }
+
+  .question-card h2 {
+    font-size: clamp(1rem, 4.9vw, 1.28rem) !important;
+    line-height: 1.14 !important;
+  }
+
+  .choice {
+    padding: .55rem .62rem !important;
+    gap: .48rem !important;
+    min-height: 0 !important;
+  }
+
+  .choice-letter {
+    width: 1.45rem !important;
+    height: 1.45rem !important;
+    min-width: 1.45rem !important;
+    font-size: .75rem !important;
+  }
+
+  .actions.split,
+  .compact-actions,
+  .submit-column {
+    gap: .42rem !important;
+  }
+
+  .actions button,
+  .submit-column button {
+    min-height: 36px !important;
+    padding: .48rem .62rem !important;
+  }
+}

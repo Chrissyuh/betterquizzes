@@ -15,7 +15,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v66-refresh-grace.html"'), "final hardening fixes must use a v66 widget URI so ChatGPT does not reuse the v64 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v67-screenshot-polish.html"'), "screenshot polish fixes must use a v67 widget URI so ChatGPT does not reuse the v66 cached resource");
+assert(remote.includes("betterquizzes-v66-refresh-grace.html"), "v66 refresh-grace URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v65-final-hardening.html"), "v65 final-hardening URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v64-polish.html"), "v64 polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v63-uxfix.html"), "v63 UX-fix URI must remain available as a compatibility alias");
@@ -133,7 +134,8 @@ assert(styles.includes("bq-staged-dot-arrival-v19"), "question dots must have st
 assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronger arrival animation");
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v66-refresh-grace.html"), "skip removal and bridge hardening must ship with a widget URI cache bust");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v67-screenshot-polish.html"), "skip removal and screenshot polish must ship with a widget URI cache bust");
+assert(!app.includes("quiz.description ? <RichBlock") && styles.includes("V67 screenshot polish"), "quiz descriptions must stay hidden and mobile screenshot compaction CSS must exist");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");

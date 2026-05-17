@@ -1247,7 +1247,6 @@ function QuizRunner({
         <div>
           <div className="eyebrow-row"><p className="eyebrow">BetterQuizzes</p><span className="version-chip">{WIDGET_VERSION_LABEL}</span></div>
           <h1><RichInline text={quiz.title} /></h1>
-          {quiz.description ? <RichBlock text={quiz.description} /> : null}
         </div>
         <div className="top-actions">
           {!widgetMode ? <button type="button" onClick={onReset}>New quiz</button> : null}
