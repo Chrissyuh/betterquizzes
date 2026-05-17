@@ -97,7 +97,7 @@ function bqV44ShouldUseEarlyMobileFollowUp() {
 
 
 
-type Screen = "loading" | "import" | "quiz" | "submission";
+type Screen = "loading" | "import" | "quiz" | "submission" | "review";
 type DraftAnswer = {
   response: AnswerResponse;
   confidence?: AnswerRecord["confidence"];
@@ -423,7 +423,11 @@ export default function App(): ReactElement {
     return <SubmissionScreen finished={finished} widgetMode={widgetMode} onNewQuiz={() => {
       setRecoveryToken(undefined);
       setScreen(widgetMode ? "submission" : "import");
-    }} />;
+    }} onReview={() => setScreen("review")} />;
+  }
+
+  if (screen === "review" && finished && quiz) {
+    return <ReviewQuizScreen quiz={quiz} finished={finished} onBack={() => setScreen("submission")} />;
   }
 
   if (!quiz) {
@@ -888,6 +892,7 @@ function QuizRunner({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [incompleteSubmitPrompt, setIncompleteSubmitPrompt] = useState(false);
+  const incompleteSubmitPromptRef = useRef<HTMLElement | null>(null);
   const [skipMode, setSkipMode] = useState<"prompt" | "skipped" | null>(null);
   const knownQuestionIdsRef = useRef<Set<string>>(new Set(quiz.questions.map((question) => question.id)));
   const [arrivingQuestionIds, setArrivingQuestionIds] = useState<Set<string>>(() => new Set());
@@ -946,6 +951,24 @@ function QuizRunner({
   }, [widgetMode, quiz, launchId, recoveryToken, currentIndex, drafts]);
 
   useEffect(() => {
+    if (!incompleteSubmitPrompt || typeof document === "undefined") return;
+    const closeOnOutsidePointer = (event: globalThis.PointerEvent): void => {
+      const panel = incompleteSubmitPromptRef.current;
+      if (panel && event.target instanceof Node && panel.contains(event.target)) return;
+      setIncompleteSubmitPrompt(false);
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === "Escape") setIncompleteSubmitPrompt(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer, true);
+    document.addEventListener("keydown", closeOnEscape, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
+      document.removeEventListener("keydown", closeOnEscape, true);
+    };
+  }, [incompleteSubmitPrompt]);
+
+  useEffect(() => {
     const currentQuestion = quiz.questions[currentIndex];
     if (!currentQuestion || currentQuestion.type !== "ordering") return;
     const items = getOrderingItems(currentQuestion);
@@ -996,6 +1019,11 @@ function QuizRunner({
     setIncompleteSubmitPrompt(false);
     setError(null);
     setCurrentIndex(firstIncompleteQuestionIndex());
+  }
+
+  function goToQuestion(index: number): void {
+    setIncompleteSubmitPrompt(false);
+    setCurrentIndex(clampIndex(index, quiz.questions.length));
   }
 
   function requestSubmit(): void {
@@ -1209,13 +1237,14 @@ function QuizRunner({
         ) : null}
       </section>
 
-      {shouldShowQuestionNav ? <QuestionNav questions={quiz.questions} expectedQuestionCount={generationStatus?.expected} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={arrivingQuestionIds} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={setCurrentIndex} /> : null}
+      {shouldShowQuestionNav ? <QuestionNav questions={quiz.questions} expectedQuestionCount={generationStatus?.expected} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={arrivingQuestionIds} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={goToQuestion} /> : null}
 
       <section className="main-column">
         <QuestionCard question={current} questionIndex={currentIndex} questionCount={quiz.questions.length} plannedQuestionCount={progressTotal} draft={drafts[current.id]} isArriving={arrivingQuestionIds.has(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
         {submitAttempted && error ? <div className="notice-box" role="status">{error}</div> : null}
         {incompleteSubmitPrompt ? (
-          <section className="incomplete-submit-panel" role="alert" aria-live="assertive">
+          <section ref={incompleteSubmitPromptRef} className="incomplete-submit-panel" role="alert" aria-live="assertive">
+            <button className="panel-close-button" type="button" aria-label="Close submit warning" onClick={() => setIncompleteSubmitPrompt(false)}>×</button>
             <div>
               <strong>Submit with {completeQuestionCount} of {quiz.questions.length} questions complete?</strong>
               <p>Unfinished answers will be sent blank for ChatGPT to grade or ignore based on the quiz instructions.</p>
@@ -1229,8 +1258,8 @@ function QuizRunner({
         <div className={`actions split compact-actions ${quiz.questions.length <= 1 ? "single-question-actions" : ""}`}>
           {quiz.questions.length > 1 ? (
             <div className="actions">
-              <button type="button" disabled={currentIndex === 0} onClick={() => setCurrentIndex((index) => Math.max(0, index - 1))}>Previous</button>
-              <button className={!allQuestionsDone && currentIndex < quiz.questions.length - 1 ? "primary next-primary" : undefined} type="button" disabled={currentIndex === quiz.questions.length - 1} onClick={() => setCurrentIndex((index) => Math.min(quiz.questions.length - 1, index + 1))}>Next</button>
+              <button type="button" disabled={currentIndex === 0} onClick={() => goToQuestion(currentIndex - 1)}>Previous</button>
+              <button className={!allQuestionsDone && currentIndex < quiz.questions.length - 1 ? "primary next-primary" : undefined} type="button" disabled={currentIndex === quiz.questions.length - 1} onClick={() => goToQuestion(currentIndex + 1)}>Next</button>
             </div>
           ) : null}
           <div className="submit-column">
@@ -1326,10 +1355,42 @@ function QuestionNav({
 }): ReactElement {
   const plannedCount = Math.max(questions.length, Math.floor(expectedQuestionCount ?? questions.length));
   const placeholderCount = Math.max(0, plannedCount - questions.length);
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const previousIndexRef = useRef(currentIndex);
+  const suppressAutoScrollUntilRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const rail = railRef.current;
+    const active = rail?.querySelector<HTMLElement>(".dot.active");
+    if (!rail || !active) return;
+    const now = Date.now();
+    if (now < suppressAutoScrollUntilRef.current) {
+      previousIndexRef.current = currentIndex;
+      return;
+    }
+
+    const previousIndex = previousIndexRef.current;
+    previousIndexRef.current = currentIndex;
+    const direction = Math.sign(currentIndex - previousIndex);
+    const gap = parseFloat(window.getComputedStyle(rail).columnGap || window.getComputedStyle(rail).gap || "0") || 0;
+    const step = active.getBoundingClientRect().width + gap;
+    if (direction !== 0) rail.scrollBy({ left: step * direction, behavior: "smooth" });
+
+    const railRect = rail.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    if (activeRect.left < railRect.left || activeRect.right > railRect.right) {
+      active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    }
+  }, [currentIndex, questions.length, plannedCount]);
+
+  function markManualQuestionRailScroll(): void {
+    suppressAutoScrollUntilRef.current = Date.now() + 900;
+  }
+
   return (
     <aside className="card nav-card">
       <p className="eyebrow">Questions</p>
-      <div className="question-dots">
+      <div ref={railRef} className="question-dots" onWheel={markManualQuestionRailScroll} onPointerDown={markManualQuestionRailScroll} onTouchStart={markManualQuestionRailScroll}>
         {questions.map((question, index) => {
           const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy, revealRequiredStatus);
           return <button key={question.id} type="button" className={`dot ${index === currentIndex ? "active" : ""} ${arrivingQuestionIds.has(question.id) ? "new-question" : ""} ${status}`} onClick={() => onSelect(index)}>{index + 1}</button>;
@@ -1342,7 +1403,7 @@ function QuestionNav({
   );
 }
 
-function QuestionCard({ question, questionIndex, questionCount, plannedQuestionCount, draft, isArriving = false, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }: { question: Question; questionIndex: number; questionCount: number; plannedQuestionCount: number; draft: DraftAnswer | undefined; isArriving?: boolean; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+function QuestionCard({ question, questionIndex, questionCount, plannedQuestionCount, draft, isArriving = false, readOnly = false, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }: { question: Question; questionIndex: number; questionCount: number; plannedQuestionCount: number; draft: DraftAnswer | undefined; isArriving?: boolean; readOnly?: boolean; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
   const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy, revealRequiredStatus);
   const required = isQuestionRequired(question, activityPolicy);
   const answerComplete = isQuestionAnswerComplete(question, draft);
@@ -1356,11 +1417,17 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
         {!required ? <span className="question-meta-label">Optional</span> : null}
       </div>
       <h2><RichInline text={question.prompt} /></h2>
-      <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onChange={onChange} />
-      {confidenceRequired ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
-        <div><p className="confidence-heading">Confidence</p></div>
-        <ConfidencePicker value={confidenceValue} required={confidenceRequired && revealRequiredStatus} disabled={!answerComplete} onChange={(confidence) => onChange({ confidence })} />
-      </section> : null}
+      <fieldset className="read-only-question-fieldset" disabled={readOnly} aria-label={readOnly ? "Submitted answer review" : undefined}>
+        <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onChange={readOnly ? () => undefined : onChange} />
+        {confidenceRequired ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
+          <div>
+            <p className="confidence-heading">Confidence</p>
+            {!answerComplete ? <p className="confidence-lock-note">Answer this question to choose confidence.</p> : null}
+          </div>
+          <ConfidencePicker value={confidenceValue} required={confidenceRequired && revealRequiredStatus} disabled={!answerComplete || readOnly} onChange={(confidence) => onChange({ confidence })} />
+        </section> : null}
+      </fieldset>
+      {readOnly ? <p className="review-mode-note">Review mode: submitted answers cannot be changed.</p> : null}
     </section>
   );
 }
@@ -2361,10 +2428,9 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
 
     const rect = row.getBoundingClientRect();
     const previousOffset = dragVisualOffsetRef.current;
-    const baseLeft = rect.left - (previousOffset?.x ?? 0);
     const baseTop = rect.top - (previousOffset?.y ?? 0);
     setOrderingDragVisualOffset({
-      x: active.currentX - active.grabOffsetX - baseLeft,
+      x: 0,
       y: active.currentY - active.grabOffsetY - baseTop,
     });
   }
@@ -2737,7 +2803,7 @@ function ConfidencePicker({ value, required, disabled, onChange }: { value: Answ
   );
 }
 
-function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: FinishedSubmission; widgetMode: boolean; onNewQuiz: () => void }): ReactElement {
+function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finished: FinishedSubmission; widgetMode: boolean; onNewQuiz: () => void; onReview: () => void }): ReactElement {
   const { submission, hostSubmitted } = finished;
   const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
   const [recordedGrade, setRecordedGrade] = useState<GradePayload | null>(null);
@@ -2788,11 +2854,75 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz }: { finished: Finis
         {recordedGrade ? <GradeSummaryCard grade={recordedGrade} /> : widgetMode && !gradePollingDone ? <p className="muted compact-status">Waiting for feedback to appear...</p> : null}
 
         {finished.followUpAttempts && gradeStatus !== "grade_requested" ? (
-          <p className="muted compact-status">{finished.followUpMessage ?? "Still trying to send your answers for feedback."}</p>
+          <p className="muted compact-status">{getFriendlyFollowUpMessage(gradeStatus)}</p>
         ) : null}
 
         <div className="actions wrap">
+          <button className="primary" type="button" onClick={onReview}>Review quiz</button>
           {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function buildReviewDraftsFromSubmission(submission: SubmissionCapsule): Record<string, DraftAnswer> {
+  const submittedAt = Date.parse(submission.submittedAt);
+  const timestamp = Number.isFinite(submittedAt) ? submittedAt : Date.now();
+  return Object.fromEntries(submission.answers.map((answer) => [answer.questionId, {
+    response: answer.response,
+    confidence: normalizeConfidence(answer.confidence),
+    firstSeenAt: timestamp,
+    lastUpdatedAt: timestamp,
+  } satisfies DraftAnswer]));
+}
+
+function ReviewQuizScreen({ quiz, finished, onBack }: { quiz: QuizSpec; finished: FinishedSubmission; onBack: () => void }): ReactElement {
+  const displayPolicy = normalizeDisplayPolicy(quiz.displayPolicy);
+  const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
+  const drafts = useMemo(() => buildReviewDraftsFromSubmission(finished.submission), [finished.submission]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const current = quiz.questions[currentIndex] ?? quiz.questions[0];
+  const total = quiz.questions.length;
+
+  useEffect(() => {
+    setCurrentIndex((index) => clampIndex(index, total));
+  }, [total]);
+
+  if (!current) {
+    return (
+      <main className="shell narrow result-shell">
+        <section className="card result-hero">
+          <h1>Review unavailable</h1>
+          <p>This submission did not include questions to review.</p>
+          <button type="button" onClick={onBack}>Back to results</button>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="shell quiz-layout review-quiz-layout">
+      <section className="top-bar card">
+        <div>
+          <p className="eyebrow">Review mode</p>
+          <h1><RichInline text={quiz.title} /></h1>
+          <p>Your submitted answers are shown below. They cannot be changed.</p>
+        </div>
+        <div className="top-actions">
+          <button className="primary" type="button" onClick={onBack}>Back to results</button>
+        </div>
+      </section>
+      {total > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={new Set()} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus onSelect={setCurrentIndex} /> : null}
+      <section className="main-column">
+        <QuestionCard question={current} questionIndex={currentIndex} questionCount={total} plannedQuestionCount={total} draft={drafts[current.id]} readOnly displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus quizChoiceBehavior={quiz.choiceBehavior} onChange={() => undefined} />
+        <div className={`actions split compact-actions ${total <= 1 ? "single-question-actions" : ""}`}>
+          {total > 1 ? (
+            <div className="actions">
+              <button type="button" disabled={currentIndex === 0} onClick={() => setCurrentIndex((index) => Math.max(0, index - 1))}>Previous</button>
+              <button type="button" disabled={currentIndex === total - 1} onClick={() => setCurrentIndex((index) => Math.min(total - 1, index + 1))}>Next</button>
+            </div>
+          ) : null}
         </div>
       </section>
     </main>
@@ -2925,6 +3055,12 @@ function getSubmissionMessage(status: SubmissionDeliveryStatus, hostSubmitted: b
     : "Your answers are saved here. Return to the chat to continue.";
   if (status === "grade_request_failed") return "Your answers were saved, but the feedback request did not finish. Your work is not lost.";
   return "Your answers were saved.";
+}
+
+function getFriendlyFollowUpMessage(status: SubmissionDeliveryStatus): string {
+  if (status === "grade_request_failed") return "Your answers are saved. If feedback does not appear, return to the chat and ask ChatGPT to grade this submission.";
+  if (status === "grade_request_unavailable") return "Your answers are saved. Return to the chat to continue.";
+  return "Your answers are saved. Feedback should appear in the chat shortly.";
 }
 
 function getGradeStatusLabel(status: SubmissionDeliveryStatus): string {
@@ -3318,7 +3454,7 @@ function getQuestionStatus(question: Question, draft: DraftAnswer | undefined, d
 
 function isReady(question: Question, draft: DraftAnswer | undefined, displayPolicy: DisplayPolicy, activityPolicy: ActivityPolicy): boolean {
   if (!isQuestionAnswerComplete(question, draft)) return false;
-  if (displayPolicy.requireConfidence && normalizeConfidence(draft?.confidence) === undefined) return false;
+  if (isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === undefined) return false;
   return true;
 }
 
@@ -3326,7 +3462,7 @@ function isQuestionDoneForNavigation(question: Question, draft: DraftAnswer | un
   const special = asSpecialResponse(draft?.response);
   if (special?.kind === "cancelled") return true;
   if (!isQuestionAnswerComplete(question, draft)) return false;
-  if (displayPolicy.requireConfidence && normalizeConfidence(draft?.confidence) === undefined) return false;
+  if (isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === undefined) return false;
   return true;
 }
 

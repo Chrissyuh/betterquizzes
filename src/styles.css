@@ -3058,4 +3058,96 @@ button.drag-handle:focus-visible {
     min-height: 2.7rem !important;
   }
 }
+
+/* V1.1 visual and review polish. */
+.incomplete-submit-panel {
+  position: relative;
+  border-color: #fecaca !important;
+  background: #fef2f2 !important;
+  color: #7f1d1d !important;
+  padding-right: 3.1rem !important;
+  box-shadow: 0 14px 30px rgba(185, 28, 28, .10) !important;
+}
+
+.incomplete-submit-panel p {
+  color: #9f1239 !important;
+}
+
+.incomplete-submit-panel .primary {
+  background: #b91c1c;
+  border-color: #991b1b;
+}
+
+.panel-close-button {
+  position: absolute;
+  top: .55rem;
+  right: .55rem;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(185, 28, 28, .22);
+  background: rgba(255, 255, 255, .82);
+  color: #991b1b;
+  font-size: 1.25rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.panel-close-button:hover {
+  background: #fee2e2;
+}
+
+.read-only-question-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.read-only-question-fieldset:disabled {
+  opacity: 1;
+}
+
+.read-only-question-fieldset:disabled input,
+.read-only-question-fieldset:disabled textarea,
+.read-only-question-fieldset:disabled select,
+.read-only-question-fieldset:disabled button,
+.read-only-question-fieldset:disabled .draggable-order-item,
+.read-only-question-fieldset:disabled .text-segment {
+  cursor: default !important;
+}
+
+.read-only-question-fieldset:disabled .draggable-order-item,
+.read-only-question-fieldset:disabled .text-segment,
+.read-only-question-fieldset:disabled .choice {
+  pointer-events: none;
+}
+
+.review-mode-note,
+.confidence-lock-note {
+  margin: .3rem 0 0;
+  color: #64748b;
+  font-size: .85rem;
+  font-weight: 700;
+}
+
+.review-quiz-layout .top-bar {
+  border-color: #bfdbfe;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.result-hero .actions.wrap {
+  margin-top: 1.1rem;
+}
+
+.result-hero .submission-status-grid span {
+  color: #1f2937;
+}
+
+.bq-ordering-rebuilt .draggable-order-item.dragging {
+  transform: translate3d(0, var(--drag-y, 0), 0) !important;
+}
 /* END V61 ordering rebuild */
