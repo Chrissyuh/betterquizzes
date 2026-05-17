@@ -15,7 +15,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v65-final-hardening.html"'), "final hardening fixes must use a v65 widget URI so ChatGPT does not reuse the v64 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v66-refresh-grace.html"'), "final hardening fixes must use a v66 widget URI so ChatGPT does not reuse the v64 cached resource");
+assert(remote.includes("betterquizzes-v65-final-hardening.html"), "v65 final-hardening URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v64-polish.html"), "v64 polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v63-uxfix.html"), "v63 UX-fix URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v62-fastload.html"), "v62 fast-load URI must remain available as a compatibility alias");
@@ -74,6 +75,9 @@ assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTA
 assert(remote.includes("v23SyncLaunchedDraft") && remote.includes('name: "add_first_question"') && remote.includes("launch exactly one widget"), "staged authoring must launch from add_first_question");
 assert(!remote.includes('name: "finalize_quiz"') && remote.includes("Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes"), "finalize_quiz must not be advertised in the normal model tool path");
 assert(app.includes("fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken ?? launchId)") && app.includes("No recovery token or launchId is available for token-scoped quiz updates") && app.includes("shouldPollForServerQuizUpdates(quiz, hydrationProgress)") && app.includes("setQuiz(serverQuiz)"), "widget must poll token-scoped stored quiz updates while questions are still generating");
+assert(app.includes("serverUpdateWakeSignal") && app.includes("setServerUpdateWakeSignal") && app.includes("subscribeHostQuizPayload(() =>"), "host bridge updates must wake token-scoped quiz polling after later question tool calls");
+assert(app.includes("SERVER_UPDATE_FAST_WINDOW_MS") && app.includes("lastServerUpdateAtRef") && app.includes("pointerdown") && app.includes("online"), "stored-quiz polling must stay fast after updates and wake on user/network activity");
+assert(app.includes("HYDRATION_ERROR_GRACE_MS") && app.includes("SERVER_RECOVERY_TIMEOUT_MS + HYDRATION_ERROR_GRACE_MS"), "initial loading errors must get a short grace period before becoming visible");
 assert(!app.includes("callHostOpenQuizForUpdates(quizId)") && !bridge.includes("getHostQuizPayloadFromToolResult"), "widget must not fall back to live host open_quiz calls for updates");
 assert(app.includes("nextRevision > currentRevision") && app.includes("setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId)"), "widget must accept newer stored quiz revisions while answering");
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
@@ -129,7 +133,7 @@ assert(styles.includes("bq-staged-dot-arrival-v19"), "question dots must have st
 assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronger arrival animation");
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v65-final-hardening.html"), "skip removal and bridge hardening must ship with a widget URI cache bust");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v66-refresh-grace.html"), "skip removal and bridge hardening must ship with a widget URI cache bust");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");

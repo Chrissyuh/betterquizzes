@@ -154,9 +154,11 @@ const WIDGET_VERSION = BETTERQUIZZER_VERSION;
 const WIDGET_VERSION_LABEL = formatWidgetVersion(WIDGET_VERSION);
 const STABLE_LAUNCH_MS = 450;
 const HYDRATION_ERROR_DELAY_MS = 30000;
+const HYDRATION_ERROR_GRACE_MS = 3500;
 const HYDRATION_INTERRUPTED_MS = 12000;
 const SERVER_RECOVERY_POLL_MS = 1500;
 const SERVER_RECOVERY_TIMEOUT_MS = 30000;
+const SERVER_UPDATE_FAST_WINDOW_MS = 90000;
 
 export default function App(): ReactElement {
   const routeWidgetMode = useMemo(() => isWidgetRoute(), []);
@@ -174,8 +176,10 @@ export default function App(): ReactElement {
   const [hydrationErrorVisible, setHydrationErrorVisible] = useState(false);
   const [hydrationPhase, setHydrationPhase] = useState<HydrationPhase>(widgetMode ? "waiting_for_launch" : "rendering");
   const [hydrationProgress, setHydrationProgress] = useState<HydrationProgress | null>(null);
+  const [serverUpdateWakeSignal, setServerUpdateWakeSignal] = useState(0);
   const pendingLaunchRef = useRef<PendingLaunch | null>(null);
   const hydrationStartedAtRef = useRef(Date.now());
+  const lastServerUpdateAtRef = useRef(Date.now());
 
   function applyQuiz(rawQuiz: unknown, nextLaunchId?: string, nextRecoveryToken?: string): void {
     const prepared = prepareQuizForRender(rawQuiz);
@@ -211,6 +215,7 @@ export default function App(): ReactElement {
     if (!widgetMode) return;
     return subscribeHostQuizPayload(() => {
       pendingLaunchRef.current = null;
+      setServerUpdateWakeSignal((value) => value + 1);
       setHydrationProgress((progress) => progress ?? {
         expectedQuestions: 0,
         receivedQuestions: 0,
@@ -271,7 +276,7 @@ export default function App(): ReactElement {
       }
       if (!nextPayload && !quiz && elapsedMs >= SERVER_RECOVERY_TIMEOUT_MS) {
         setHydrationError(buildHydrationFailureDetails("The quiz launch did not finish before the recovery timeout."));
-        setHydrationErrorVisible(true);
+        if (elapsedMs >= SERVER_RECOVERY_TIMEOUT_MS + HYDRATION_ERROR_GRACE_MS) setHydrationErrorVisible(true);
         setHydrationPhase("terminal_error");
       }
     }, 250);
@@ -296,6 +301,7 @@ export default function App(): ReactElement {
           throw new Error("Recovered launch quiz is not render-certified yet.");
         }
         const restored = buildFinishedFromPersistedSubmission(prepared.quiz, launchSummary.launchId);
+        lastServerUpdateAtRef.current = Date.now();
         setQuiz(prepared.quiz);
         setLaunchId(launchSummary.launchId ?? getRecoveredLaunchId(prepared.quiz));
         setRecoveryToken(launchSummary.recoveryToken ?? restored?.recoveryToken);
@@ -372,7 +378,7 @@ export default function App(): ReactElement {
     if (!widgetMode || !quiz || finished || !shouldPollForServerQuizUpdates(quiz, hydrationProgress)) return;
     let cancelled = false;
     const quizId = getQuizId(quiz);
-    const pollIntervalMs = getServerQuizUpdatePollMs(quiz, hydrationProgress);
+    const pollIntervalMs = getServerQuizUpdatePollMs(quiz, hydrationProgress, Date.now() - lastServerUpdateAtRef.current);
     const poll = async () => {
       const update = await fetchQuizUpdateForIncrementalBuild(quizId, recoveryToken ?? launchId).catch(() => null);
       if (cancelled || !update) return;
@@ -391,23 +397,32 @@ export default function App(): ReactElement {
       setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId);
       if (update.payload?.recoveryToken) setRecoveryToken(update.payload.recoveryToken);
       setHydrationPhase("polling_updates");
+      lastServerUpdateAtRef.current = Date.now();
       setQuiz(serverQuiz);
     };
     const pollOnFocus = () => void poll();
     const pollOnVisible = () => {
       if (document.visibilityState === "visible") void poll();
     };
+    const pollOnOnline = () => void poll();
+    const pollOnUserActivity = () => void poll();
     const interval = window.setInterval(() => void poll(), pollIntervalMs);
     window.addEventListener("focus", pollOnFocus);
+    window.addEventListener("online", pollOnOnline);
+    window.addEventListener("pointerdown", pollOnUserActivity, { passive: true });
+    window.addEventListener("keydown", pollOnUserActivity);
     document.addEventListener("visibilitychange", pollOnVisible);
     void poll();
     return () => {
       cancelled = true;
       window.removeEventListener("focus", pollOnFocus);
+      window.removeEventListener("online", pollOnOnline);
+      window.removeEventListener("pointerdown", pollOnUserActivity);
+      window.removeEventListener("keydown", pollOnUserActivity);
       document.removeEventListener("visibilitychange", pollOnVisible);
       window.clearInterval(interval);
     };
-  }, [widgetMode, quiz, finished, hydrationProgress, recoveryToken, launchId]);
+  }, [widgetMode, quiz, finished, hydrationProgress, recoveryToken, launchId, serverUpdateWakeSignal]);
 
   if (screen === "import") {
     if (widgetMode) return <WidgetLoading progress={hydrationProgress} phase={hydrationPhase} />;
@@ -900,10 +915,11 @@ function shouldPollForServerQuizUpdates(quiz: QuizSpec, progress: HydrationProgr
   return true;
 }
 
-function getServerQuizUpdatePollMs(quiz: QuizSpec, progress: HydrationProgress | null): number {
+function getServerQuizUpdatePollMs(quiz: QuizSpec, progress: HydrationProgress | null, msSinceLastServerUpdate = SERVER_UPDATE_FAST_WINDOW_MS + 1): number {
   if (isIncrementalQuizBuilding(quiz)) return 1500;
   if (!progress || progress.complete !== true) return 1500;
   if (progress.expectedQuestions > quiz.questions.length) return 1500;
+  if (msSinceLastServerUpdate < SERVER_UPDATE_FAST_WINDOW_MS) return 1500;
   return 5000;
 }
 
