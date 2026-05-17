@@ -796,29 +796,65 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
 
   return (
     <main className="shell">
-      <section className="hero card">
-        <div className="site-brand-row">
-          <img className="site-logo" src="/brand/betterquizzes-logo-light.png" alt="" />
-          <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+      <section className="hero card public-hero">
+        <div>
+          <div className="site-brand-row">
+            <img className="site-logo" src="/brand/betterquizzes-logo-light.png" alt="" />
+            <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
+          </div>
+          <h1>Interactive study quizzes inside ChatGPT.</h1>
+          <p>
+            BetterQuizzes turns a study prompt into a structured quiz widget with mixed question types, confidence ratings, answer submission, and ChatGPT grading feedback.
+          </p>
+          <div className="public-hero-actions" aria-label="BetterQuizzes links">
+            <a className="primary-link-button" href="https://chatgpt.com" rel="noreferrer">Use in ChatGPT</a>
+            <a className="secondary-link-button" href="/privacy">Privacy</a>
+            <a className="secondary-link-button" href="/terms">Terms</a>
+          </div>
         </div>
-        <h1>Interactive quizzes that feel built for the lesson.</h1>
-        <p>
-          Build, take, and review mixed-format practice quizzes with answer capture, confidence checks, ordering, matching, typed responses, and grade writeback.
-        </p>
+        <div className="public-preview" aria-label="BetterQuizzes workflow preview">
+          <div className="preview-topline"><span>Biology Practice</span><strong>4 questions</strong></div>
+          <div className="preview-question-card">
+            <span className="question-meta-label question-number-label">Question 1 of 4</span>
+            <strong>Which organelle produces most ATP in eukaryotic cells?</strong>
+            <span className="preview-choice selected">B. Mitochondrion</span>
+            <span className="preview-choice">C. Nucleus</span>
+          </div>
+          <div className="preview-status-row"><span>Confidence: high</span><span>Ready to submit</span></div>
+        </div>
       </section>
 
-      <section className="project-panel card">
+      <section className="project-panel card public-project-panel">
         <div>
-          <p className="eyebrow">What it does</p>
-          <h2>BetterQuizzes turns a ChatGPT prompt into a real quiz experience.</h2>
-          <p>It keeps the chat flexible while giving students a structured place to answer, review, submit, and receive feedback.</p>
+          <p className="eyebrow">For students and tutors</p>
+          <h2>Ask for a study quiz. Answer in one widget. Get feedback in chat.</h2>
+          <p>BetterQuizzes is for practice drills, diagnostic checks, self-tests, and quick review sessions. It is not a gradebook, email tool, account system, or permanent student record store.</p>
         </div>
         <div className="feature-pills" aria-label="BetterQuizzes features">
           <span>Mixed question types</span>
-          <span>Draft recovery</span>
-          <span>Grade writeback</span>
-          <span>Mobile-friendly UI</span>
+          <span>Confidence ratings</span>
+          <span>One-widget flow</span>
+          <span>Structured submissions</span>
+          <span>ChatGPT grading</span>
         </div>
+      </section>
+
+      <section className="grid three public-feature-grid" aria-label="BetterQuizzes highlights">
+        <article className="feature-card card">
+          <p className="eyebrow">Varied practice</p>
+          <h3>More than multiple choice</h3>
+          <p>Use matching, ordering, true/false, fill-in, short answer, multi-select, text selection, numeric, and written-response questions.</p>
+        </article>
+        <article className="feature-card card">
+          <p className="eyebrow">Student workflow</p>
+          <h3>Designed for answering</h3>
+          <p>Questions stay in a dedicated widget with progress, confidence, incomplete-submit review, and read-only post-submit review.</p>
+        </article>
+        <article className="feature-card card">
+          <p className="eyebrow">Privacy stance</p>
+          <h3>No accounts or analytics</h3>
+          <p>The current hosted app uses temporary browser/server-memory state and does not sell data, run ad tracking, or send email.</p>
+        </article>
       </section>
 
       <section className="grid three">
@@ -832,7 +868,19 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
         ))}
       </section>
 
-      
+      <section className="submission-info card">
+        <div>
+          <p className="eyebrow">Submission endpoint</p>
+          <h2>ChatGPT Apps MCP server</h2>
+          <p>Use the production MCP URL for review and testing:</p>
+          <code>https://quizzes.trybettertools.com/mcp</code>
+        </div>
+        <div>
+          <p className="eyebrow">Support</p>
+          <h2>Need help?</h2>
+          <p>Email <a href="mailto:support@trybettertools.com">support@trybettertools.com</a>. For classroom use, review generated quizzes before assigning them and do not use BetterQuizzes as a permanent gradebook.</p>
+        </div>
+      </section>
     
       <BetterQuizzesHomeLegalLinks />
 </main>

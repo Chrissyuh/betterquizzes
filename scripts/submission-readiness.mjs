@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 
 const CANONICAL_ORIGIN = "https://quizzes.trybettertools.com";
@@ -65,6 +65,7 @@ function checkLegalAndSubmissionFiles() {
   ];
   for (const file of legalFiles) {
     const text = read(file);
+    check(text.includes("Effective date:"), `${file} must publish an effective date.`);
     check(text.includes("mailto:"), `${file} must publish a support contact email.`);
     check(text.includes("ChatGPT"), `${file} must disclose the ChatGPT handoff.`);
     check(text.includes("server memory") || text.includes("server-memory"), `${file} must disclose temporary server-memory storage.`);
@@ -78,6 +79,10 @@ function checkLegalAndSubmissionFiles() {
   check(serialized.includes("add_first_question"), "submission test cases must describe the add_first_question launch flow.");
   check(serialized.includes("durable classroom gradebook"), "negative tests must reject durable classroom gradebook use.");
   check(serialized.includes("sensitive personal information"), "negative tests must cover sensitive personal information collection.");
+  check(existsSync("docs/submission-final-checklist.md"), "final submission checklist doc must exist.");
+  const finalChecklist = read("docs/submission-final-checklist.md");
+  check(finalChecklist.includes(`${CANONICAL_ORIGIN}/mcp`), "final checklist must include the canonical MCP URL.");
+  check(finalChecklist.includes(SUPPORT_EMAIL), "final checklist must include the production support email.");
 }
 
 function checkSupportReleaseBlocker() {

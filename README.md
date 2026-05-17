@@ -62,6 +62,8 @@ npm run submission:readiness
 
 `submission:readiness` is a final release gate. It checks that `https://quizzes.trybettertools.com` resolves, the hosted manifest advertises that domain, and the legal pages publish the production support email.
 
+For exact review-form values, assets, and final manual QA prompts, see [`docs/submission-final-checklist.md`](docs/submission-final-checklist.md). The remaining release blocker that automation cannot prove is that `support@trybettertools.com` is a real working inbox.
+
 ## Core flow
 
 ```text

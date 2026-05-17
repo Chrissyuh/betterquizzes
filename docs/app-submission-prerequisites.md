@@ -44,7 +44,7 @@ WIDGET_DOMAIN=https://quizzes.trybettertools.com
 
 Then verify that the server logs show the public MCP endpoint correctly. For submission, `WIDGET_DOMAIN` must be a stable HTTPS origin that you control. Do not use a temporary tunnel for this value.
 
-The custom domain must resolve before submission. `quizzes.trybettertools.com` is currently a release blocker until DNS points to the deployed host and strict public checks pass on that domain.
+The custom domain must resolve before submission. Keep `quizzes.trybettertools.com` as the submitted origin and rerun strict public checks after each deploy.
 
 ## 3. Rebuild before every hosted release
 
@@ -114,6 +114,8 @@ Likely required or strongly recommended:
 - age/safety positioning if the app may be used by students
 
 The legal pages publish `support@trybettertools.com` as the support email. Keep this address working before submission; `npm run submission:readiness` fails if old placeholder support copy returns.
+
+For exact values to paste into the review form, use [`submission-final-checklist.md`](submission-final-checklist.md). The manual blocker that automation cannot prove is that `support@trybettertools.com` can receive external email.
 
 ## 7. Privacy and data handling
 
