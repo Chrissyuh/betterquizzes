@@ -15,20 +15,19 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v63-uxfix.html"'), "current UX fixes must use a v63 widget URI so ChatGPT does not reuse the v62 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v64-polish.html"'), "current polish fixes must use a v64 widget URI so ChatGPT does not reuse the v63 cached resource");
+assert(remote.includes("betterquizzes-v63-uxfix.html"), "v63 UX-fix URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v62-fastload.html"), "v62 fast-load URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzer-stage12-7-0-build-bq1270.html"), "12.7.0 alias must remain active");
 assert(remote.includes("declaredQuestionCount"), "launch packet must declare expected question count");
 assert(remote.includes("packetProgress"), "launch packet must include upload progress metadata");
 assert(types.includes('"multi_write_vertical"'), "types must include multi_write_vertical");
-assert(types.includes('"text_select"'), "types must include text_select");
 assert(render.includes("MultiWriteVerticalQuestion"), "render contract must certify multi_write_vertical");
-assert(render.includes("TextSelectQuestion"), "render contract must certify text_select");
+const supportedQuestionTypeBlock = render.slice(render.indexOf("const SUPPORTED_QUESTION_TYPES"), render.indexOf("const ORDERING_ITEM_TEXT_MAX_CHARS"));
+assert(!supportedQuestionTypeBlock.includes('"text_select"') && !remote.includes('"text_select", "matching"'), "text_select must not be advertised or renderer-certified for launch");
 assert(submission.includes("multi_write_vertical"), "submission capsule must understand multi_write_vertical");
-assert(submission.includes("text_select"), "submission capsule must understand text_select");
 assert(submission.includes("typeof response === \"string\" && response.trim().length > 0"), "numeric completion must accept attempted string answers so symbol-ending values can submit");
 assert(app.includes("function MultiWriteVerticalInput"), "app must render multi-write vertical questions");
-assert(app.includes("function TextSelectInput"), "app must render text-select questions");
 assert(app.includes("isQuestionAnswerComplete(question, draft)"), "confidence must be gated by complete question state");
 assert(app.includes("Preserve confidence while a user temporarily clears or edits an answer"), "confidence should survive un-answer/re-answer edits");
 assert(app.includes("disabled={!answerComplete || readOnly}"), "confidence picker must stay disabled until all question parts are complete");
@@ -36,7 +35,7 @@ assert(app.includes("function isConfidenceEnabledForQuestion") && app.includes("
 assert(app.includes('record.confidence === true || record.confidence === "optional" || record.confidence === "required"'), "model-enabled confidence must show even when quiz-level confidence is inconsistent");
 assert(app.includes('record.confidence === "optional") return false'), "optional confidence must not block ready/green completion");
 assert(app.includes("isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === undefined"), "completion must respect per-question confidence requirements");
-assert(app.includes("Answer this question to choose confidence."), "confidence-required questions must show a locked confidence hint before answer completion");
+assert(!app.includes("Answer this question to choose confidence.") && app.includes("Confidence unlocks after you answer."), "confidence locked copy must stay concise and non-demanding");
 assert(app.includes("function OrderingInput") && app.includes("bqV61OrderingRebuild") && app.includes("data-ordering-mode") && app.includes("draggable={false}") && app.includes("moveByStep"), "ordering questions must support rebuilt separate desktop/mobile sorting with fallback controls");
 assert(app.includes("x: 0,") && styles.includes("transform: translate3d(0, var(--drag-y, 0), 0)"), "ordering drag visual movement must be vertically clamped");
 assert(app.includes("questionIndex={currentIndex}") && app.includes("Question {questionIndex + 1} of {visibleTotal}"), "question cards must show a stable question number label");
@@ -57,6 +56,7 @@ assert(app.includes("disabled={submitting}") && !app.includes("disabled={submitt
 assert(app.includes("function RichInline"), "titles and prompts must support light formatting");
 assert(app.includes("<u>") && remote.includes("Use <u>...</u> sparingly for critical negations"), "underline emphasis must be supported and advertised for critical negations");
 assert(remote.includes("3 choices are fine") && remote.includes("5+ choices") && remote.includes("Avoid filler options"), "model guidance must allow 3 or 5+ meaningful answer choices");
+assert(remote.includes("Do not add confidence by default") && remote.includes("use it only when certainty is useful"), "model guidance must keep confidence opt-in instead of default");
 assert(app.includes("katex.renderToString") && app.includes("dangerouslySetInnerHTML"), "quiz display text must render LaTeX math safely through KaTeX");
 assert(styles.includes("katex/dist/katex.min.css") || readFileSync("src/main.tsx", "utf8").includes("katex/dist/katex.min.css"), "KaTeX CSS must be loaded");
 assert(remote.includes("LaTeX math using only \\\\(...\\\\)") && remote.includes("Do not use dollar-sign math delimiters"), "model instructions must allow explicit LaTeX delimiters and reject dollar delimiters");
@@ -77,12 +77,11 @@ assert(!app.includes("callHostOpenQuizForUpdates(quizId)") && !bridge.includes("
 assert(app.includes("nextRevision > currentRevision") && app.includes("setLaunchId((currentLaunchId) => getRecoveredLaunchId(serverQuiz) ?? currentLaunchId)"), "widget must accept newer stored quiz revisions while answering");
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
 assert(app.includes("submission.launchId = launchId") && app.includes("submission.quizRevision = quiz.metadata.quizRevision"), "submissions must carry stable launch/revision identity");
+assert(app.includes("sendSubmissionFollowUp(buildAutoGradePrompt(submission, quiz), 4500)") && app.includes("kind: \"betterquizzer.fast_grading_packet\"") && app.includes("const richQuestionMap"), "submission follow-up must be self-contained when the host tool result is not visible after a chat interruption");
 assert(!app.includes('"/api/quiz/latest"') && app.includes("getRequestedRecoveryToken") && app.includes("SERVER_RECOVERY_TIMEOUT_MS"), "widget must not use latest-quiz as a generic ChatGPT hydration fallback");
 assert(app.includes("describeHostBridgeState()") && app.includes("Server bases:"), "widget hydration failures must include useful technical recovery details");
 assert(remote.includes("window.__BETTERQUIZZER_SERVER_BASES__=") && remote.includes("requestOrigin") && remote.includes("connectDomains"), "production widget bootstrap must include fallback server bases and CSP connect domains");
-assert(remote.includes('type !== "text_select"') && remote.includes("Text-select questions need segments") && remote.includes("Do not use choices for text_select"), "draft validator must not reject text_select as a choice question");
-assert(remote.includes("Do not use text_select for a single obvious sentence") && remote.includes("at least three plausible selectable segments"), "text_select quality guardrails must reject one-obvious-phrase questions");
-assert(remote.includes("sentence-selection questions") && remote.includes("plausible distractor segments"), "model guidance must improve sentence-selection authoring");
+assert(remote.includes("Do not use text_select/sentence-selection until after launch"), "model guidance must keep sentence-selection disabled for launch");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
 assert(app.includes("function formatPlainText"), "format buttons must not insert raw markdown/html tags into student answers");
 assert(app.includes("stripTextFormatting"), "format buttons must be reversible and able to clear plain-text formatting");
@@ -102,7 +101,7 @@ assert(styles.includes("grid-template-columns: repeat(3"), "confidence options m
 assert(styles.includes("V1 variety + formatting polish"), "V1 variety and formatting CSS must be present");
 assert(/\.quiz-layout\s*\{[\s\S]*?grid-template-columns:\s*1fr\s*;/.test(styles), "question navigation must move back above the question card");
 assert(/\.top-bar\s+p\s*\{[\s\S]*?max-width:\s*none\s*;/.test(styles), "header subtitle must use the available width");
-assert(/\.skip-quiz-button\s*\{[\s\S]*?min-height:\s*44px\s*;/.test(styles), "skip button must be large enough to tap");
+assert(!app.includes("Skip this quiz"), "skip quiz action must be removed from the widget");
 assert(app.includes('"choice single-choice selected"'), "single-select choices must keep letter badges");
 assert(!app.includes("TOOL_INPUT_FALLBACK_DELAY_MS") && !bridge.includes("allowUnsealedToolInput"), "widget must not accept unsealed tool input as a launch source");
 assert(app.includes("HYDRATION_INTERRUPTED_MS"), "widget must not wait indefinitely when no quiz packet arrives");
@@ -128,8 +127,7 @@ assert(styles.includes("bq-staged-dot-arrival-v19"), "question dots must have st
 assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronger arrival animation");
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
-assert(app.includes("Skip this quiz"), "skip action must use clearer label");
-assert(app.includes("Skip this quiz") && remote.includes("betterquizzes-v63-uxfix.html"), "Skip this quiz UX must ship with a widget URI cache bust");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v64-polish.html"), "skip removal must ship with a widget URI cache bust");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");

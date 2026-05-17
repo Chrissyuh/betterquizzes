@@ -53,7 +53,7 @@ export type ActivityPolicy = {
 export const DEFAULT_DISPLAY_POLICY: DisplayPolicy = {
   showCorrectAnswers: "after_submit",
   showExplanations: "llm_after_submit",
-  requireConfidence: true,
+  requireConfidence: false,
 };
 
 export const DEFAULT_GRADING_POLICY: GradingPolicy = {
@@ -63,8 +63,8 @@ export const DEFAULT_GRADING_POLICY: GradingPolicy = {
 };
 
 export const DEFAULT_ACTIVITY_POLICY: ActivityPolicy = {
-  allowSkipQuiz: true,
-  allowCancel: true,
+  allowSkipQuiz: false,
+  allowCancel: false,
   allowSkipQuestions: true,
   defaultAnswerRequired: false,
   defaultQuestionRequired: true,

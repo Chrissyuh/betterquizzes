@@ -2,7 +2,6 @@ import katex from "katex";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode, type PointerEvent, type TouchEvent as ReactTouchEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   buildCompletionSummary,
-  buildLlmReturnPrompt,
   createSession,
   createSubmissionCapsule,
   getQuizId,
@@ -1157,7 +1156,7 @@ function QuizRunner({
     let bqV44EarlyFollowUpResult: Awaited<ReturnType<typeof sendSubmissionFollowUp>> | null = null;
 
     if (widgetMode && bqV44ShouldUseEarlyMobileFollowUp()) {
-      bqV44EarlyFollowUpResult = await sendSubmissionFollowUp(buildLlmReturnPrompt(submission), 4500);
+      bqV44EarlyFollowUpResult = await sendSubmissionFollowUp(buildAutoGradePrompt(submission, quiz), 4500);
 
       if (bqV44EarlyFollowUpResult.status === "sent") {
         submission.status = {
@@ -1226,6 +1225,7 @@ function QuizRunner({
           currentIndex,
           drafts,
           hostResult,
+          quiz,
           launchId,
           recoveryToken,
           onUpdate: onFinish,
@@ -1274,7 +1274,6 @@ function QuizRunner({
         </div>
         <div className="top-actions">
           {!widgetMode ? <button type="button" onClick={onReset}>New quiz</button> : null}
-          {activityPolicy.allowSkipQuiz ? <button className="skip-quiz-button" type="button" onClick={() => skipQuiz()}>Skip this quiz</button> : null}
         </div>
         <div className="progress-shell" aria-label="Quiz progress"><span style={{ width: `${progressPercent}%` }} /></div>
         {generationStatus ? (
@@ -1471,7 +1470,7 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
         {confidenceEnabled ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
           <div>
             <p className="confidence-heading">Confidence</p>
-            {!answerComplete ? <p className="confidence-lock-note">Answer this question to choose confidence.</p> : null}
+            {!answerComplete ? <p className="confidence-lock-note">Confidence unlocks after you answer.</p> : null}
           </div>
           <ConfidencePicker value={confidenceValue} required={confidenceRequired && revealRequiredStatus} disabled={!answerComplete || readOnly} onChange={(confidence) => onChange({ confidence })} />
         </section> : null}
@@ -3124,6 +3123,7 @@ type GradeRetryOptions = {
   submission: SubmissionCapsule;
   session: ReturnType<typeof createSession>;
   hostSubmitted: boolean;
+  quiz?: QuizSpec;
   currentIndex: number;
   drafts: Record<string, DraftAnswer>;
   hostResult: ToolResultLike | null;
@@ -3135,7 +3135,7 @@ type GradeRetryOptions = {
 async function requestChatGptGradeOnce(options: GradeRetryOptions): Promise<void> {
   setFollowUpDelivery(options, "requesting_grade", false, 0, "Asking ChatGPT to grade…");
 
-  const prompt = buildAutoGradePrompt(options.submission);
+  const prompt = buildAutoGradePrompt(options.submission, options.quiz);
   const delays = [0, 900, 1800, 3200];
   let lastResult: Awaited<ReturnType<typeof sendSubmissionFollowUp>> | null = null;
 
@@ -3398,8 +3398,8 @@ function formatQuestionList(quiz: QuizSpec, questionIds: string[]): string {
   }).join(", ");
 }
 
-function buildAutoGradePrompt(submission: SubmissionCapsule): string {
-  const packet = buildCompactGradingPacket(submission);
+function buildAutoGradePrompt(submission: SubmissionCapsule, quiz?: QuizSpec): string {
+  const packet = buildCompactGradingPacket(submission, quiz);
   return [
     "Grade this BetterQuizzes submission now. Do not call tools, do not wait for more data, and do not recreate the quiz.",
     "Use only the compact JSON packet below. Reply quickly and concisely.",
@@ -3410,8 +3410,9 @@ function buildAutoGradePrompt(submission: SubmissionCapsule): string {
   ].join("\n");
 }
 
-function buildCompactGradingPacket(submission: SubmissionCapsule): Record<string, unknown> {
+function buildCompactGradingPacket(submission: SubmissionCapsule, quiz?: QuizSpec): Record<string, unknown> {
   const questionMap = new Map(submission.questions.map((question) => [question.id, question]));
+  const richQuestionMap = new Map((quiz?.questions ?? []).map((question) => [question.id, question]));
   const keyMap = new Map((submission.answerKey ?? []).map((entry) => [entry.questionId, entry as Record<string, unknown>]));
   return {
     kind: "betterquizzer.fast_grading_packet",
@@ -3423,15 +3424,22 @@ function buildCompactGradingPacket(submission: SubmissionCapsule): Record<string
     completion: submission.completion,
     items: submission.answers.map((answer) => {
       const question = questionMap.get(answer.questionId);
+      const richQuestion = richQuestionMap.get(answer.questionId);
       const key = keyMap.get(answer.questionId);
+      const directAnswer = richQuestion && "answer" in richQuestion ? (richQuestion as { answer?: unknown }).answer : undefined;
       return {
         id: answer.questionId,
-        type: question?.type,
-        prompt: limitForGrading(question?.prompt, 240),
-        required: question?.answerRequired ?? question?.required,
+        type: richQuestion?.type ?? question?.type,
+        prompt: limitForGrading(richQuestion?.prompt ?? question?.prompt, 240),
+        required: richQuestion?.answerRequired ?? richQuestion?.required ?? question?.answerRequired ?? question?.required,
+        choices: richQuestion && "choices" in richQuestion && Array.isArray((richQuestion as { choices?: unknown }).choices) ? compactForGrading((richQuestion as { choices?: unknown }).choices) : undefined,
+        left: richQuestion && "left" in richQuestion ? compactForGrading((richQuestion as { left?: unknown }).left) : undefined,
+        right: richQuestion && "right" in richQuestion ? compactForGrading((richQuestion as { right?: unknown }).right) : undefined,
+        items: richQuestion && "items" in richQuestion ? compactForGrading((richQuestion as { items?: unknown }).items) : undefined,
+        fields: richQuestion && "fields" in richQuestion ? compactForGrading((richQuestion as { fields?: unknown }).fields) : undefined,
         response: compactForGrading(answer.response),
         confidence: answer.confidence,
-        key: key ? compactForGrading(key.answer ?? key.expectedKeywords ?? key.rubric) : undefined,
+        key: compactForGrading(key ? key.answer ?? key.expectedKeywords ?? key.rubric : directAnswer),
         tolerance: key?.tolerance,
         unit: key?.unit,
       };

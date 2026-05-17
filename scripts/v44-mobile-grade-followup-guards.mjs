@@ -16,7 +16,8 @@ const bridge = read("src/host/openaiBridge.ts");
 
 assert(app.includes("function bqV44ShouldUseEarlyMobileFollowUp"), "V44 mobile host detector missing");
 assert(app.includes("navigator.maxTouchPoints"), "V44 mobile detector should include touch detection");
-assert(app.includes("await sendSubmissionFollowUp(buildLlmReturnPrompt(submission), 4500)"), "V44 early follow-up send missing");
+assert(app.includes("await sendSubmissionFollowUp(buildAutoGradePrompt(submission, quiz), 4500)"), "V44 early follow-up send must include a self-contained grading packet");
+assert(app.includes('kind: "betterquizzer.fast_grading_packet"'), "V44 early follow-up must not depend on the host surfacing the original SubmissionCapsule tool result");
 assert(app.includes('status: "grade_requested"'), "V44 should persist grade_requested when early follow-up succeeds");
 assert(app.includes("followUpRequested: bqV44EarlyFollowUpSent"), "V44 should prevent duplicate follow-up after early mobile send");
 

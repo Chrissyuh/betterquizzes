@@ -25,7 +25,7 @@ Included in this package:
 - multi-part writing inputs no longer show formatting controls
 - drag-and-drop ordering works from a right-side handle instead of a busy top/left handle
 - `multi_write_vertical` question type
-- `text_select` question type with selectable words embedded inline inside the passage
+- sentence-selection/text-select is intentionally disabled until after launch
 - launch packet question-count/progress metadata
 - numeric input accepts decimals and fractions while typing
 

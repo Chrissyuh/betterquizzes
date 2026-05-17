@@ -145,7 +145,7 @@ type: "object",
   required: ["title"]
 };
 
-const SUPPORTED_QUESTION_TYPE_VALUES = ["multiple_choice", "multi_select", "true_false", "fill_blank", "short_answer", "long_response", "multi_typing", "multi_write_vertical", "text_select", "matching", "ordering", "numeric"];
+const SUPPORTED_QUESTION_TYPE_VALUES = ["multiple_choice", "multi_select", "true_false", "fill_blank", "short_answer", "long_response", "multi_typing", "multi_write_vertical", "matching", "ordering", "numeric"];
 const BUILDER_WORKFLOW = [
   "Call start_quiz to create a draft only.",
   "Call add_first_question exactly once for the first accepted/renderable question when that tool is visible; this launches the only widget.",
@@ -374,7 +374,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v63-uxfix.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v63-uxfix.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v64-polish.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v64-polish.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
   },
   {
     name: "add_question",
@@ -522,11 +522,11 @@ function v23SameOrder(left, right) {
   });
 }
 
-function v23RotateIfAlreadyCorrect(items, answerOrder) {
+function v23ShuffleOrderingItemsForPractice(items, answerOrder) {
   if (!Array.isArray(items) || items.length < 2) return items;
   if (!v23SameOrder(items, answerOrder)) return items;
 
-  return [...items.slice(1), items[0]];
+  return items.length >= 3 ? [...items].reverse() : [items[1], items[0]];
 }
 
 function v23NormalizeMatchingQuestion(question) {
@@ -620,9 +620,9 @@ function v23NormalizeQuestion(rawQuestion, index = 0) {
       question.items;
 
     if (Array.isArray(question.items)) {
-      question.items = v23RotateIfAlreadyCorrect(question.items, answerOrder);
+      question.items = v23ShuffleOrderingItemsForPractice(question.items, answerOrder);
     } else if (Array.isArray(question.choices)) {
-      question.choices = v23RotateIfAlreadyCorrect(question.choices, answerOrder);
+      question.choices = v23ShuffleOrderingItemsForPractice(question.choices, answerOrder);
     }
   }
 
@@ -1188,7 +1188,7 @@ function bqV40CreateQuizInputAdvice(input = {}) {
         title: input.title ?? "Untitled BetterQuizzes quiz",
         mode: "practice",
         activityPolicy: {
-          allowSkipQuiz: true,
+          allowSkipQuiz: false,
           allowSkipQuestions: true,
           defaultAnswerRequired: false
         },
@@ -1217,10 +1217,11 @@ function bqV40PracticeRequiredWarning(quiz) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v63-uxfix.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v64-polish.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v63-uxfix.html",
   "ui://widget/betterquizzes-v62-fastload.html",
   "ui://widget/betterquizzes-v61-bridge.html",
   "ui://widget/betterquizzes-v59-refresh.html",
@@ -1730,16 +1731,16 @@ BetterQuizzes model instructions V1 renderer-certified contract:
 1. Use BetterQuizzes when a student wants an interactive study quiz, practice drill, diagnostic check, self-test, survey, or practice activity inside ChatGPT. Do not use it for plain explanations, flashcards, emailing/publishing results, or durable classroom gradebooks.
 2. For a new assistant-authored activity, use the quiet staged builder by default. Call start_quiz with expectedQuestionCount; this creates a draft only. As soon as the first renderable question is ready, call add_first_question once; add_first_question is the preferred builder tool that launches the widget. Do not wait until all questions are authored before opening the widget. If the current ChatGPT session has stale tool metadata and does not list add_first_question, call add_question for the first question as a compatibility launch path. Continue add_question/repair_question silently until expectedQuestionCount is reached; accepted later questions are stored continuously and the already-launched widget refreshes from the stored draft. Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. Do not send chat progress/check-in messages while authoring; only speak if blocked by a draft cleanup error. Do not send question batches in start_quiz. Use create_quiz only when the user supplied a complete, validated top-level {"quiz": BetterQuizzesQuizSpecV2} packet. Do not call create_quiz with raw questions only.
 3. Use canonical public field names: activityPolicy.allowSkipQuiz, activityPolicy.allowSkipQuestions, activityPolicy.defaultAnswerRequired, activityPolicy.submitRequiresRequiredAnswers. Do not use legacy aliases unless normalizing older input.
-4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, and numeric. Use multi_write_vertical when a prompt needs any number of separate written answers, text_select when the user should select words/segments inside a passage, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall. Use the number of answer choices that fits the learning task: 3 choices are fine for simple discrimination, 4 choices are not mandatory, and 5+ choices are encouraged for richer classification, identification, or misconception checks when the extra options are meaningful. Avoid filler options.
-5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based choice indexes and may have any number of correct answers; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; multi_typing and multi_write_vertical fields may have any number of fields/answers and use response/answer objects keyed by field id; text_select uses segments:[{id,text,selectable?}], optional selectionPolicy, and answer:string[] of selected segment ids. Use text_select only for a passage with context, usually at least two sentences or 120 characters, and at least three plausible selectable segments; do not make one sentence with one obvious highlighted answer. For sentence-selection questions, create contextual text with meaningful selectable segments and plausible distractor segments; do not make the correct segment the only reasonable clickable text. Do not use choices for text_select. Ordering answer is ordered item ids in visual top-to-bottom order. orderingBehavior.direction must always be "top_to_bottom"; never use first_to_last or other conceptual values there. Put conceptual meaning in orderingBehavior.topLabel and orderingBehavior.bottomLabel; matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]. Matching defaults to reusable right-side answers; set matchingBehavior:{rightItemReuse:'unique'} only when each right-side answer should be used at most once. Do not author matching as pairs unless normalizing old input.
+4. Quiz design variety: do not default an ordinary quiz to all multiple-choice. Unless the user explicitly asks for all multiple-choice, mix suitable types from multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, ordering, matching, and numeric. Do not use text_select/sentence-selection until after launch. Use multi_write_vertical when a prompt needs any number of separate written answers, ordering for sequences, matching for pairs, numeric for calculations, and fill_blank/short_answer for recall. Use the number of answer choices that fits the learning task: 3 choices are fine for simple discrimination, 4 choices are not mandatory, and 5+ choices are encouraged for richer classification, identification, or misconception checks when the extra options are meaningful. Avoid filler options.
+5. Answer shapes: multiple_choice answer is a zero-based choice index; multi_select answer is zero-based choice indexes and may have any number of correct answers; true_false answer is boolean; numeric answer is number with optional tolerance; fill_blank/short_answer answer is string or string[] plus optional acceptableAnswers; multi_typing and multi_write_vertical fields may have any number of fields/answers and use response/answer objects keyed by field id. Ordering answer is ordered item ids in correct visual top-to-bottom order; the app will shuffle display items away from that answer order for practice. orderingBehavior.direction must always be "top_to_bottom"; never use first_to_last or other conceptual values there. Put conceptual meaning in orderingBehavior.topLabel and orderingBehavior.bottomLabel; matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}]. Matching defaults to reusable right-side answers; set matchingBehavior:{rightItemReuse:'unique'} only when each right-side answer should be used at most once. Do not author matching as pairs unless normalizing old input.
 6. Each advertised question type has renderer certification. If add_question requests cleanup, call repair_question silently for the specific bad question instead of restarting the whole quiz. If create_quiz returns renderDiagnostics.unrenderableQuestions or rendererCertified=false, prefer updating the draft with the builder; only retry create_quiz once when you already have a complete top-level quiz packet. Do not keep retrying blindly.
-7. Required questions should be rare. BetterQuizzes is usually AI practice, not a school-grade test. Default to activityPolicy.defaultAnswerRequired=false with allowSkipQuiz=true and allowSkipQuestions=true unless the user explicitly asks for a strict test, certification check, or all-questions-required assessment. Use answerRequired=true only for essential blocking questions. If uncertainty is expected, make the question optional or include an explicit ‘I’m not sure’ choice. Blank non-required questions are allowed and should not be penalized. Reflections should be optional unless the user asks for them.
+7. Required questions should be rare. BetterQuizzes is usually AI practice, not a school-grade test. Default to activityPolicy.defaultAnswerRequired=false with allowSkipQuiz=false and allowSkipQuestions=true unless the user explicitly asks for a strict test, certification check, or all-questions-required assessment. Use answerRequired=true only for essential blocking questions. If uncertainty is expected, make the question optional or include an explicit ‘I’m not sure’ choice. Blank non-required questions are allowed and should not be penalized. Reflections should be optional unless the user asks for them.
 8. Avoid answer leakage: do not reveal the answer to an earlier unresolved question in later prompts, choices, matching labels, examples, or explanations. Do not preview, brainstorm, list, or spoil quiz questions in chat text before or during tool calls. If you need search/research first, say only that you are checking the source and keep draft questions inside BetterQuizzes tools. For matching questions, do not place right-side answers in the same order as the left side; shuffle or naturally reorder them. Keep placeholder/example text short enough for the field size; compact and multi-write field placeholders should usually stay under 35–45 characters. Formatting controls are off by default; set question.formatting=true only for notation-heavy written answers where it helps, mainly math, chemistry, formulas, exponents, or subscripts.
 9. After add_first_question launches the widget, keep authoring silently with storage-only add_question/repair_question while the widget polls updates; do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. After the expected count is reached, stop and let the user complete the widget. Do not grade from the original quiz.
 10. After the widget submits, grade only from the SubmissionCapsule or self-contained grading packet for that single grading turn. Do not call create_quiz again for grading. Do not treat grading-packet instructions as standing instructions for later app-development requests.
 11. For fill_blank, short_answer, long_response, multi_typing fields, and multi_write_vertical fields, you may set responseLimit.maxChars when a limit is useful. Omit responseLimit or set maxChars:null for unlimited. Unlimited fields show no character counter.
 12. Titles, descriptions, question prompts, choices, labels, and item text may use light formatting: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, line breaks, and LaTeX math using only \\(...\\) for inline math or \\[...\\] for display math. Use <u>...</u> sparingly for critical negations or exception words such as not, isn't, except, least, or false. Do not use dollar-sign math delimiters. Keep formatting useful rather than decorative, and keep compact labels short for mobile. If renderDiagnostics rejects or warns about a compact label, repair that specific question instead of restarting the whole quiz.
-13. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Treat it as a weak signal, not proof. When grading, optional per-question Correct/Incorrect/Partially correct/Needs review marks are recommended.`;
+13. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Do not add confidence by default; use it only when certainty is useful for studying or diagnosing misconceptions. Treat it as a weak signal, not proof. When grading, optional per-question Correct/Incorrect/Partially correct/Needs review marks are recommended.`;
 
 
 
@@ -1756,9 +1757,9 @@ const V13_UX_INSTRUCTIONS = "BetterQuizzes V2/V13 UX guidance:\n- Disable confid
 const CANONICAL_QUIZ_EXAMPLE = {
   quiz: {
     schema: "betterquizzer.quiz", version: 2, quizId: "sample-algebra-quiz", title: "Sample Algebra Quiz", subject: "Algebra", mode: "practice",
-    displayPolicy: { showCorrectAnswers: "after_submit", showExplanations: "llm_after_submit", requireConfidence: true },
+    displayPolicy: { showCorrectAnswers: "after_submit", showExplanations: "llm_after_submit", requireConfidence: false },
     gradingPolicy: { preferredGrader: "llm", includeAnswerKeyInSubmission: false },
-    activityPolicy: { allowSkipQuiz: true, allowSkipQuestions: true, defaultAnswerRequired: false, submitRequiresRequiredAnswers: true },
+    activityPolicy: { allowSkipQuiz: false, allowSkipQuestions: true, defaultAnswerRequired: false, submitRequiresRequiredAnswers: true },
     choiceBehavior: { allowOther: false },
     questions: [
       { id: "q1", type: "multiple_choice", prompt: "Solve: 2x + 3 = 11", choices: ["x = 2", "x = 4", "x = 7", "x = 8"], answer: 1, answerRequired: false, tags: ["linear-equations"], difficulty: 1 },
@@ -1770,8 +1771,6 @@ const CHOICE_ITEM_SCHEMA = { anyOf: [{ type: "string", minLength: 1 }, { type: "
 const ORDERING_BEHAVIOR_SCHEMA = { type: "object", required: ["direction"], properties: { direction: { type: "string", enum: BQ_V52_ORDERING_DIRECTION_INPUT_ALIASES, description: "Input accepts top_to_bottom plus common semantic aliases so the server can normalize them. Best value is top_to_bottom. Final renderer output is always normalized to top_to_bottom; conceptual meaning belongs in topLabel/bottomLabel or sortRule/orderRule." }, topLabel: { type: "string", description: "Required for meaningful ordering. Label for the top of the vertical list, such as First, Earliest, Largest, Most, Closest, or Start." }, bottomLabel: { type: "string", description: "Required for meaningful ordering. Label for the bottom of the vertical list, such as Last, Latest, Smallest, Least, Farthest, or End." } }, additionalProperties: false, description: "Ordering behavior is renderer layout metadata. direction must be top_to_bottom; conceptual order goes in topLabel/bottomLabel." };
 const RESPONSE_LIMIT_SCHEMA = { type: "object", properties: { maxChars: { anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }] }, minChars: { type: "integer", minimum: 0 }, showCounter: { type: "boolean" } }, additionalProperties: false };
 const MULTI_TYPING_FIELD_SCHEMA = { type: "object", properties: { id: { type: "string", minLength: 1 }, label: { type: "string", minLength: 1 }, placeholder: { type: "string" }, responseLimit: RESPONSE_LIMIT_SCHEMA, answer: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] }, acceptableAnswers: { type: "array", items: { type: "string" } }, expectedKeywords: { type: "array", items: { type: "string" } } }, required: ["id", "label"], additionalProperties: true };
-const TEXT_SELECT_SEGMENT_SCHEMA = { type: "object", properties: { id: { type: "string", minLength: 1 }, text: { type: "string", minLength: 1 }, selectable: { type: "boolean" } }, required: ["id", "text"], additionalProperties: true };
-const TEXT_SELECT_POLICY_SCHEMA = { type: "object", properties: { mode: { enum: ["exact_count", "all_that_apply", "range"] }, count: { type: "integer", minimum: 1 }, min: { type: "integer", minimum: 0 }, max: { type: "integer", minimum: 1 }, instruction: { type: "string" } }, additionalProperties: true };
 const COMMON_Q = { id: { type: "string", minLength: 1 }, type: { type: "string" }, prompt: { type: "string", minLength: 1 }, answerRequired: { type: "boolean" }, required: { type: "boolean", description: "Backward-compatible alias. Prefer answerRequired." }, tags: { type: "array", items: { type: "string" } }, difficulty: { type: "number", minimum: 1, maximum: 5 }, points: { type: "number", minimum: 0 }, choiceBehavior: { type: "object", properties: { allowOther: { type: "boolean" }, otherLabel: { type: "string" } }, additionalProperties: false }, orderingBehavior: ORDERING_BEHAVIOR_SCHEMA, responseLimit: RESPONSE_LIMIT_SCHEMA, formatting: { type: "boolean", description: "Opt-in plain-text formatting toolbar. Rare; use mainly for math, chemistry, exponents, subscripts, or notation-heavy answers." } };
 const QUESTION_SCHEMA = { oneOf: [
   { title: "MultipleChoiceQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "multiple_choice" }, choices: { type: "array", minItems: 1, items: CHOICE_ITEM_SCHEMA }, answer: { anyOf: [{ type: "number", minimum: 0 }, { type: "string" }] } }, required: ["id", "type", "prompt", "choices"], additionalProperties: true },
@@ -1782,7 +1781,6 @@ const QUESTION_SCHEMA = { oneOf: [
   { title: "LongResponseQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "long_response" }, answer: { type: "string" }, rubric: { type: "array", items: { type: "string" } } }, required: ["id", "type", "prompt"], additionalProperties: true },
   { title: "MultiTypingQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "multi_typing" }, fields: { type: "array", minItems: 2, items: MULTI_TYPING_FIELD_SCHEMA }, answer: { type: "object", additionalProperties: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] } } }, required: ["id", "type", "prompt", "fields"], additionalProperties: true },
   { title: "MultiWriteVerticalQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "multi_write_vertical" }, fields: { type: "array", minItems: 1, items: MULTI_TYPING_FIELD_SCHEMA }, answer: { type: "object", additionalProperties: { anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }] } }, rubric: { type: "array", items: { type: "string" } } }, required: ["id", "type", "prompt", "fields"], additionalProperties: true },
-  { title: "TextSelectQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "text_select" }, text: { type: "string" }, segments: { type: "array", minItems: 1, items: TEXT_SELECT_SEGMENT_SCHEMA }, selectionPolicy: TEXT_SELECT_POLICY_SCHEMA, answer: { type: "array", items: { type: "string" } }, rubric: { type: "array", items: { type: "string" } } }, required: ["id", "type", "prompt", "segments"], additionalProperties: true },
   { title: "NumericQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "numeric" }, answer: { type: "number" }, tolerance: { type: "number", minimum: 0 }, unit: { type: "string" } }, required: ["id", "type", "prompt"], additionalProperties: true },
   { title: "OrderingQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "ordering" }, items: { type: "array", minItems: 2, items: { type: "object", properties: { id: { type: "string" }, text: { type: "string" } }, required: ["id", "text"], additionalProperties: true } }, answer: { type: "array", items: { type: "string" } } }, required: ["id", "type", "prompt", "items"], additionalProperties: true },
   { title: "MatchingQuestion", type: "object", properties: { ...COMMON_Q, type: { const: "matching" }, left: { type: "array", minItems: 1, items: { type: "object", properties: { id: { type: "string" }, text: { type: "string" } }, required: ["id", "text"], additionalProperties: true } }, right: { type: "array", minItems: 1, items: { type: "object", properties: { id: { type: "string" }, text: { type: "string" } }, required: ["id", "text"], additionalProperties: true } }, matchingBehavior: { type: "object", properties: { rightItemReuse: { type: "string", enum: ["allow_reuse", "unique"] } }, additionalProperties: true }, answer: { type: "array", items: { type: "object", properties: { leftId: { type: "string" }, rightId: { type: "string" } }, required: ["leftId", "rightId"], additionalProperties: false } } }, required: ["id", "type", "prompt", "left", "right"], additionalProperties: true }
@@ -1807,7 +1805,7 @@ const COMPACT_QUIZ_PACKET_SCHEMA = {
 };
 const CREATE_QUIZ_INPUT_SCHEMA = { type: "object", properties: { quiz: COMPACT_QUIZ_PACKET_SCHEMA }, required: ["quiz"], additionalProperties: false };
 const SUBMIT_ANSWERS_INPUT_SCHEMA = { type: "object", properties: { quizId: { type: "string" }, sessionId: { type: "string" }, launchId: { type: "string" }, quizRevision: { type: "integer", minimum: 0 }, submission: { type: "object", additionalProperties: true, description: "Complete BetterQuizzes fallback submission packet when top-level answers are unavailable." }, answers: { type: "array", items: { type: "object", properties: { questionId: { type: "string" }, response: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "object" }] } }, { type: "object", additionalProperties: true }, { type: "null" }] }, confidence: { type: "integer", enum: [1, 2, 3], description: "Confidence must be an integer: 1=low, 2=medium, 3=high. Do not use decimals or percentages." }, timeMs: { type: "number", minimum: 0 } }, required: ["questionId", "response"], additionalProperties: true } } }, additionalProperties: false };
-const QUESTION_TYPE_GUIDE = "Use variety unless the user asks for one format. Supported types: multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, ordering, matching, numeric. Answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes and can have any number of correct answers; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; multi_typing uses fields:[{id,label}] and answer/response objects keyed by field id; multi_write_vertical uses 1+ fields for stacked written responses and may have any number of answers. Choice counts should fit the task: 3 answers are fine for simple discrimination, 4 is not mandatory, and 5+ answers are encouraged for richer classification or identification when the extra options are meaningful; avoid filler options. text_select uses segments:[{id,text,selectable?}], optional selectionPolicy, and answer:string[] of selected segment ids. Use text_select only for a passage with context, usually at least two sentences or 120 characters, and at least three plausible selectable segments; do not make one sentence with one obvious highlighted answer. For sentence-selection questions, create contextual text with meaningful selectable segments and plausible distractor segments; do not make the correct segment the only reasonable clickable text. Do not use choices for text_select. Ordering answer=ordered item ids in visual top-to-bottom order with orderingBehavior labels when conceptual order matters; direction itself must still be top_to_bottom; matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}], and optional matchingBehavior:{rightItemReuse:'unique'} for one-to-one matching; otherwise right answers can be reused. Do not author matching as pairs unless repairing legacy input. Light formatting is allowed in title, description, prompts, choices, labels, and item text: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, line breaks, and LaTeX math using \\(...\\) or \\[...\\]. Use <u>...</u> sparingly for critical negations like not, isn't, and except. Do not use dollar-sign math delimiters. Keep compact labels short for mobile; if renderDiagnostics flags a compact label, repair that question.";
+const QUESTION_TYPE_GUIDE = "Use variety unless the user asks for one format. Supported types: multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, ordering, matching, numeric. Do not use text_select/sentence-selection until after launch. Answer shapes: multiple_choice answer=zero-based index; multi_select answer=zero-based indexes and can have any number of correct answers; true_false answer=boolean; numeric answer=number plus optional tolerance; fill_blank/short_answer answer=string or string[] plus optional acceptableAnswers and optional responseLimit.maxChars; multi_typing uses fields:[{id,label}] and answer/response objects keyed by field id; multi_write_vertical uses 1+ fields for stacked written responses and may have any number of answers. Choice counts should fit the task: 3 answers are fine for simple discrimination, 4 is not mandatory, and 5+ answers are encouraged for richer classification or identification when the extra options are meaningful; avoid filler options. Ordering answer=ordered item ids in correct visual top-to-bottom order; the app shuffles display items for practice. orderingBehavior labels carry conceptual order, but direction itself must still be top_to_bottom. Matching uses left:[{id,text}], right:[{id,text}], answer:[{leftId,rightId}], and optional matchingBehavior:{rightItemReuse:'unique'} for one-to-one matching; otherwise right answers can be reused. Do not author matching as pairs unless repairing legacy input. Light formatting is allowed in title, description, prompts, choices, labels, and item text: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, line breaks, and LaTeX math using \\(...\\) or \\[...\\]. Use <u>...</u> sparingly for critical negations like not, isn't, and except. Do not use dollar-sign math delimiters. Keep compact labels short for mobile; if renderDiagnostics flags a compact label, repair that question.";
 const CREATE_QUIZ_DESCRIPTION = "Use only when the user supplied a complete, validated top-level {\"quiz\": BetterQuizzesQuizSpecV2} packet and wants it checked or stored. This compatibility tool intentionally does not advertise a widget template; for assistant-authored quizzes, use start_quiz and add_first_question so exactly one widget opens. Runtime validation returns renderDiagnostics.";
 
 
@@ -2692,6 +2690,14 @@ function normalizeQuestion(raw, index, warnings, normalizedFields = []) {
   }
   if (q.type === "ordering") {
     q.orderingBehavior = normalizeOrderingBehavior(q.orderingBehavior, q.prompt);
+    if (Array.isArray(q.items) && Array.isArray(q.answer)) {
+      const shuffledItems = shuffleOrderingItemsAwayFromAnswer(q.items, q.answer);
+      if (shuffledItems !== q.items) {
+        q.items = shuffledItems;
+        warnings.push(`questions[${index}]: shuffled ordering items away from answer order.`);
+        normalizedFields.push({ path: `questions[${index}].items`, from: "answer_order", to: "practice_order" });
+      }
+    }
     if (!raw.orderingBehavior) normalizedFields.push({ path: `questions[${index}].orderingBehavior`, from: "prompt", to: "orderingBehavior" });
   }
   if ((q.type === "multi_typing" || q.type === "multi_write_vertical") && Array.isArray(q.fields)) {
@@ -2710,6 +2716,13 @@ function normalizeQuestion(raw, index, warnings, normalizedFields = []) {
 function normalizeTypingField(field, fieldIndex) {
   const raw = field && typeof field === "object" && !Array.isArray(field) ? field : {};
   return { ...raw, id: String(raw.id ?? `field${fieldIndex + 1}`), label: String(raw.label ?? raw.id ?? `Field ${fieldIndex + 1}`) };
+}
+function shuffleOrderingItemsAwayFromAnswer(items, answer) {
+  if (!Array.isArray(items) || !Array.isArray(answer) || items.length < 2) return items;
+  const answerIds = answer.map((id) => String(id));
+  const itemIds = items.map((item) => item && typeof item === "object" && !Array.isArray(item) ? String(item.id ?? "") : "");
+  if (answerIds.length !== itemIds.length || !itemIds.every((id, index) => id && id === answerIds[index])) return items;
+  return items.length >= 3 ? [...items].reverse() : [items[1], items[0]];
 }
 function normalizeTextSelectSegment(segment, segmentIndex) {
   if (typeof segment === "string") return { id: `segment${segmentIndex + 1}`, text: segment, selectable: true };
@@ -2898,7 +2911,7 @@ function normalizeDisplayPolicy(policy = {}) {
   return {
     showCorrectAnswers: policy.showCorrectAnswers || "after_submit",
     showExplanations: policy.showExplanations || "llm_after_submit",
-    requireConfidence: policy.requireConfidence ?? true
+    requireConfidence: policy.requireConfidence ?? false
   };
 }
 
@@ -2911,7 +2924,7 @@ function normalizeGradingPolicy(policy = {}) {
 }
 
 function normalizeActivityPolicy(policy = {}, warnings = [], normalizedFields = []) {
-  const allowSkipQuiz = policy.allowSkipQuiz ?? policy.allowCancel ?? true;
+  const allowSkipQuiz = false;
   const defaultAnswerRequired = policy.defaultAnswerRequired ?? policy.defaultQuestionRequired ?? false;
   const submitRequiresRequiredAnswers = policy.submitRequiresRequiredAnswers ?? policy.submitRequiresAllRequired ?? true;
   if (policy.allowCancel !== undefined && policy.allowSkipQuiz === undefined) { warnings.push("activityPolicy.allowCancel normalized to allowSkipQuiz."); normalizedFields.push({ path: "activityPolicy", from: "allowCancel", to: "allowSkipQuiz" }); }

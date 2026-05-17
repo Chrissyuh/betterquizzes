@@ -22,7 +22,6 @@ const QUESTION_TYPES = new Set([
   "long_response",
   "multi_typing",
   "multi_write_vertical",
-  "text_select",
   "matching",
   "ordering",
   "numeric",
@@ -38,7 +37,7 @@ export function normalizeGradingPolicy(policy?: Partial<GradingPolicy>): Grading
 
 export function normalizeActivityPolicy(policy?: Partial<ActivityPolicy>): ActivityPolicy {
   const incoming = policy ?? {};
-  const allowSkipQuiz = incoming.allowSkipQuiz ?? incoming.allowCancel ?? DEFAULT_ACTIVITY_POLICY.allowSkipQuiz;
+  const allowSkipQuiz = false;
   const allowSkipQuestions = incoming.allowSkipQuestions ?? DEFAULT_ACTIVITY_POLICY.allowSkipQuestions;
   const defaultAnswerRequired = incoming.defaultAnswerRequired ?? incoming.defaultQuestionRequired ?? DEFAULT_ACTIVITY_POLICY.defaultAnswerRequired;
   const submitRequiresRequiredAnswers = incoming.submitRequiresRequiredAnswers ?? incoming.submitRequiresAllRequired ?? DEFAULT_ACTIVITY_POLICY.submitRequiresRequiredAnswers;

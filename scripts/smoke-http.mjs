@@ -274,16 +274,10 @@ async function runSmoke() {
     arguments: {
       draftId: stagedDraftId,
       question: {
-        id: "staged-text-select",
-        type: "text_select",
-        prompt: "Select the evidence phrase that best supports the claim about validation.",
-        segments: [
-          { id: "s1", text: "The draft stores each question before launch." },
-          { id: "s2", text: "The server validates the draft through the render contract before the widget opens." },
-          { id: "s3", text: "The final packet then reports whether every question can render." }
-        ],
-        selectionPolicy: { mode: "exact_count", count: 1 },
-        answer: ["s2"]
+        id: "staged-true-false",
+        type: "true_false",
+        prompt: "The server validates the draft through the render contract before storing it.",
+        answer: true
       }
     }
   });
@@ -318,7 +312,7 @@ async function runSmoke() {
 
   const stagedStored = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
   assert(stagedStored.quiz.questions.length === 3, "launched draft should sync later questions to stored quiz without another finalize");
-  assert(stagedStored.quiz.questions[1].type === "text_select", "stored staged text_select question was not preserved");
+  assert(stagedStored.quiz.questions[1].type === "true_false", "stored staged true_false question was not preserved");
   const stagedStoredViaLaunchId = await getJson("/api/quiz/staged-builder-smoke?launchId=" + encodeURIComponent(firstAdd.result.structuredContent.launchId));
   assert(stagedStoredViaLaunchId.quiz.questions.length === 3, "original launchId should authorize polling newer quiz revisions after later add_question calls");
   const stagedAfterUpdates = await getJson("/api/quiz/staged-builder-smoke?recoveryToken=" + encodeURIComponent(stagedRecoveryToken));
@@ -375,7 +369,7 @@ async function runSmoke() {
   const lateStoredViaOriginalLaunch = await getJson("/api/quiz/late-extra-question-smoke?launchId=" + encodeURIComponent(lateFirst.result.structuredContent.launchId));
   assert(lateStoredViaOriginalLaunch.quiz.questions.length === 3, "original launchId should keep polling access to late questions added after expected count");
 
-  const badTextSelect = await rpc("tools/call", {
+  const disabledTextSelect = await rpc("tools/call", {
     name: "add_question",
     arguments: {
       draftId: stagedDraftId,
@@ -392,8 +386,8 @@ async function runSmoke() {
       }
     }
   });
-  assert(badTextSelect.result.structuredContent.needsRepair === true, "single-obvious-phrase text_select should be rejected");
-  assert(String(badTextSelect.result.structuredContent.issues).includes("single obvious sentence"), "bad text_select repair should explain the quality issue");
+  assert(disabledTextSelect.result.structuredContent.needsRepair === true, "text_select should be rejected until after launch");
+  assert(String(disabledTextSelect.result.structuredContent.issues).includes("Unsupported question type: text_select"), "disabled text_select repair should explain that the type is unsupported");
 
   const started = await rpc("tools/call", {
     name: "start_quiz",

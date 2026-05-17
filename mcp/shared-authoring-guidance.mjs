@@ -3,7 +3,7 @@ export const V2_BUILDER_INSTRUCTION_LINES = [
   "V45 ORDERING CHECKLIST BEFORE add_question: if type is ordering, use items and orderingBehavior.direction exactly top_to_bottom. Answer item ids are optional unless the user asks for grading keys.",
   "V45 ORDERING WARNING: orderingBehavior.direction is never conceptual. Never use first_to_last, chronological, sequence, most_to_least, least_to_most, closest_to_farthest, left_to_right, or horizontal.",
   "V45 ORDERING LABELS: write conceptual meaning only in orderingBehavior.topLabel and orderingBehavior.bottomLabel, such as First/Last or Most/Least.",
-  "Supported question types are multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, text_select, matching, ordering, and numeric. Use multi_select, not multiple_select, for multiple-answer questions.",
+  "Supported question types are multiple_choice, multi_select, true_false, fill_blank, short_answer, long_response, multi_typing, multi_write_vertical, matching, ordering, and numeric. Do not use text_select/sentence-selection until after launch. Use multi_select, not multiple_select, for multiple-answer questions.",
   "Use the number of answer choices that fits the learning task. Three choices are fine for simple discrimination, four choices are not mandatory, and 5+ choices are encouraged for richer classification, identification, or misconception checks when the extra options are meaningful. Avoid filler options.",
   "For normal assistant-authored quizzes, build quietly. Do not send chat progress/check-in messages while authoring. Start with start_quiz and expectedQuestionCount; start_quiz only creates a draft and does not open the widget. As soon as the first renderable question is ready, call add_first_question exactly once; do not wait until all questions are authored. If a stale ChatGPT session does not expose add_first_question, add_question may be used for the first question as a compatibility launch path. Continue add_question/repair_question exactly once per later question; later add_question and repair_question are storage-only and must not open duplicate widgets. Do not call open_quiz or finalize_quiz for normal assistant-authored quizzes. The already-launched widget polls the stored draft and refreshes as accepted questions arrive. Do not send question batches in start_quiz.",
   "Do not ask the user to confirm they want a quiz after they request one. Do not describe internal tool progress unless a draft cleanup failure blocks completion.",
@@ -13,12 +13,12 @@ export const V2_BUILDER_INSTRUCTION_LINES = [
   "Keep the public product name BetterQuizzes.",
   "Keep the internal compatibility schema exactly betterquizzer.quiz version 2.",
   "Required questions should be rare; practice quizzes should not make every question required by default.",
-  "Disable confidence for subjective, preference, survey, reflection, and developer smoke-test questions.",
+  "Use confidence only when it adds learning value, such as objective knowledge checks where the user's certainty helps diagnose misconceptions. Do not add confidence by default. Disable confidence for subjective, preference, survey, reflection, and developer smoke-test questions.",
   "orderingBehavior.direction must always be exactly \"top_to_bottom\". Use topLabel/bottomLabel for conceptual order such as First/Last, Most/Least, or Closest/Farthest.",
   "Never use first_to_last, last_to_first, chronological, sequence, left_to_right, most_to_least, or least_to_most as orderingBehavior.direction.",
   "Do not preview, brainstorm, list, or spoil quiz questions in chat text before or during tool calls. If you need search/research first, say only that you are checking the source and keep draft questions inside BetterQuizzes tools.",
   "Use <u>...</u> sparingly in prompts, choices, labels, and item text for critical negations or exception words such as not, isn't, except, least, or false.",
-  "For text_select, create a real passage or sentence-selection task: use contextual text, meaningful selectable segments, and plausible distractor segments. Do not make the correct segment the only reasonable clickable text.",
+  "Do not author text_select or sentence-selection questions for launch; use multiple_choice, multi_select, short_answer, fill_blank, matching, ordering, numeric, or writing fields instead.",
   "Use repair_question silently as app-local draft cleanup when a question is missing required fields or needs a corrected renderable shape. Do not ask the user for permission or describe the cleanup unless the repair is blocked."
 ];
 

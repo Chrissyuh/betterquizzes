@@ -45,7 +45,6 @@ const SUPPORTED_QUESTION_TYPES = new Set<QuestionType>([
   "long_response",
   "multi_typing",
   "multi_write_vertical",
-  "text_select",
   "matching",
   "ordering",
   "numeric",
@@ -331,6 +330,14 @@ function normalizeQuestion(raw: unknown, index: number, warnings: string[], norm
   if (question.type === "ordering") {
     const normalizedOrdering = normalizeOrderingBehavior(question.orderingBehavior, question.prompt);
     question.orderingBehavior = normalizedOrdering;
+    if (Array.isArray(question.items) && Array.isArray(question.answer)) {
+      const shuffledItems = shuffleOrderingItemsAwayFromAnswer(question.items, question.answer);
+      if (shuffledItems !== question.items) {
+        question.items = shuffledItems;
+        warnings.push(`questions[${index}]: shuffled ordering items away from answer order.`);
+        normalizedFields.push({ path: `questions[${index}].items`, from: "answer_order", to: "practice_order" });
+      }
+    }
     if (!isRecord(raw) || !isRecord(raw.orderingBehavior)) {
       normalizedFields.push({ path: `questions[${index}].orderingBehavior`, from: "prompt", to: "orderingBehavior" });
     }
@@ -519,6 +526,14 @@ function validateAnswerShape(question: MutableRecord, questionId: string, warnin
     if (!question.answer.every((id) => ids.has(id))) warnings.push(`${questionId}: ordering answer should contain only item ids from items[].`);
   }
   if (question.type === "matching" && Array.isArray(question.answer) && !question.answer.every((pair) => isRecord(pair) && typeof pair.leftId === "string" && typeof pair.rightId === "string")) warnings.push(`${questionId}: matching answer should be [{leftId,rightId}].`);
+}
+
+function shuffleOrderingItemsAwayFromAnswer(items: unknown[], answer: unknown[]): unknown[] {
+  if (items.length < 2) return items;
+  const answerIds = answer.map((id) => String(id));
+  const itemIds = items.map((item) => isRecord(item) ? String(item.id ?? "") : "");
+  if (answerIds.length !== itemIds.length || !itemIds.every((id, index) => id && id === answerIds[index])) return items;
+  return items.length >= 3 ? [...items].reverse() : [items[1], items[0]];
 }
 
 function validateCompactDisplayText(question: MutableRecord, questionId: string, warnings: string[]): void {
