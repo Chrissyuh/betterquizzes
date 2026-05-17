@@ -188,12 +188,13 @@ function nonEmpty(value: unknown): value is string {
 
 
 function questionRequiresConfidence(question: unknown, displayPolicy: DisplayPolicy): boolean {
-  if (!displayPolicy.requireConfidence) return false;
   if (!question || typeof question !== "object" || Array.isArray(question)) return displayPolicy.requireConfidence;
   const record = question as Record<string, unknown>;
   if (record.disableConfidence === true) return false;
+  if (record.confidence === false || record.confidence === "disabled") return false;
+  if (record.confidence === "optional") return false;
+  if (record.confidence === "required" || record.requireConfidence === true || record.confidenceRequired === true) return true;
   if (record.requireConfidence === false) return false;
   if (record.confidenceRequired === false) return false;
-  if (record.confidence === false || record.confidence === "disabled") return false;
-  return true;
+  return displayPolicy.requireConfidence;
 }

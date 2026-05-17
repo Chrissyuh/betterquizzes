@@ -1274,7 +1274,7 @@ function QuizRunner({
         </div>
         <div className="top-actions">
           {!widgetMode ? <button type="button" onClick={onReset}>New quiz</button> : null}
-          {activityPolicy.allowSkipQuiz ? <button className="skip-quiz-button" type="button" onClick={() => skipQuiz()}>Skip</button> : null}
+          {activityPolicy.allowSkipQuiz ? <button className="skip-quiz-button" type="button" onClick={() => skipQuiz()}>Skip this quiz</button> : null}
         </div>
         <div className="progress-shell" aria-label="Quiz progress"><span style={{ width: `${progressPercent}%` }} /></div>
         {generationStatus ? (
@@ -1455,8 +1455,9 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
   const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy, revealRequiredStatus);
   const required = isQuestionRequired(question, activityPolicy);
   const answerComplete = isQuestionAnswerComplete(question, draft);
+  const confidenceEnabled = isConfidenceEnabledForQuestion(question, displayPolicy);
   const confidenceRequired = isConfidenceRequiredForQuestion(question, displayPolicy);
-  const confidenceValue = answerComplete && confidenceRequired ? normalizeConfidence(draft?.confidence) : undefined;
+  const confidenceValue = answerComplete && confidenceEnabled ? normalizeConfidence(draft?.confidence) : undefined;
   const visibleTotal = Math.max(questionCount, plannedQuestionCount);
   return (
     <section className={`card question-card ${isArriving ? "new-question" : ""} ${status}`}>
@@ -1467,7 +1468,7 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
       <h2><RichInline text={question.prompt} /></h2>
       <fieldset className="read-only-question-fieldset" disabled={readOnly} aria-label={readOnly ? "Submitted answer review" : undefined}>
         <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onChange={readOnly ? () => undefined : onChange} />
-        {confidenceRequired ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
+        {confidenceEnabled ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
           <div>
             <p className="confidence-heading">Confidence</p>
             {!answerComplete ? <p className="confidence-lock-note">Answer this question to choose confidence.</p> : null}
@@ -2855,7 +2856,6 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finis
   const { submission, hostSubmitted } = finished;
   const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
   const [recordedGrade, setRecordedGrade] = useState<GradePayload | null>(null);
-  const [gradePollingDone, setGradePollingDone] = useState(false);
 
   useEffect(() => {
     if (!widgetMode) return;
@@ -2867,10 +2867,8 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finis
       if (cancelled) return;
       if (grade) {
         setRecordedGrade(grade);
-        setGradePollingDone(true);
         return;
       }
-      if (attempts >= 16) setGradePollingDone(true);
     };
     void poll();
     const interval = window.setInterval(() => {
@@ -2893,13 +2891,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finis
         <h1>{getSubmissionHeadline(gradeStatus)}</h1>
         <p>{getSubmissionMessage(gradeStatus, hostSubmitted)}</p>
 
-        <div className="submission-status-grid user-status-grid">
-          <span>Answers saved</span>
-          {submission.completion.requiredTotal > 0 ? <span>Required questions complete</span> : null}
-          <span>{getGradeStatusLabel(gradeStatus)}</span>
-        </div>
-
-        {recordedGrade ? <GradeSummaryCard grade={recordedGrade} /> : widgetMode && !gradePollingDone ? <p className="muted compact-status">Waiting for feedback to appear...</p> : null}
+        {recordedGrade ? <GradeSummaryCard grade={recordedGrade} /> : null}
 
         {finished.followUpAttempts && gradeStatus !== "grade_requested" ? (
           <p className="muted compact-status">{getFriendlyFollowUpMessage(gradeStatus)}</p>
@@ -3087,45 +3079,28 @@ function getSubmissionHeadline(status: SubmissionDeliveryStatus): string {
     case "retrying_grade_request":
       return "Sending your answers...";
     case "grade_request_unavailable":
-      return "Answers saved";
+      return "Submitted";
     case "grade_request_failed":
-      return "Answers saved";
+      return "Submitted";
     default:
-      return "Your answers were saved";
+      return "Submitted";
   }
 }
 
 function getSubmissionMessage(status: SubmissionDeliveryStatus, hostSubmitted: boolean): string {
-  if (status === "grade_requested") return "Your answers are saved and ChatGPT has what it needs. Return to the chat for feedback.";
-  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers are saved. Feedback should appear in the chat shortly.";
+  if (status === "grade_requested") return "Your submission is complete and ChatGPT has what it needs. Return to the chat for feedback.";
+  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your submission is complete. Feedback should appear in the chat shortly.";
   if (status === "grade_request_unavailable") return hostSubmitted
     ? "Your answers were submitted. Return to the chat if feedback does not appear automatically."
-    : "Your answers are saved here. Return to the chat to continue.";
-  if (status === "grade_request_failed") return "Your answers were saved, but the feedback request did not finish. Your work is not lost.";
-  return "Your answers were saved.";
+    : "Your submission is complete here. Return to the chat to continue.";
+  if (status === "grade_request_failed") return "Your submission is complete, but the feedback request did not finish. Your work is not lost.";
+  return "Your submission is complete.";
 }
 
 function getFriendlyFollowUpMessage(status: SubmissionDeliveryStatus): string {
-  if (status === "grade_request_failed") return "Your answers are saved. If feedback does not appear, return to the chat and ask ChatGPT to grade this submission.";
-  if (status === "grade_request_unavailable") return "Your answers are saved. Return to the chat to continue.";
-  return "Your answers are saved. Feedback should appear in the chat shortly.";
-}
-
-function getGradeStatusLabel(status: SubmissionDeliveryStatus): string {
-  switch (status) {
-    case "grade_requested":
-      return "Feedback requested";
-    case "requesting_grade":
-      return "Sending to ChatGPT";
-    case "retrying_grade_request":
-      return "Still sending";
-    case "grade_request_unavailable":
-      return "Saved for review";
-    case "grade_request_failed":
-      return "Feedback request incomplete";
-    default:
-      return "Saved";
-  }
+  if (status === "grade_request_failed") return "If feedback does not appear, return to the chat and ask ChatGPT to grade this submission.";
+  if (status === "grade_request_unavailable") return "Return to the chat to continue.";
+  return "Feedback should appear in the chat shortly.";
 }
 
 function summarizeToolResult(result: ToolResultLike | null): ToolResultLike | null {
@@ -3160,18 +3135,29 @@ type GradeRetryOptions = {
 async function requestChatGptGradeOnce(options: GradeRetryOptions): Promise<void> {
   setFollowUpDelivery(options, "requesting_grade", false, 0, "Asking ChatGPT to grade…");
 
-  const result = await sendSubmissionFollowUp(buildAutoGradePrompt(options.submission), 8000);
-  if (result.status === "sent") {
-    setFollowUpDelivery(options, "grade_requested", true, 1, "Grade request sent.");
-    return;
+  const prompt = buildAutoGradePrompt(options.submission);
+  const delays = [0, 900, 1800, 3200];
+  let lastResult: Awaited<ReturnType<typeof sendSubmissionFollowUp>> | null = null;
+
+  for (let index = 0; index < delays.length; index += 1) {
+    if (delays[index] > 0) {
+      setFollowUpDelivery(options, "retrying_grade_request", false, index, "Trying again to ask ChatGPT for feedback.");
+      await sleep(delays[index]);
+    }
+
+    lastResult = await sendSubmissionFollowUp(prompt, 8000);
+    if (lastResult.status === "sent") {
+      setFollowUpDelivery(options, "grade_requested", true, index + 1, "Grade request sent.");
+      return;
+    }
+
+    if (lastResult.status === "unavailable") {
+      setFollowUpDelivery(options, "grade_request_unavailable", false, index + 1, lastResult.message);
+      return;
+    }
   }
 
-  if (result.status === "unavailable") {
-    setFollowUpDelivery(options, "grade_request_unavailable", false, 1, result.message);
-    return;
-  }
-
-  setFollowUpDelivery(options, "grade_request_failed", false, 1, result.message ?? "ChatGPT grading request did not complete.");
+  setFollowUpDelivery(options, "grade_request_failed", false, delays.length, lastResult?.message ?? "ChatGPT grading request did not complete.");
 }
 
 function setFollowUpDelivery(options: GradeRetryOptions, status: SubmissionDeliveryStatus, followUpRequested: boolean, attempts: number, message?: string): void {
@@ -3358,7 +3344,7 @@ function makeAnswerRecords(quiz: QuizSpec, drafts: Record<string, DraftAnswer>, 
     const response = normalizeResponseForSubmission(question, draft?.response ?? null);
     const timeMs = safeElapsedMs(draft, startedAt);
     const meta = buildAnswerMeta(question);
-    return { questionId: question.id, response, confidence: isQuestionAnswerComplete(question, draft) && isConfidenceRequiredForQuestion(question, normalizeDisplayPolicy(quiz.displayPolicy)) ? normalizeConfidence(draft?.confidence) : undefined, timeMs, ...(meta ? { meta, ...meta } : {}) };
+    return { questionId: question.id, response, confidence: isQuestionAnswerComplete(question, draft) && isConfidenceEnabledForQuestion(question, normalizeDisplayPolicy(quiz.displayPolicy)) ? normalizeConfidence(draft?.confidence) : undefined, timeMs, ...(meta ? { meta, ...meta } : {}) };
   });
 }
 
@@ -3474,19 +3460,41 @@ function limitForGrading(value: unknown, maxChars: number): string | undefined {
 }
 
 
-function isConfidenceRequiredForQuestion(question: Question, displayPolicy: DisplayPolicy): boolean {
-  const record = question as Question & {
+function getConfidenceConfig(question: Question): {
+  requireConfidence?: boolean;
+  confidenceRequired?: boolean;
+  disableConfidence?: boolean;
+  confidence?: boolean | "required" | "optional" | "disabled";
+} {
+  return question as Question & {
     requireConfidence?: boolean;
     confidenceRequired?: boolean;
     disableConfidence?: boolean;
     confidence?: boolean | "required" | "optional" | "disabled";
   };
-  if (!displayPolicy.requireConfidence) return false;
-  if (record.disableConfidence === true) return false;
-  if (record.requireConfidence === false) return false;
-  if (record.confidenceRequired === false) return false;
-  if (record.confidence === false || record.confidence === "disabled") return false;
-  return true;
+}
+
+function isConfidenceDisabledForQuestion(question: Question): boolean {
+  const record = getConfidenceConfig(question);
+  if (record.confidence === false || record.confidence === "disabled") return true;
+  return record.disableConfidence === true;
+}
+
+function isConfidenceEnabledForQuestion(question: Question, displayPolicy: DisplayPolicy): boolean {
+  const record = getConfidenceConfig(question);
+  if (isConfidenceDisabledForQuestion(question)) return false;
+  if (record.confidence === true || record.confidence === "optional" || record.confidence === "required") return true;
+  if (record.requireConfidence === true || record.confidenceRequired === true) return true;
+  return displayPolicy.requireConfidence;
+}
+
+function isConfidenceRequiredForQuestion(question: Question, displayPolicy: DisplayPolicy): boolean {
+  const record = getConfidenceConfig(question);
+  if (isConfidenceDisabledForQuestion(question)) return false;
+  if (record.confidence === "optional") return false;
+  if (record.confidence === "required" || record.requireConfidence === true || record.confidenceRequired === true) return true;
+  if (record.requireConfidence === false || record.confidenceRequired === false) return false;
+  return displayPolicy.requireConfidence;
 }
 
 function isQuestionRequired(question: Question, activityPolicy: ActivityPolicy): boolean {

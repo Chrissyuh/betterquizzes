@@ -120,12 +120,13 @@ function questionRequiresConfidence(question: Question, displayPolicy: DisplayPo
     disableConfidence?: boolean;
     confidence?: boolean | "required" | "optional" | "disabled";
   };
-  if (!displayPolicy.requireConfidence) return false;
   if (record.disableConfidence === true) return false;
+  if (record.confidence === false || record.confidence === "disabled") return false;
+  if (record.confidence === "optional") return false;
+  if (record.confidence === "required" || record.requireConfidence === true || record.confidenceRequired === true) return true;
   if (record.requireConfidence === false) return false;
   if (record.confidenceRequired === false) return false;
-  if (record.confidence === false || record.confidence === "disabled") return false;
-  return true;
+  return displayPolicy.requireConfidence;
 }
 
 function isValidConfidenceValue(value: unknown): value is 1 | 2 | 3 {

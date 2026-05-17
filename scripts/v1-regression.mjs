@@ -30,7 +30,10 @@ assert(app.includes("function TextSelectInput"), "app must render text-select qu
 assert(app.includes("isQuestionAnswerComplete(question, draft)"), "confidence must be gated by complete question state");
 assert(app.includes("Preserve confidence while a user temporarily clears or edits an answer"), "confidence should survive un-answer/re-answer edits");
 assert(app.includes("disabled={!answerComplete || readOnly}"), "confidence picker must stay disabled until all question parts are complete");
-assert(app.includes("isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === undefined"), "completion must respect per-question confidence overrides");
+assert(app.includes("function isConfidenceEnabledForQuestion") && app.includes("const confidenceEnabled = isConfidenceEnabledForQuestion(question, displayPolicy)"), "confidence visibility must be separate from confidence requirement");
+assert(app.includes('record.confidence === true || record.confidence === "optional" || record.confidence === "required"'), "model-enabled confidence must show even when quiz-level confidence is inconsistent");
+assert(app.includes('record.confidence === "optional") return false'), "optional confidence must not block ready/green completion");
+assert(app.includes("isConfidenceRequiredForQuestion(question, displayPolicy) && normalizeConfidence(draft?.confidence) === undefined"), "completion must respect per-question confidence requirements");
 assert(app.includes("Answer this question to choose confidence."), "confidence-required questions must show a locked confidence hint before answer completion");
 assert(app.includes("function OrderingInput") && app.includes("bqV61OrderingRebuild") && app.includes("data-ordering-mode") && app.includes("draggable={false}") && app.includes("moveByStep"), "ordering questions must support rebuilt separate desktop/mobile sorting with fallback controls");
 assert(app.includes("x: 0,") && styles.includes("transform: translate3d(0, var(--drag-y, 0), 0)"), "ordering drag visual movement must be vertically clamped");
@@ -40,9 +43,10 @@ assert(app.includes("const shouldShowQuestionNav = quiz.questions.length > 1 || 
 assert(app.includes("single-question-actions"), "one-question quizzes must not show prev/next controls");
 assert(app.includes("const submitLooksReady = allQuestionsDone"), "submit button should look ready only when every question is complete");
 assert(app.includes("incompleteSubmitPrompt") && app.includes("Submit anyway") && app.includes("Review unfinished"), "incomplete optional submissions must ask for confirmation");
-assert(app.includes("panel-close-button") && app.includes("closeOnOutsidePointer") && app.includes('event.key === "Escape"') && styles.includes("background: #fef2f2"), "incomplete submit warning must be red and dismissible");
+assert(app.includes("panel-close-button") && app.includes("closeOnOutsidePointer") && app.includes('event.key === "Escape"') && styles.includes("background: #fff7ed") && styles.includes("grid-template-columns: repeat(2, minmax(0, 1fr))"), "incomplete submit warning must be soft, full-width, and dismissible");
 assert(app.includes("function ReviewQuizScreen") && app.includes("buildReviewDraftsFromSubmission") && app.includes("readOnly") && app.includes("Back to results"), "submitted quizzes must support read-only review mode");
 assert(app.includes("getFriendlyFollowUpMessage") && !app.includes("{finished.followUpMessage ?? \"Still trying to send your answers for feedback.\"}"), "post-submit page must avoid technical follow-up messages");
+assert(!app.includes("Answers saved") && !app.includes("Feedback requested") && !app.includes("Waiting for feedback to appear"), "post-submit page must avoid the old technical status chips");
 assert(app.includes("generation-status-strip") && app.includes("Questions are being added:"), "incremental generation must use a compact status strip");
 assert(app.includes("planned-question") && styles.includes(".question-dots .planned-question"), "incremental generation must show planned question placeholders in the question bar");
 assert(!app.includes("className=\"card question-card build-next-card\""), "incremental generation must not render the old end-card");
@@ -50,6 +54,7 @@ assert(app.includes("const [submitAttempted, setSubmitAttempted]") && app.includ
 assert(app.includes("disabled={submitting}") && !app.includes("disabled={submitting || !canSubmit}"), "submit must remain clickable so missing required items can show delayed feedback");
 assert(app.includes("function RichInline"), "titles and prompts must support light formatting");
 assert(app.includes("<u>") && remote.includes("Use <u>...</u> sparingly for critical negations"), "underline emphasis must be supported and advertised for critical negations");
+assert(remote.includes("3 choices are fine") && remote.includes("5+ choices") && remote.includes("Avoid filler options"), "model guidance must allow 3 or 5+ meaningful answer choices");
 assert(app.includes("katex.renderToString") && app.includes("dangerouslySetInnerHTML"), "quiz display text must render LaTeX math safely through KaTeX");
 assert(styles.includes("katex/dist/katex.min.css") || readFileSync("src/main.tsx", "utf8").includes("katex/dist/katex.min.css"), "KaTeX CSS must be loaded");
 assert(remote.includes("LaTeX math using only \\\\(...\\\\)") && remote.includes("Do not use dollar-sign math delimiters"), "model instructions must allow explicit LaTeX delimiters and reject dollar delimiters");
@@ -75,6 +80,7 @@ assert(app.includes("describeHostBridgeState()") && app.includes("Server bases:"
 assert(remote.includes("window.__BETTERQUIZZER_SERVER_BASES__=") && remote.includes("requestOrigin") && remote.includes("connectDomains"), "production widget bootstrap must include fallback server bases and CSP connect domains");
 assert(remote.includes('type !== "text_select"') && remote.includes("Text-select questions need segments") && remote.includes("Do not use choices for text_select"), "draft validator must not reject text_select as a choice question");
 assert(remote.includes("Do not use text_select for a single obvious sentence") && remote.includes("at least three plausible selectable segments"), "text_select quality guardrails must reject one-obvious-phrase questions");
+assert(remote.includes("sentence-selection questions") && remote.includes("plausible distractor segments"), "model guidance must improve sentence-selection authoring");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
 assert(app.includes("function formatPlainText"), "format buttons must not insert raw markdown/html tags into student answers");
 assert(app.includes("stripTextFormatting"), "format buttons must be reversible and able to clear plain-text formatting");
@@ -119,6 +125,8 @@ assert(styles.includes("V19: ordering repair and stronger staged loading"), "V19
 assert(styles.includes("bq-staged-dot-arrival-v19"), "question dots must have stronger staged arrival animation");
 assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronger arrival animation");
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
+assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
+assert(app.includes("Skip this quiz"), "skip action must use clearer label");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");
@@ -134,6 +142,6 @@ const staleReqUse = 'required complete' + '). Use';
 const staleNoPenalty = 'do not penalize' + ' blank non-required';
 assert(!remote.includes(staleReqUse), 'submit tool must not emit stale required-count text');
 assert(!remote.toLowerCase().includes(staleNoPenalty), 'submit tool must not use blanket no-penalty wording');
-assert(app.includes('submission.completion.requiredTotal > 0 ? <span>Required questions complete'), 'submission screen should only mention required completion when required questions exist');
+assert(!app.includes('submission.completion.requiredTotal > 0 ? <span>Required questions complete'), 'submission screen should not show the old required-completion status chip');
 assert(!app.includes('More ' + 'options'), 'post-submit More options should be removed');
 assert(remote.includes('case-by-case'), 'submit pipeline must use case-by-case grading wording');
