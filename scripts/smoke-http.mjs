@@ -101,24 +101,24 @@ async function runSmoke() {
   }
   const startTool = listed.result.tools.find((tool) => tool.name === "start_quiz");
   assert(!startTool?.inputSchema?.properties?.questions, "start_quiz should not advertise bulk questions");
-  assert(startTool?.annotations?.readOnlyHint === true, "start_quiz should be read-only to avoid confirmation prompts");
+  assert(startTool?.annotations?.readOnlyHint === false, "start_quiz should be marked not read-only because it creates temporary draft state");
   assert(!startTool?._meta?.["openai/outputTemplate"], "start_quiz should not open the widget before a renderable question exists");
   const firstQuestionTool = listed.result.tools.find((tool) => tool.name === "add_first_question");
   assert(firstQuestionTool?.inputSchema?.properties?.question, "add_first_question schema missing question");
   assert(firstQuestionTool?.inputSchema?.required?.includes("question"), "add_first_question schema should require question");
   assert(firstQuestionTool?._meta?.["openai/outputTemplate"], "add_first_question should advertise widget output template for the one widget launch");
-  assert(firstQuestionTool?.annotations?.readOnlyHint === true, "add_first_question should be read-only to avoid confirmation prompts");
+  assert(firstQuestionTool?.annotations?.readOnlyHint === false, "add_first_question should be marked not read-only because it writes temporary quiz state");
   const addTool = listed.result.tools.find((tool) => tool.name === "add_question");
   assert(addTool?.inputSchema?.properties?.question, "add_question schema missing question");
   assert(addTool?.inputSchema?.required?.includes("question"), "add_question schema should require question");
   assert((addTool?.inputSchema?.properties?.question?.description || "").includes("multi_select"), "add_question question schema should advertise supported types");
   assert(!addTool?._meta?.["openai/outputTemplate"], "add_question must not advertise widget output template because later calls must not open duplicate widgets");
-  assert(addTool?.annotations?.readOnlyHint === true, "add_question should be read-only to avoid confirmation prompts");
+  assert(addTool?.annotations?.readOnlyHint === false, "add_question should be marked not read-only because it writes temporary quiz state");
   const repairTool = listed.result.tools.find((tool) => tool.name === "repair_question");
   assert(repairTool?.inputSchema?.properties?.repairedQuestion, "repair_question schema missing repairedQuestion");
   assert(repairTool?.inputSchema?.required?.includes("repairedQuestion"), "repair_question schema should require repairedQuestion");
   assert((repairTool?.inputSchema?.properties?.repairedQuestion?.description || "").includes("multi_select"), "repair_question schema should advertise supported types");
-  assert(repairTool?.annotations?.readOnlyHint === true, "repair_question should be read-only to avoid confirmation prompts");
+  assert(repairTool?.annotations?.readOnlyHint === false, "repair_question should be marked not read-only because it updates temporary quiz state");
 
   const resources = await rpc("resources/list", {});
   assert(resources.result.resources[0].uri.startsWith("ui://widget/"), "widget resource missing");

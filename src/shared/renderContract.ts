@@ -54,7 +54,6 @@ const COMPACT_CHOICE_TEXT_WARN_CHARS = 180;
 const COMPACT_MATCH_TEXT_WARN_CHARS = 120;
 const COMPACT_FIELD_LABEL_WARN_CHARS = 80;
 const COMPACT_PLACEHOLDER_WARN_CHARS = 60;
-const COMPACT_TEXT_SELECT_SEGMENT_WARN_CHARS = 160;
 
 const QUESTION_TYPE_ALIASES = new Map<string, QuestionType>([
   ["multipleChoice", "multiple_choice"],
@@ -79,10 +78,6 @@ const QUESTION_TYPE_ALIASES = new Map<string, QuestionType>([
   ["multi_write", "multi_write_vertical"],
   ["multi-write", "multi_write_vertical"],
   ["multiWrite", "multi_write_vertical"],
-  ["textSelect", "text_select"],
-  ["text-select", "text_select"],
-  ["select_text", "text_select"],
-  ["select-text", "text_select"],
 ]);
 
 type MutableRecord = Record<string, unknown>;
@@ -202,9 +197,6 @@ export function getRenderDiagnostics(quiz: unknown, inheritedWarnings: string[] 
     if (type === "multi_write_vertical" && (!Array.isArray((rawQuestion as { fields?: unknown }).fields) || (rawQuestion as { fields?: unknown[] }).fields!.length < 1 || !(rawQuestion as { fields?: unknown[] }).fields!.every(isRenderableTypingField))) {
       unrenderableQuestions.push({ index, questionId, reason: "Multi-write vertical question requires fields: {id,label}[] with at least one valid field." });
     }
-    if (type === "text_select" && (!Array.isArray((rawQuestion as { segments?: unknown }).segments) || (rawQuestion as { segments?: unknown[] }).segments!.length < 1 || !(rawQuestion as { segments?: unknown[] }).segments!.every(isRenderableTextSelectSegment))) {
-      unrenderableQuestions.push({ index, questionId, reason: "Text-select question requires segments: {id,text,selectable?}[] with at least one valid segment." });
-    }
     if (type === "matching" && (!Array.isArray(rawQuestion.left) || !Array.isArray(rawQuestion.right) || rawQuestion.left.length < 1 || rawQuestion.right.length < 1 || !rawQuestion.left.every(isRenderableItem) || !rawQuestion.right.every(isRenderableItem))) {
       unrenderableQuestions.push({ index, questionId, reason: "Matching question requires left and right arrays of {id,text} items." });
     }
@@ -316,17 +308,6 @@ function normalizeQuestion(raw: unknown, index: number, warnings: string[], norm
     normalizeMatchingQuestion(question, index, warnings, normalizedFields);
   }
 
-  if (question.type === "text_select") {
-    if (!Array.isArray(question.segments) && Array.isArray(question.selectableSegments)) {
-      question.segments = question.selectableSegments;
-      warnings.push(`questions[${index}]: normalized selectableSegments to segments.`);
-      normalizedFields.push({ path: `questions[${index}]`, from: "selectableSegments", to: "segments" });
-    }
-    if (Array.isArray(question.segments)) question.segments = normalizeTextSelectSegments(question.segments);
-    question.selectionPolicy = normalizeTextSelectPolicy(question.selectionPolicy ?? question.selectPolicy ?? question.selection ?? question.select);
-    if (!isRecord(raw.selectionPolicy)) normalizedFields.push({ path: `questions[${index}].selectionPolicy`, from: null, to: "selectionPolicy" });
-  }
-
   if (question.type === "ordering") {
     const normalizedOrdering = normalizeOrderingBehavior(question.orderingBehavior, question.prompt);
     question.orderingBehavior = normalizedOrdering;
@@ -399,42 +380,6 @@ function normalizeTypingField(field: unknown, fieldIndex: number): unknown {
     id: String(field.id ?? `field${fieldIndex + 1}`),
     label: String(field.label ?? field.id ?? `Field ${fieldIndex + 1}`),
   };
-}
-
-function normalizeTextSelectSegments(segments: unknown[]): unknown[] {
-  return segments.map((segment, segmentIndex) => {
-    if (typeof segment === "string") return { id: `segment${segmentIndex + 1}`, text: segment, selectable: true };
-    if (!isRecord(segment)) return segment;
-    return {
-      ...segment,
-      id: String(segment.id ?? `segment${segmentIndex + 1}`),
-      text: String(segment.text ?? segment.label ?? segment.value ?? ""),
-      selectable: segment.selectable === false ? false : true,
-    };
-  });
-}
-
-function normalizeTextSelectPolicy(raw: unknown): { mode: "exact_count" | "all_that_apply" | "range"; count?: number; min?: number; max?: number; instruction?: string } {
-  const record = isRecord(raw) ? raw : {};
-  const rawMode = String(record.mode ?? record.kind ?? record.selectionMode ?? "");
-  const count = toPositiveInteger(record.count ?? record.selectCount ?? record.requiredSelections);
-  const min = toNonNegativeInteger(record.min ?? record.minSelections);
-  const max = toPositiveInteger(record.max ?? record.maxSelections);
-  const mode = rawMode === "exact_count" || rawMode === "exact" || count !== undefined
-    ? "exact_count"
-    : rawMode === "range" || min !== undefined || max !== undefined
-      ? "range"
-      : "all_that_apply";
-  const instruction = typeof record.instruction === "string" && record.instruction.trim() ? record.instruction.trim() : undefined;
-  return { mode, ...(count !== undefined ? { count } : {}), ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}), ...(instruction ? { instruction } : {}) };
-}
-
-function toPositiveInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
-}
-
-function toNonNegativeInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 function normalizeChoices(choices: unknown[], index: number, warnings: string[]): NormalizedChoices {
@@ -520,7 +465,6 @@ function validateAnswerShape(question: MutableRecord, questionId: string, warnin
   if (question.type === "numeric" && typeof question.answer !== "number") warnings.push(`${questionId}: numeric answer should be a number.`);
   if ((question.type === "fill_blank" || question.type === "short_answer") && !(typeof question.answer === "string" || Array.isArray(question.answer))) warnings.push(`${questionId}: ${String(question.type)} answer should be string or string[].`);
   if ((question.type === "multi_typing" || question.type === "multi_write_vertical") && !(isRecord(question.answer) || question.answer === undefined)) warnings.push(`${questionId}: ${String(question.type)} answer should be a field-id keyed object when provided.`);
-  if (question.type === "text_select" && !(Array.isArray(question.answer) || question.answer === undefined)) warnings.push(`${questionId}: text_select answer should be an array of selected segment ids when provided.`);
   if (question.type === "ordering" && Array.isArray(question.items) && Array.isArray(question.answer)) {
     const ids = new Set(question.items.filter(isRecord).map((item) => item.id));
     if (!question.answer.every((id) => ids.has(id))) warnings.push(`${questionId}: ordering answer should contain only item ids from items[].`);
@@ -550,9 +494,6 @@ function validateCompactDisplayText(question: MutableRecord, questionId: string,
       warnIfLongText(warnings, `${questionId}.fields[${index}].placeholder`, isRecord(field) ? field.placeholder : undefined, COMPACT_PLACEHOLDER_WARN_CHARS);
     });
   }
-  if (question.type === "text_select" && Array.isArray(question.segments)) {
-    question.segments.forEach((segment, index) => warnIfLongText(warnings, `${questionId}.segments[${index}].text`, isRecord(segment) ? segment.text : undefined, COMPACT_TEXT_SELECT_SEGMENT_WARN_CHARS));
-  }
 }
 
 function warnIfLongText(warnings: string[], path: string, value: unknown, maxChars: number): void {
@@ -575,7 +516,6 @@ function rendererComponentForType(type: QuestionType): string {
     long_response: "LongResponseQuestion",
     multi_typing: "MultiTypingQuestion",
     multi_write_vertical: "MultiWriteVerticalQuestion",
-    text_select: "TextSelectQuestion",
     numeric: "NumericQuestion",
     ordering: "OrderingQuestion",
     matching: "MatchingQuestion",
@@ -597,10 +537,6 @@ function isOneLineOrderingItemText(text: string): boolean {
 
 function isRenderableTypingField(item: unknown): boolean {
   return isRecord(item) && isNonEmptyString(item.id) && isNonEmptyString(item.label);
-}
-
-function isRenderableTextSelectSegment(item: unknown): boolean {
-  return isRecord(item) && isNonEmptyString(item.id) && isNonEmptyString(item.text);
 }
 
 function emptyDiagnostics(): RenderDiagnostics {

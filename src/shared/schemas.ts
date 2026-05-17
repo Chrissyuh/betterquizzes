@@ -112,18 +112,6 @@ export function validateQuizSpec(input: unknown): ValidationResult<QuizSpec> {
           }
         });
       }
-      if (question.type === "text_select") {
-        if (!Array.isArray(question.segments) || question.segments.length < 1) errors.push(`${prefix}.segments must contain at least one segment.`);
-        else question.segments.forEach((segment, segmentIndex) => {
-          const segmentPrefix = `${prefix}.segments[${segmentIndex}]`;
-          if (!segment || typeof segment !== "object" || Array.isArray(segment)) errors.push(`${segmentPrefix} must be an object.`);
-          else {
-            const record = segment as Record<string, unknown>;
-            if (!nonEmpty(record.id)) errors.push(`${segmentPrefix}.id must be a non-empty string.`);
-            if (!nonEmpty(record.text)) errors.push(`${segmentPrefix}.text must be a non-empty string.`);
-          }
-        });
-      }
       if (question.type === "matching") {
         if (!Array.isArray(question.left) || !Array.isArray(question.right)) errors.push(`${prefix}.left and ${prefix}.right must be arrays.`);
       }

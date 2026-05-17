@@ -10,49 +10,49 @@
   "tools": {
     "start_quiz": {
       "annotations": {
-        "readOnlyHint": true,
+        "readOnlyHint": false,
         "openWorldHint": false,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Creates only an in-memory quiz draft for the current BetterQuizzes app session; it does not publish, persist, or modify external user data.",
+        "read_only_justification": "Not marked read-only because it creates or updates temporary BetterQuizzes session state in memory; it does not modify external services, durable user records, or the open web.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
     },
     "add_first_question": {
       "annotations": {
-        "readOnlyHint": true,
+        "readOnlyHint": false,
         "openWorldHint": false,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Adds the first question only to an in-memory BetterQuizzes draft and opens exactly one widget for the current app session.",
+        "read_only_justification": "Not marked read-only because it creates or updates temporary BetterQuizzes session state in memory; it does not modify external services, durable user records, or the open web.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
     },
     "add_question": {
       "annotations": {
-        "readOnlyHint": true,
+        "readOnlyHint": false,
         "openWorldHint": false,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Adds one later question only to an in-memory BetterQuizzes draft for the current app session; it does not open another widget, publish, persist, or modify external user data.",
+        "read_only_justification": "Not marked read-only because it creates or updates temporary BetterQuizzes session state in memory; it does not modify external services, durable user records, or the open web.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
     },
     "repair_question": {
       "annotations": {
-        "readOnlyHint": true,
+        "readOnlyHint": false,
         "openWorldHint": false,
         "destructiveHint": false,
         "idempotentHint": true
       },
       "justifications": {
-        "read_only_justification": "Updates one invalid or incomplete question only inside the current in-memory BetterQuizzes draft; it does not publish, persist, or modify external user data.",
+        "read_only_justification": "Not marked read-only because it creates or updates temporary BetterQuizzes session state in memory; it does not modify external services, durable user records, or the open web.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, revoke access, or perform irreversible actions.",
         "idempotent_justification": "Repeating the same corrected question update for the same draft target produces the same draft question state."

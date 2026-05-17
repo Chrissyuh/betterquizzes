@@ -15,7 +15,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v64-polish.html"'), "current polish fixes must use a v64 widget URI so ChatGPT does not reuse the v63 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v65-final-hardening.html"'), "final hardening fixes must use a v65 widget URI so ChatGPT does not reuse the v64 cached resource");
+assert(remote.includes("betterquizzes-v64-polish.html"), "v64 polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v63-uxfix.html"), "v63 UX-fix URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v62-fastload.html"), "v62 fast-load URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzer-stage12-7-0-build-bq1270.html"), "12.7.0 alias must remain active");
@@ -81,7 +82,8 @@ assert(app.includes("sendSubmissionFollowUp(buildAutoGradePrompt(submission, qui
 assert(!app.includes('"/api/quiz/latest"') && app.includes("getRequestedRecoveryToken") && app.includes("SERVER_RECOVERY_TIMEOUT_MS"), "widget must not use latest-quiz as a generic ChatGPT hydration fallback");
 assert(app.includes("describeHostBridgeState()") && app.includes("Server bases:"), "widget hydration failures must include useful technical recovery details");
 assert(remote.includes("window.__BETTERQUIZZER_SERVER_BASES__=") && remote.includes("requestOrigin") && remote.includes("connectDomains"), "production widget bootstrap must include fallback server bases and CSP connect domains");
-assert(remote.includes("Do not use text_select/sentence-selection until after launch"), "model guidance must keep sentence-selection disabled for launch");
+assert(!remote.includes("Do not use text_select/sentence-selection until after launch") && !remote.includes("Do not author text_select"), "active model guidance must not suggest text-select authoring or repair");
+assert(bridge.includes('callHostJsonRpc("tools/call"') && bridge.includes('callHostJsonRpc("ui/message"'), "bridge must include JSON-RPC fallbacks for tools/call and ui/message");
 assert(app.includes("parseNumericResponse"), "numeric input must preserve and parse decimal/fraction strings");
 assert(app.includes("function formatPlainText"), "format buttons must not insert raw markdown/html tags into student answers");
 assert(app.includes("stripTextFormatting"), "format buttons must be reversible and able to clear plain-text formatting");
@@ -127,7 +129,7 @@ assert(styles.includes("bq-staged-dot-arrival-v19"), "question dots must have st
 assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronger arrival animation");
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v64-polish.html"), "skip removal must ship with a widget URI cache bust");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v65-final-hardening.html"), "skip removal and bridge hardening must ship with a widget URI cache bust");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");

@@ -940,7 +940,6 @@ function QuizRunner({
   const [error, setError] = useState<string | null>(null);
   const [incompleteSubmitPrompt, setIncompleteSubmitPrompt] = useState(false);
   const incompleteSubmitPromptRef = useRef<HTMLElement | null>(null);
-  const [skipMode, setSkipMode] = useState<"prompt" | "skipped" | null>(null);
   const knownQuestionIdsRef = useRef<Set<string>>(new Set(quiz.questions.map((question) => question.id)));
   const [arrivingQuestionIds, setArrivingQuestionIds] = useState<Set<string>>(() => new Set());
   const displayPolicy = normalizeDisplayPolicy(quiz.displayPolicy);
@@ -963,7 +962,6 @@ function QuizRunner({
   const progressTotal = generationStatus?.expected ?? quiz.questions.length;
   const progressPercent = progressTotal ? Math.round((completeQuestionCount / progressTotal) * 100) : 100;
   const shouldShowQuestionNav = quiz.questions.length > 1 || Boolean(generationStatus);
-  const answeredCount = quiz.questions.filter((question) => hasResponse(drafts[question.id])).length;
 
   useEffect(() => {
     setCurrentIndex((index) => clampIndex(index, quiz.questions.length));
@@ -1088,26 +1086,6 @@ function QuizRunner({
       return;
     }
     void finish();
-  }
-
-  function skipQuiz(): void {
-    setError(null);
-    setSkipMode("prompt");
-  }
-
-  function exitWithoutGrading(): void {
-    if (widgetMode) {
-      persistSubmissionState({
-        status: "skipped",
-        quizId: getQuizId(quiz),
-        launchId,
-        recoveryToken,
-        currentIndex,
-        drafts,
-        error: "User skipped the quiz before submission.",
-      });
-    }
-    setSkipMode("skipped");
   }
 
   async function finish(options: { allowIncomplete?: boolean } = {}): Promise<void> {
@@ -1236,23 +1214,6 @@ function QuizRunner({
     }
   }
 
-  if (skipMode) {
-    return (
-      <SkipQuizScreen
-        mode={skipMode}
-        widgetMode={widgetMode}
-        title={quiz.title}
-        answeredCount={answeredCount}
-        totalCount={quiz.questions.length}
-        submitting={submitting}
-        onResume={() => setSkipMode(null)}
-        onSubmitAnswered={() => void finish({ allowIncomplete: true })}
-        onExitWithoutGrading={exitWithoutGrading}
-        onNewQuiz={onReset}
-      />
-    );
-  }
-
   if (!current) {
     return (
       <main className="shell narrow">
@@ -1318,66 +1279,6 @@ function QuizRunner({
   );
 }
 
-
-function SkipQuizScreen({
-  mode,
-  widgetMode,
-  title,
-  answeredCount,
-  totalCount,
-  submitting,
-  onResume,
-  onSubmitAnswered,
-  onExitWithoutGrading,
-  onNewQuiz,
-}: {
-  mode: "prompt" | "skipped";
-  widgetMode: boolean;
-  title: string;
-  answeredCount: number;
-  totalCount: number;
-  submitting: boolean;
-  onResume: () => void;
-  onSubmitAnswered: () => void;
-  onExitWithoutGrading: () => void;
-  onNewQuiz: () => void;
-}): ReactElement {
-  if (mode === "skipped") {
-    return (
-      <main className="shell narrow result-shell">
-        <section className="card result-hero stack">
-          <p className="eyebrow eyebrow-row">Quiz skipped <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
-          <h1>No grade was created</h1>
-          <p>You exited “{title}” before submitting answers for grading.</p>
-          <div className="submission-status-grid user-status-grid">
-            <span>{answeredCount}/{totalCount} questions had draft answers</span>
-            <span>Grading not requested</span>
-          </div>
-
-        <div className="actions wrap">
-            <button className="primary" type="button" onClick={onResume}>Resume quiz</button>
-            {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <main className="shell narrow result-shell">
-      <section className="card result-hero stack">
-        <p className="eyebrow eyebrow-row">Leave quiz? <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
-        <h1>{answeredCount > 0 ? "Submit what you answered?" : "Exit without grading?"}</h1>
-        <p>{answeredCount > 0 ? `You have answered ${answeredCount} of ${totalCount} questions. You can submit those answers for grading, resume the quiz, or exit without creating a grade.` : "You have not answered anything yet. You can resume the quiz or exit without creating a grade."}</p>
-        <div className="actions wrap">
-          <button className="primary" type="button" disabled={answeredCount === 0 || submitting} onClick={onSubmitAnswered}>{submitting ? "Submitting…" : "Submit answered questions"}</button>
-          <button type="button" onClick={onResume}>Resume quiz</button>
-          <button type="button" onClick={onExitWithoutGrading}>Exit without grading</button>
-        </div>
-      </section>
-    </main>
-  );
-}
 
 function QuestionNav({
   questions,
@@ -1482,6 +1383,9 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
 
 function QuestionInput({ question, draft, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
   const response = draft?.response;
+  if ((question as { type?: unknown }).type === "text_select") {
+    return <QuestionRenderWarning question={question} detail="Text-select questions are not available in BetterQuizzes V1. Ask ChatGPT to replace this question with a supported type." />;
+  }
   switch (question.type) {
     case "multiple_choice":
       return <ChoiceList question={question} quizChoiceBehavior={quizChoiceBehavior} response={response} onChange={(nextResponse) => onChange({ response: nextResponse })} />;
@@ -1499,8 +1403,6 @@ function QuestionInput({ question, draft, quizChoiceBehavior, onChange }: { ques
       return <MultiTypingInput question={question} response={isMultiTypingResponse(response) ? response : {}} onChange={(value) => onChange({ response: value })} />;
     case "multi_write_vertical":
       return <MultiWriteVerticalInput question={question} response={isMultiTypingResponse(response) ? response : {}} onChange={(value) => onChange({ response: value })} />;
-    case "text_select":
-      return <TextSelectInput question={question} response={Array.isArray(response) ? response.filter((item): item is string => typeof item === "string") : []} onChange={(value) => onChange({ response: value })} />;
     case "numeric":
       return <TextField label={question.unit ? `Number (${question.unit})` : "Number"} inputMode="text" value={typeof response === "number" || typeof response === "string" ? String(response) : ""} onChange={(value) => onChange({ response: value })} />;
     case "ordering":
@@ -1802,93 +1704,6 @@ function getFieldResponseLimit(raw: unknown): ResponseLimit | null {
 
 function isMultiTypingResponse(value: unknown): value is Record<string, string> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value) && !("kind" in (value as Record<string, unknown>)) && Object.values(value as Record<string, unknown>).every((item) => typeof item === "string");
-}
-
-type TextSelectLike = { segments?: unknown; selectionPolicy?: unknown; selectPolicy?: unknown; selection?: unknown; select?: unknown };
-type TextSelectSegmentRender = { id: string; text: string; selectable?: boolean };
-type TextSelectPolicyRender = { mode: "exact_count" | "all_that_apply" | "range"; count?: number; min?: number; max?: number; instruction?: string };
-
-function getTextSelectSegments(question: TextSelectLike): TextSelectSegmentRender[] {
-  if (!Array.isArray(question.segments)) return [];
-  return question.segments.flatMap((segment, index): TextSelectSegmentRender[] => {
-    if (typeof segment === "string") {
-      const text = segment.trim();
-      return text ? [{ id: "segment" + (index + 1), text, selectable: true }] : [];
-    }
-    if (!segment || typeof segment !== "object" || Array.isArray(segment)) return [];
-    const record = segment as Record<string, unknown>;
-    const id = String(record.id ?? "segment" + (index + 1)).trim();
-    const text = String(record.text ?? record.label ?? record.value ?? "").trim();
-    if (!id || !text) return [];
-    return [{ id, text, selectable: record.selectable === false ? false : true }];
-  });
-}
-
-function getTextSelectPolicy(question: TextSelectLike): TextSelectPolicyRender {
-  const raw = question.selectionPolicy ?? question.selectPolicy ?? question.selection ?? question.select;
-  const record = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
-  const rawMode = String(record.mode ?? record.kind ?? record.selectionMode ?? "");
-  const count = toPositiveInteger(record.count ?? record.selectCount ?? record.requiredSelections);
-  const min = toNonNegativeInteger(record.min ?? record.minSelections);
-  const max = toPositiveInteger(record.max ?? record.maxSelections);
-  const mode: TextSelectPolicyRender["mode"] = rawMode === "exact_count" || rawMode === "exact" || count !== undefined
-    ? "exact_count"
-    : rawMode === "range" || min !== undefined || max !== undefined
-      ? "range"
-      : "all_that_apply";
-  const instruction = typeof record.instruction === "string" && record.instruction.trim() ? record.instruction.trim() : undefined;
-  return { mode, ...(count !== undefined ? { count } : {}), ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}), ...(instruction ? { instruction } : {}) };
-}
-
-function getTextSelectMaxSelections(policy: TextSelectPolicyRender): number | null {
-  if (policy.mode === "exact_count" && typeof policy.count === "number") return policy.count;
-  if (typeof policy.max === "number") return policy.max;
-  return null;
-}
-
-function getTextSelectInstruction(policy: TextSelectPolicyRender): string {
-  if (policy.instruction) return policy.instruction;
-  if (policy.mode === "exact_count") return "Select " + (policy.count ?? 1) + " segment" + ((policy.count ?? 1) === 1 ? "." : "s.");
-  if (policy.mode === "range") {
-    if (policy.min !== undefined && policy.max !== undefined) return "Select " + policy.min + " to " + policy.max + " segments.";
-    if (policy.min !== undefined) return "Select at least " + policy.min + " segment" + (policy.min === 1 ? "." : "s.");
-    if (policy.max !== undefined) return "Select up to " + policy.max + " segment" + (policy.max === 1 ? "." : "s.");
-  }
-  return "Select all that apply.";
-}
-
-function isTextSelectComplete(question: Extract<Question, { type: "text_select" }>, response: unknown): boolean {
-  if (!Array.isArray(response) || !response.every((item) => typeof item === "string")) return false;
-  const segments = getTextSelectSegments(question);
-  const selectableIds = new Set(segments.filter((segment) => segment.selectable !== false).map((segment) => segment.id));
-  const selected = response.filter((id) => selectableIds.has(id));
-  const policy = getTextSelectPolicy(question);
-  if (policy.mode === "exact_count") return selected.length === (policy.count ?? 1);
-  if (policy.mode === "range") {
-    if (policy.min !== undefined && selected.length < policy.min) return false;
-    if (policy.max !== undefined && selected.length > policy.max) return false;
-    return selected.length > 0 || policy.min === 0;
-  }
-  return selected.length > 0;
-}
-
-function sanitizeTextSelectResponse(question: Extract<Question, { type: "text_select" }>, response: unknown): string[] {
-  if (!Array.isArray(response)) return [];
-  const selectableIds = new Set(getTextSelectSegments(question).filter((segment) => segment.selectable !== false).map((segment) => segment.id));
-  const seen = new Set<string>();
-  return response.filter((item): item is string => {
-    if (typeof item !== "string" || !selectableIds.has(item) || seen.has(item)) return false;
-    seen.add(item);
-    return true;
-  });
-}
-
-function toPositiveInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
-}
-
-function toNonNegativeInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 function ChoiceList({ question, quizChoiceBehavior, response, onChange }: { question: Extract<Question, { type: "multiple_choice" }>; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; response: AnswerResponse | undefined; onChange: (response: AnswerResponse) => void }): ReactElement {
@@ -2211,89 +2026,6 @@ function MultiWriteVerticalInput({ question, response, onChange }: { question: E
       ))}
     </div>
   );
-}
-
-function TextSelectInput({ question, response, onChange }: { question: Extract<Question, { type: "text_select" }>; response: string[]; onChange: (value: string[]) => void }): ReactElement {
-  const segments = getTextSelectSegments(question);
-  const selectableIds = new Set(segments.filter((segment) => segment.selectable !== false).map((segment) => segment.id));
-  const selected = response.filter((id) => selectableIds.has(id));
-  const policy = getTextSelectPolicy(question);
-  const maxSelections = getTextSelectMaxSelections(policy);
-  const maxReached = maxSelections !== null && selected.length >= maxSelections;
-
-  if (!segments.length) return <QuestionRenderWarning question={question} detail="This text-select question needs at least one text segment." />;
-
-  function toggleSegment(id: string): void {
-    if (!selectableIds.has(id)) return;
-    if (selected.includes(id)) {
-      onChange(selected.filter((item) => item !== id));
-      return;
-    }
-    if (maxReached) return;
-    onChange([...selected, id]);
-  }
-
-  function renderSegment(segment: TextSelectSegmentRender, labelText?: string): ReactNode {
-    const selectable = segment.selectable !== false;
-    const isSelected = selected.includes(segment.id);
-    const label = labelText ?? segment.text;
-    if (!selectable) return <span key={segment.id} className="text-segment static-segment"><RichInline text={label} /></span>;
-    return (
-      <button
-        key={segment.id}
-        type="button"
-        className={isSelected ? "text-segment selectable-segment selected" : "text-segment selectable-segment"}
-        disabled={!isSelected && maxReached}
-        onClick={() => toggleSegment(segment.id)}
-      >
-        <RichInline text={label} />
-      </button>
-    );
-  }
-
-  const inline = buildTextSelectInlineParts(typeof question.text === "string" ? question.text : "", segments, renderSegment);
-  const fallbackSegments = segments.filter((segment) => !inline.renderedSegmentIds.has(segment.id));
-
-  return (
-    <div className="text-select-shell">
-      <p className="text-select-instruction">{getTextSelectInstruction(policy)}</p>
-      <div className="text-select-content inline-text-select">
-        {inline.nodes.length ? inline.nodes : fallbackSegments.map((segment) => renderSegment(segment))}
-      </div>
-      {Boolean(inline.nodes.length && fallbackSegments.length) ? <div className="text-select-fallback" aria-label="Additional selectable segments">{fallbackSegments.map((segment) => renderSegment(segment))}</div> : null}
-      <p className="text-select-count">Selected {selected.length}{maxSelections !== null ? " / " + maxSelections : ""}</p>
-    </div>
-  );
-}
-
-type TextSelectRenderSegment = (segment: TextSelectSegmentRender, labelText?: string) => ReactNode;
-
-function buildTextSelectInlineParts(text: string, segments: TextSelectSegmentRender[], renderSegment: TextSelectRenderSegment): { nodes: ReactNode[]; renderedSegmentIds: Set<string> } {
-  const renderedSegmentIds = new Set<string>();
-  if (!text.trim()) return { nodes: [], renderedSegmentIds };
-
-  const lowerText = text.toLowerCase();
-  const rawMatches = segments
-    .map((segment, order) => {
-      const exactIndex = text.indexOf(segment.text);
-      const fallbackIndex = exactIndex >= 0 ? exactIndex : lowerText.indexOf(segment.text.toLowerCase());
-      return fallbackIndex >= 0 ? { segment, index: fallbackIndex, length: segment.text.length, order } : null;
-    })
-    .filter((match): match is { segment: TextSelectSegmentRender; index: number; length: number; order: number } => Boolean(match))
-    .sort((a, b) => a.index - b.index || b.length - a.length || a.order - b.order);
-
-  const nodes: ReactNode[] = [];
-  let cursor = 0;
-  for (const match of rawMatches) {
-    if (renderedSegmentIds.has(match.segment.id) || match.index < cursor) continue;
-    if (match.index > cursor) nodes.push(<RichInline key={`text-${cursor}`} text={text.slice(cursor, match.index)} />);
-    const label = text.slice(match.index, match.index + match.length);
-    nodes.push(renderSegment(match.segment, label));
-    renderedSegmentIds.add(match.segment.id);
-    cursor = match.index + match.length;
-  }
-  if (cursor < text.length) nodes.push(<RichInline key={`text-${cursor}`} text={text.slice(cursor)} />);
-  return { nodes, renderedSegmentIds };
 }
 
 function getResponseLimit(question: Question): ResponseLimit | null {
@@ -3254,8 +2986,6 @@ function sanitizeDraftForQuestion(question: Question, draft: DraftAnswer): Draft
     case "multi_typing":
     case "multi_write_vertical":
       return { ...base, response: sanitizeMultiTypingResponse(question, response) };
-    case "text_select":
-      return { ...base, response: sanitizeTextSelectResponse(question, response) };
     case "numeric":
       return { ...base, response: typeof response === "number" && Number.isFinite(response) ? response : typeof response === "string" ? response : null };
     case "ordering": {
@@ -3304,13 +3034,6 @@ function buildAnswerMeta(question: Question): Record<string, unknown> | undefine
       topLabel: behavior.topLabel,
       bottomLabel: behavior.bottomLabel,
       interaction: "drag_and_drop",
-    };
-  }
-  if (question.type === "text_select") {
-    const segments = getTextSelectSegments(question);
-    return {
-      selectionPolicy: getTextSelectPolicy(question),
-      selectableSegmentIds: segments.filter((segment) => segment.selectable !== false).map((segment) => segment.id),
     };
   }
   return undefined;
@@ -3574,8 +3297,6 @@ function isQuestionAnswerComplete(question: Question, draft: DraftAnswer | undef
       const fields = getMultiTypingFields(question as Question & MultiTypingLike);
       return fields.length > 0 && fields.every((field) => typeof responseRecord[field.id] === "string" && responseRecord[field.id].trim().length > 0);
     }
-    case "text_select":
-      return isTextSelectComplete(question, response);
     default:
       return hasResponse(draft);
   }

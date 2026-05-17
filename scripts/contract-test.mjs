@@ -74,17 +74,18 @@ assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata 
 assert(server.includes('name: "add_first_question"') && server.includes("launch exactly one widget"), "add_first_question must be the sole builder launch tool");
 assert(server.includes('name: "add_question"') && server.includes("intentionally has no widget output template"), "add_question must be storage-only after launch");
 assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must retain status metadata");
-assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v64-polish.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
-assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v64-polish.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
+assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v65-final-hardening.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
+assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v65-final-hardening.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
 assert(server.includes('"openai/toolInvocation/invoking": "Validating quiz..."') && !server.includes('"openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Validating quiz..."'), "compatibility create_quiz must not advertise an output template");
-assert(server.includes("betterquizzes-v64-polish.html"), "widget URI must cache-bust the polish resource rewrite");
+assert(server.includes("betterquizzes-v65-final-hardening.html"), "widget URI must cache-bust the final hardening resource rewrite");
+assert(server.includes("betterquizzes-v64-polish.html"), "v64 widget URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v63-uxfix.html"), "v63 widget URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v62-fastload.html"), "v62 widget URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v61-bridge.html"), "v61 widget URI must remain a compatibility alias");
 assert(server.includes('rel="modulepreload"') && server.includes('type="module" src='), "widget resource should externalize hashed JS/CSS assets");
 assert(server.includes("max-age=31536000, immutable") && server.includes("gzipSync"), "static assets should be immutable and gzip-capable");
 assert(server.includes("SUPPORTED_QUESTION_TYPE_VALUES") && server.includes("unsupportedQuestionTypes") && server.includes("multiple_select"), "builder tools must advertise supported/unsupported question types");
-assert(!server.includes('"text_select", "matching"') && server.includes("Do not use text_select/sentence-selection until after launch"), "text_select must not be advertised as a launch-ready authored question type");
+assert(!server.includes('"text_select", "matching"') && !sharedGuidance.includes("text_select") && !sharedGuidance.includes("sentence-selection"), "text_select must not be advertised or suggested in active model guidance");
 assert(server.includes("add_question validates every question against the renderer-supported type") && server.includes("Unsupported question type:"), "add_question must reject unsupported types before storing");
 assert(server.includes("safeToPresentToUser") && server.includes("launchStatus"), "launch packets must expose clear model-facing readiness flags");
 assert(server.includes("summarizeNormalizations") && server.includes("visibleWarnings"), "model-facing diagnostics must split normalizations from warnings");
@@ -120,7 +121,7 @@ assert(JSON.stringify(appSubmission.negative_test_cases).includes("sensitive per
 assert(JSON.stringify(appSubmission.negative_test_cases).includes("durable classroom gradebook"), "submission metadata must include durable-gradebook negative test");
 for (const toolName of ["start_quiz", "add_first_question", "add_question", "repair_question"]) {
   const annotations = appSubmission.tools?.[toolName]?.annotations;
-  assert(annotations?.readOnlyHint === true, `submission metadata must mark ${toolName} read-only`);
+  assert(annotations?.readOnlyHint === false, `submission metadata must mark ${toolName} as not read-only because it mutates temporary session state`);
   assert(annotations?.destructiveHint === false, `submission metadata must mark ${toolName} non-destructive`);
   assert(annotations?.openWorldHint === false, `submission metadata must mark ${toolName} non-open-world`);
 }

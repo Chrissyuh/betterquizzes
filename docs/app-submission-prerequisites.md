@@ -156,7 +156,7 @@ Before submitting, test:
 - submit to ChatGPT
 - reopening a submitted quiz
 - one-question quiz layout
-- skip flow
+- incomplete-submit confirmation and read-only review flow
 - malformed quiz diagnostics
 - mobile/narrow layout
 - public URL from a different browser/session

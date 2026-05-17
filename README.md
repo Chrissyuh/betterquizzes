@@ -17,7 +17,7 @@ Included in this package:
 - confidence stays locked until all required parts of a question are complete
 - confidence buttons are compact, side-by-side, and grey until the current question is actually complete
 - single-select multiple-choice keeps A/B/C/D letter badges, while multi-select uses checkbox-style markers
-- the `Question X of Y` label is removed
+- question cards show a stable `Question X of Y` label
 - layout/progress bars use the full available width instead of leaving a dead right margin
 - loading now shows animated progress/status feedback before the quiz packet arrives
 - stable text boxes without side-resize scrollbar flicker
@@ -25,7 +25,7 @@ Included in this package:
 - multi-part writing inputs no longer show formatting controls
 - drag-and-drop ordering works from a right-side handle instead of a busy top/left handle
 - `multi_write_vertical` question type
-- sentence-selection/text-select is intentionally disabled until after launch
+- sentence-selection is intentionally unavailable for V1
 - launch packet question-count/progress metadata
 - numeric input accepts decimals and fractions while typing
 
@@ -35,7 +35,7 @@ Included in this package:
 cd %USERPROFILE%\Downloads\betterquizzes-v1-final-proposal-fix
 npm install --no-audit --no-fund
 npm run build
-set PUBLIC_BASE_URL=https://energize-service-spruce.ngrok-free.dev
+set PUBLIC_BASE_URL=https://quizzes.trybettertools.com
 npm run serve:prod
 ```
 

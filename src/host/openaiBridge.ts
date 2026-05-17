@@ -91,10 +91,12 @@ type HostCandidate = {
 };
 
 const HOST_BRIDGE_UPDATE_EVENT = "betterquizzer:host-bridge-update";
+const HOST_JSON_RPC_VERSION = "2.0";
 let hostBridgeListenersInstalled = false;
 let latestMcpToolInput: unknown = null;
 let latestMcpToolResult: ToolResultLike | null = null;
 let latestOpenAiGlobals: Record<string, unknown> | null = null;
+let hostRpcRequestSequence = 0;
 
 export function getOpenAiBridge(): OpenAiBridge | undefined {
   installHostBridgeListeners();
@@ -305,7 +307,6 @@ export function persistSubmissionState(state: Omit<SubmissionBridgeState, "kind"
 
 export async function submitToHost(submission: SubmissionCapsule, timeoutMs = 8000): Promise<ToolResultLike | null> {
   const bridge = getOpenAiBridge();
-  if (!bridge?.callTool) return null;
 
   const args = {
     quizId: submission.quizId,
@@ -324,9 +325,20 @@ export async function submitToHost(submission: SubmissionCapsule, timeoutMs = 80
     "BetterQuizzes.record_submission",
   ];
   let lastError: unknown = null;
+  if (bridge?.callTool) {
+    for (const name of names) {
+      try {
+        return await withTimeout(bridge.callTool(name, args), timeoutMs, `Timed out calling ${name}`);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+  }
+
   for (const name of names) {
     try {
-      return await withTimeout(bridge.callTool(name, args), timeoutMs, `Timed out calling ${name}`);
+      const result = await callHostJsonRpc("tools/call", { name, arguments: args }, timeoutMs);
+      return asToolResultLike(result) ?? { structuredContent: result };
     } catch (error) {
       lastError = error;
     }
@@ -340,10 +352,6 @@ export async function sendSubmissionFollowUp(prompt: string, timeoutMs = 8000): 
   const bridge = getOpenAiBridge();
   const sendFollowUpMessage = bridge?.sendFollowUpMessage;
 
-  if (!sendFollowUpMessage) {
-    return { status: "unavailable", message: "ChatGPT follow-up is unavailable in this host session." };
-  }
-
   const attempts: { prompt: string; scrollToBottom?: boolean }[] = [
     { prompt, scrollToBottom: true },
     { prompt },
@@ -352,23 +360,77 @@ export async function sendSubmissionFollowUp(prompt: string, timeoutMs = 8000): 
 
   let lastMessage = "";
 
+  if (sendFollowUpMessage) {
+    for (const message of attempts) {
+      try {
+        await withTimeout(
+          Promise.resolve(sendFollowUpMessage.call(bridge, message)),
+          timeoutMs,
+          "Timed out sending follow-up message"
+        );
+        return { status: "sent" };
+      } catch (error) {
+        lastMessage = error instanceof Error ? error.message : String(error);
+      }
+    }
+  }
+
   for (const message of attempts) {
     try {
-      await withTimeout(
-        Promise.resolve(sendFollowUpMessage.call(bridge, message)),
-        timeoutMs,
-        "Timed out sending follow-up message"
-      );
+      await callHostJsonRpc("ui/message", message, timeoutMs);
       return { status: "sent" };
     } catch (error) {
       lastMessage = error instanceof Error ? error.message : String(error);
     }
   }
 
+  if (!sendFollowUpMessage && !lastMessage) {
+    return { status: "unavailable", message: "ChatGPT follow-up is unavailable in this host session." };
+  }
+
   return {
     status: lastMessage.toLowerCase().includes("timed out") ? "timeout" : "failed",
     message: lastMessage || "ChatGPT follow-up failed."
   };
+}
+
+function callHostJsonRpc(method: "tools/call" | "ui/message", params: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
+  if (typeof window === "undefined" || !window.parent || window.parent === window) {
+    return Promise.reject(new Error(`Host JSON-RPC ${method} is unavailable outside an embedded widget.`));
+  }
+
+  const id = `betterquizzes-${Date.now()}-${++hostRpcRequestSequence}`;
+  const message = { jsonrpc: HOST_JSON_RPC_VERSION, id, method, params };
+
+  return new Promise((resolve, reject) => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const cleanup = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      window.removeEventListener("message", onMessage);
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== window.parent) return;
+      const response = asRecord(event.data);
+      if (!response || response.jsonrpc !== HOST_JSON_RPC_VERSION || response.id !== id) return;
+      cleanup();
+      if (response.error !== undefined) {
+        const errorRecord = asRecord(response.error);
+        const messageText = typeof errorRecord?.message === "string" ? errorRecord.message : `Host JSON-RPC ${method} failed.`;
+        reject(new Error(messageText));
+        return;
+      }
+      resolve(response.result);
+    };
+
+    window.addEventListener("message", onMessage);
+    timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timed out waiting for host JSON-RPC ${method}`));
+    }, timeoutMs);
+    window.parent.postMessage(message, "*");
+  });
 }
 
 function asSubmissionBridgeStatus(value: unknown): SubmissionBridgeState["status"] {

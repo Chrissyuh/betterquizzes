@@ -9,7 +9,6 @@ export type QuestionType =
   | "long_response"
   | "multi_typing"
   | "multi_write_vertical"
-  | "text_select"
   | "matching"
   | "ordering"
   | "numeric";
@@ -175,35 +174,6 @@ export type MultiWriteVerticalQuestion = BaseQuestion & {
   rubric?: string[];
 };
 
-export type TextSelectPolicy = {
-  mode?: "exact_count" | "all_that_apply" | "range";
-  /** For exact_count, the number of selectable segments the user must choose before confidence unlocks. */
-  count?: number;
-  /** For range/all_that_apply, optional minimum number of selected segments. */
-  min?: number;
-  /** Optional maximum number of selected segments. */
-  max?: number;
-  /** User-facing helper text, e.g. "Select two causes" or "Select all that apply." */
-  instruction?: string;
-};
-
-export type TextSelectSegment = {
-  id: string;
-  text: string;
-  /** Set false for connector/static text that should display inline but not be selectable. Defaults to true. */
-  selectable?: boolean;
-};
-
-export type TextSelectQuestion = BaseQuestion & {
-  type: "text_select";
-  /** Optional heading/passage text. Inline segments are rendered below this if provided. */
-  text?: string;
-  segments: TextSelectSegment[];
-  selectionPolicy?: TextSelectPolicy;
-  answer?: string[];
-  rubric?: string[];
-};
-
 export type MatchItem = { id: string; text: string };
 export type MatchingPair = { leftId: string; rightId: string };
 export type MatchingBehavior = {
@@ -224,15 +194,13 @@ export type Question =
   | LongResponseQuestion
   | MultiTypingQuestion
   | MultiWriteVerticalQuestion
-  | TextSelectQuestion
   | MatchingQuestion
   | OrderingQuestion
   | NumericQuestion;
 
 export type SpecialResponse = { kind: "other"; text: string; selections?: number[] } | { kind: "cancelled"; reason?: string };
 export type MultiTypingResponse = Record<string, string>;
-export type TextSelectResponse = string[];
-export type AnswerResponse = number | number[] | boolean | string | string[] | MatchingPair[] | MultiTypingResponse | TextSelectResponse | SpecialResponse | null;
+export type AnswerResponse = number | number[] | boolean | string | string[] | MatchingPair[] | MultiTypingResponse | SpecialResponse | null;
 
 export type AnswerRecord = {
   questionId: string;
@@ -267,8 +235,6 @@ export type QuestionSnapshot = {
   orderingBehavior?: OrderingBehavior;
   multiTypingFields?: { id: string; label: string }[];
   multiWriteFields?: { id: string; label: string }[];
-  textSelectSegments?: { id: string; text: string; selectable?: boolean }[];
-  textSelectPolicy?: TextSelectPolicy;
   requireConfidence?: boolean;
   confidenceRequired?: boolean;
   disableConfidence?: boolean;
