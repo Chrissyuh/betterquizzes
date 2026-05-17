@@ -3590,7 +3590,7 @@ button.drag-handle:focus-visible {
   .question-dots .new-question, .question-card.new-question { animation: none; }
 }
 
-/* V67 screenshot polish: remove extra vertical weight on mobile widget captures. */
+/* V68 screenshot polish: remove extra vertical weight on mobile widget captures. */
 @media (max-width: 560px) {
   .shell,
   .shell.narrow,
@@ -3644,10 +3644,23 @@ button.drag-handle:focus-visible {
     gap: .25rem !important;
   }
 
+  .question-dots .dot,
+  .question-dots .planned-question,
   .dot {
+    width: 29px !important;
     min-width: 29px !important;
+    max-width: 29px !important;
+    height: 29px !important;
     min-height: 29px !important;
+    max-height: 29px !important;
+    flex: 0 0 29px !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
     font-size: .78rem !important;
+  }
+
+  .question-dots .planned-question {
+    border-radius: 9px !important;
   }
 
   .main-column {
