@@ -816,9 +816,9 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
             <img className="site-logo" src="/brand/betterquizzes-logo-light.png" alt="" />
             <p className="eyebrow eyebrow-row">BetterQuizzes <span className="version-chip">{WIDGET_VERSION_LABEL}</span></p>
           </div>
-          <h1>Interactive study quizzes inside ChatGPT.</h1>
+          <h1>Study with interactive quizzes inside ChatGPT.</h1>
           <p>
-            BetterQuizzes turns a study prompt into a structured quiz widget with mixed question types, confidence ratings, answer submission, and ChatGPT grading feedback.
+            BetterQuizzes turns a study prompt into a focused quiz widget with mixed question types, clear progress, answer submission, and ChatGPT feedback.
           </p>
           <div className="public-hero-actions" aria-label="BetterQuizzes links">
             <a className="primary-link-button" href="https://chatgpt.com" rel="noreferrer">Use in ChatGPT</a>
@@ -841,12 +841,12 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
       <section className="project-panel card public-project-panel">
         <div>
           <p className="eyebrow">For students and tutors</p>
-          <h2>Ask for a study quiz. Answer in one widget. Get feedback in chat.</h2>
-          <p>BetterQuizzes is for practice drills, diagnostic checks, self-tests, and quick review sessions. It is not a gradebook, email tool, account system, or permanent student record store.</p>
+          <h2>Ask for a quiz, answer in one place, and use the results to study smarter.</h2>
+          <p>BetterQuizzes is built for practice drills, diagnostic checks, self-tests, and quick review sessions. It keeps the quiz experience inside ChatGPT without accounts, ads, or a permanent gradebook.</p>
         </div>
         <div className="feature-pills" aria-label="BetterQuizzes features">
           <span>Mixed question types</span>
-          <span>Confidence ratings</span>
+          <span>Optional confidence checks</span>
           <span>One-widget flow</span>
           <span>Structured submissions</span>
           <span>ChatGPT grading</span>
@@ -857,7 +857,7 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
         <article className="feature-card card">
           <p className="eyebrow">Varied practice</p>
           <h3>More than multiple choice</h3>
-          <p>Use matching, ordering, true/false, fill-in, short answer, multi-select, text selection, numeric, and written-response questions.</p>
+          <p>Use matching, ordering, true/false, fill-in, short answer, multi-select, numeric, and written-response questions when they fit the topic.</p>
         </article>
         <article className="feature-card card">
           <p className="eyebrow">Student workflow</p>
@@ -884,10 +884,9 @@ function ImportScreen({ error, onLoadQuiz }: { error: string | null; onLoadQuiz:
 
       <section className="submission-info card">
         <div>
-          <p className="eyebrow">Submission endpoint</p>
-          <h2>ChatGPT Apps MCP server</h2>
-          <p>Use the production MCP URL for review and testing:</p>
-          <code>https://quizzes.trybettertools.com/mcp</code>
+          <p className="eyebrow">Works in ChatGPT</p>
+          <h2>Made for quick study sessions</h2>
+          <p>Ask ChatGPT to make a BetterQuizzes activity, answer the questions in the widget, then get feedback from ChatGPT based on your submitted answers.</p>
         </div>
         <div>
           <p className="eyebrow">Support</p>
