@@ -119,10 +119,28 @@ assert(appSubmission.tools?.open_quiz?.annotations?.openWorldHint === false, "su
 assert(appSubmission.tools?.open_quiz?.annotations?.idempotentHint === true, "submission metadata must mark open_quiz idempotent");
 assert(appSubmission.app_info?.subtitle === "Interactive study quizzes", "submission metadata must use student-focused subtitle");
 assert(appSubmission.app_info?.description?.includes("practice drills") && appSubmission.app_info?.description?.includes("ChatGPT grading feedback"), "submission metadata must explain the student study value");
+assert(appSubmission.app_info?.description?.includes("optional confidence checks"), "submission metadata must describe confidence as optional");
 assert(!JSON.stringify(appSubmission.test_cases).includes("start_quiz, add_question, open_quiz"), "submission test cases must not describe stale open_quiz launch flow");
 assert(JSON.stringify(appSubmission.test_cases).includes("add_first_question"), "submission test cases must describe current add_first_question launch flow");
+assert(appSubmission.test_cases?.length >= 5, "submission metadata must include at least five positive test cases");
+for (const [index, testCase] of appSubmission.test_cases.entries()) {
+  const prompt = String(testCase.user_prompt || "");
+  const expected = String(testCase.expected_output || "");
+  if (!prompt.includes("After creating a BetterQuizzes quiz in this same chat")) {
+    assert(prompt.includes("BetterQuizzes"), `positive test case ${index + 1} must explicitly name BetterQuizzes for reviewer determinism`);
+  }
+  assert(!/^Quiz me on biology\.?$/i.test(prompt.trim()), "submission must not rely on the vague rejected-style primary prompt");
+  assert(!/^I finished the BetterQuizzes activity/i.test(prompt), "submission test cases must not start from hidden prior widget state");
+  if (String(testCase.tools_triggered || "").includes("submit_answers")) {
+    assert(expected.includes("SubmissionCapsule") || expected.includes("structured answer packet") || expected.includes("submitted answers"), `positive test case ${index + 1} must explain the post-submit grading source`);
+  }
+}
+assert(JSON.stringify(appSubmission.test_cases).includes("ChatGPT web and mobile"), "submission test cases must mention web/mobile consistency");
+assert(JSON.stringify(appSubmission.test_cases).includes("does not ask for extra confirmation"), "submission test cases must guard against permission-check regressions");
 assert(JSON.stringify(appSubmission.negative_test_cases).includes("sensitive personal information"), "submission metadata must include sensitive-data negative test");
 assert(JSON.stringify(appSubmission.negative_test_cases).includes("durable classroom gradebook"), "submission metadata must include durable-gradebook negative test");
+assert(JSON.stringify(appSubmission.negative_test_cases).includes("flashcards"), "submission metadata must include flashcard negative test");
+assert(sharedGuidance.includes("do not ask for confirmation before start_quiz") && sharedGuidance.includes("Do not ask permission to add later questions"), "shared builder guidance must prevent repeated permission prompts after an explicit quiz request");
 for (const toolName of ["start_quiz", "add_first_question", "add_question", "repair_question"]) {
   const annotations = appSubmission.tools?.[toolName]?.annotations;
   assert(annotations?.readOnlyHint === false, `submission metadata must mark ${toolName} as not read-only because it mutates temporary session state`);

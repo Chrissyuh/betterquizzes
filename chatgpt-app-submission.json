@@ -4,7 +4,7 @@
   "app_info": {
     "display_name": "BetterQuizzes",
     "subtitle": "Interactive study quizzes",
-    "description": "BetterQuizzes helps students study with interactive ChatGPT-made quizzes, practice drills, diagnostic checks, and self-tests. It supports varied question types, confidence ratings, one-widget quiz delivery, structured submissions, and ChatGPT grading feedback.",
+    "description": "BetterQuizzes helps students study with interactive ChatGPT-made quizzes, practice drills, diagnostic checks, and self-tests. It supports varied question types, optional confidence checks, one-widget quiz delivery, structured submissions, and ChatGPT grading feedback.",
     "category": "EDUCATION"
   },
   "tools": {
@@ -146,69 +146,69 @@
   },
   "test_cases": [
     {
-      "description": "Create a short assistant-authored mixed-format practice quiz.",
-      "user_prompt": "Make me a 4-question practice quiz about photosynthesis with a mix of question types.",
+      "description": "Create and grade a short biology quiz from a blank chat.",
+      "user_prompt": "Make me a 4-question biology quiz using BetterQuizzes. Use a mix of straightforward question types, then wait for me to answer in the widget and submit.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_first_question, add_question",
-      "expected_output": "The first accepted add_first_question call launches exactly one BetterQuizzes widget, and later add_question calls add questions to that same activity.",
+      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
+      "expected_output": "ChatGPT should select BetterQuizzes, create a draft, call add_first_question for question 1 so exactly one widget opens, add later questions with storage-only add_question calls, then grade only from the SubmissionCapsule after the reviewer submits. The same behavior should work on ChatGPT web and mobile.",
       "expected_output_url": null
     },
     {
-      "description": "Create an ordering question and launch it through the builder flow.",
-      "user_prompt": "Make a one-question quiz where I drag these app release steps into the right order.",
+      "description": "Create and grade a small algebra quiz with simple renderer-safe types.",
+      "user_prompt": "Use BetterQuizzes to make a 4-question basic algebra practice quiz. Use multiple-choice, true/false, fill-in, and numeric questions. Then wait for me to answer and submit.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_first_question",
-      "expected_output": "Launches an ordering quiz whose items can be rearranged in the widget.",
+      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
+      "expected_output": "The first accepted question should open one BetterQuizzes widget. The remaining three questions should appear in that same widget without duplicate widgets. After submission, ChatGPT should receive the structured answer packet and record concise feedback.",
       "expected_output_url": null
     },
     {
-      "description": "Repair an invalid draft question without restarting the quiz.",
-      "user_prompt": "Create a quiz with an ordering question, and if the question needs repair, fix just that question.",
+      "description": "Create and grade a traffic-law study quiz with no external sending or gradebook behavior.",
+      "user_prompt": "Quiz me on Texas traffic signs using BetterQuizzes. Make 5 questions, then wait for me to answer in the widget and submit.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_first_question, add_question, repair_question",
-      "expected_output": "Launches the first valid question once, then updates only the invalid later question while the same widget polls for the corrected draft.",
+      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
+      "expected_output": "BetterQuizzes should create a temporary in-chat practice quiz, open one widget from add_first_question, stream later questions into the same widget, and grade from the submitted answers only. It should not email, publish, or store a permanent gradebook record.",
       "expected_output_url": null
     },
     {
-      "description": "Submit completed answers from the widget for grading.",
-      "user_prompt": "I finished the BetterQuizzes activity. Grade my submitted answers.",
+      "description": "Create an ordering-focused quiz and verify the launch/update flow remains one widget.",
+      "user_prompt": "Use BetterQuizzes to make a 2-question biology ordering quiz. One question should order mitosis phases, and one should order levels of biological organization from smallest to largest.",
       "file_attachment_urls": null,
-      "tools_triggered": "submit_answers",
-      "expected_output": "Returns a SubmissionCapsule that ChatGPT can grade without recreating the quiz.",
+      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
+      "expected_output": "The model should use the normal staged builder flow, with add_first_question launching the first ordering question and add_question adding the second question to the same widget. Ordering questions should use top_to_bottom renderer direction and meaningful top/bottom labels. After submission, ChatGPT should grade only from the submitted answers.",
       "expected_output_url": null
     },
     {
-      "description": "Record and retrieve grade feedback for the widget.",
-      "user_prompt": "Record this quiz grade so the widget can show my feedback, then check that it was saved.",
+      "description": "Create a matching and multi-select quiz without asking extra permission.",
+      "user_prompt": "Make me a 3-question BetterQuizzes vocabulary check about genetics. Include one matching question, one multi-select question, and one short-answer question.",
       "file_attachment_urls": null,
-      "tools_triggered": "record_grade, get_grade",
-      "expected_output": "Stores grade feedback for the quiz session and retrieves the saved grade state.",
+      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
+      "expected_output": "ChatGPT does not ask for extra confirmation after the user requests the quiz. It should call start_quiz, launch exactly one widget with add_first_question, add the two later questions with add_question, and grade the structured answer packet after the reviewer submits.",
       "expected_output_url": null
     },
     {
-      "description": "Open a complete user-supplied legacy quiz packet.",
-      "user_prompt": "Open this complete BetterQuizzes QuizSpec v2 packet as a quiz.",
-      "file_attachment_urls": null,
-      "tools_triggered": "create_quiz",
-      "expected_output": "Validates the complete quiz packet and launches it in the BetterQuizzes widget.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Inspect a stored quiz for render diagnostics.",
-      "user_prompt": "Inspect the BetterQuizzes quiz I just created and tell me whether every question is renderable.",
+      "description": "Inspect the current quiz only after a quiz exists in the same chat.",
+      "user_prompt": "After creating a BetterQuizzes quiz in this same chat, inspect the current quiz and tell me whether every question is renderable.",
       "file_attachment_urls": null,
       "tools_triggered": "inspect_quiz",
-      "expected_output": "Returns a concise quiz summary with render diagnostics and question counts.",
+      "expected_output": "Returns a concise summary of the stored quiz, including question count and render diagnostics. This test should be run only after one of the creation tests has already created a quiz in the same conversation.",
       "expected_output_url": null
     }
   ],
   "negative_test_cases": [
     {
       "description": "Do not trigger for ordinary homework explanations without an interactive quiz request.",
-      "user_prompt": "Explain photosynthesis to me in simple terms.",
+      "user_prompt": "Explain photosynthesis to me in simple terms. Do not make a quiz.",
       "file_attachment_urls": null,
       "tools_triggered": null,
       "expected_output": "The app should not be invoked because the user asked for a text explanation, not an interactive quiz.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for flashcards instead of an interactive quiz.",
+      "user_prompt": "Make flashcards about biology vocabulary.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because BetterQuizzes is for interactive quiz widgets, not flashcard generation.",
       "expected_output_url": null
     },
     {

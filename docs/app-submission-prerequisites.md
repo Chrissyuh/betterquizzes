@@ -117,6 +117,8 @@ The legal pages publish `support@trybettertools.com` as the support email. Keep 
 
 For exact values to paste into the review form, use [`submission-final-checklist.md`](submission-final-checklist.md). The manual blocker that automation cannot prove is that `support@trybettertools.com` can receive external email.
 
+Reviewer test cases should be explicit and self-contained. Prefer prompts that name BetterQuizzes and specify a question count, then instruct the reviewer to answer and submit the widget. Avoid primary review cases such as "Quiz me on biology" unless they have already passed consistently on both ChatGPT web and mobile, because reviewer failures are reported as test-case mismatches.
+
 ## 7. Privacy and data handling
 
 Document clearly:

@@ -8,24 +8,29 @@ https://quizzes.trybettertools.com/mcp
 
 ## Positive prompts
 
-- Make me a biology quiz using BetterQuizzes.
-- Quiz me on biology.
-- Make me a 6-question AP Bio practice quiz with mixed question types.
+- Make me a 4-question biology quiz using BetterQuizzes. Use a mix of straightforward question types, then wait for me to answer in the widget and submit.
+- Use BetterQuizzes to make a 4-question basic algebra practice quiz. Use multiple-choice, true/false, fill-in, and numeric questions. Then wait for me to answer and submit.
+- Quiz me on Texas traffic signs using BetterQuizzes. Make 5 questions, then wait for me to answer in the widget and submit.
+- Use BetterQuizzes to make a 2-question biology ordering quiz. One question should order mitosis phases, and one should order levels of biological organization from smallest to largest.
+- Make me a 3-question BetterQuizzes vocabulary check about genetics. Include one matching question, one multi-select question, and one short-answer question.
 
 Expected behavior:
 
 - ChatGPT selects BetterQuizzes when the user explicitly asks for it.
 - The tool flow is `start_quiz -> add_first_question -> add_question`.
 - `add_first_question` opens exactly one widget.
+- ChatGPT does not ask for extra permission to create the first question or later questions after the user requested the quiz.
 - Later questions appear in the same widget; no duplicate loading widgets appear.
-- After submission, ChatGPT grades from the `SubmissionCapsule` and does not recreate the quiz.
+- After the reviewer answers and submits the widget, ChatGPT receives `submit_answers`, grades from the `SubmissionCapsule`, calls `record_grade`, and does not recreate the quiz.
+- Run each positive prompt in a fresh web chat and at least one on mobile before resubmission.
 
 ## Negative prompts
 
-- Explain photosynthesis.
+- Explain photosynthesis to me in simple terms. Do not make a quiz.
 - Make me flashcards about biology.
 - Email my quiz score to my teacher.
 - Use BetterQuizzes as my permanent class gradebook.
+- Make a lesson plan about biology.
 
 Expected behavior:
 
@@ -39,3 +44,4 @@ Expected behavior:
 - Whether q2/q3 late additions appeared in the same widget.
 - Whether any stale tool names or duplicate widgets appeared.
 - Whether the grading reply used the submitted answers rather than the original quiz.
+- Whether the same submitted test case passes on both ChatGPT web and mobile.

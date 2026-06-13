@@ -11,7 +11,7 @@ Use this checklist immediately before submitting BetterQuizzes for review.
 - Privacy Policy URL: `https://quizzes.trybettertools.com/privacy`
 - Terms URL: `https://quizzes.trybettertools.com/terms`
 - Support email: `support@trybettertools.com`
-- Description: `BetterQuizzes helps students study with interactive ChatGPT-made quizzes, practice drills, diagnostic checks, and self-tests. It supports varied question types, confidence ratings, structured submissions, and ChatGPT grading feedback.`
+- Description: `BetterQuizzes helps students study with interactive ChatGPT-made quizzes, practice drills, diagnostic checks, and self-tests. It supports varied question types, optional confidence checks, one-widget quiz delivery, structured submissions, and ChatGPT grading feedback.`
 
 ## Upload or reference
 
@@ -35,12 +35,14 @@ npm run verify
 
 ## Fresh ChatGPT QA
 
-- Prompt: `Make me a biology quiz using BetterQuizzes.`
+- Prompt: `Make me a 4-question biology quiz using BetterQuizzes. Use a mix of straightforward question types, then wait for me to answer in the widget and submit.`
 - Expected tool flow: `start_quiz -> add_first_question -> add_question -> submit_answers -> record_grade`
 - Confirm exactly one widget opens.
 - Confirm later questions appear in the same widget.
+- Confirm ChatGPT does not ask extra permission to create question 1 or later questions after the quiz request.
 - Confirm the submitted answers produce a `SubmissionCapsule`.
 - Confirm ChatGPT grades from the submitted answers and does not recreate the quiz.
+- Repeat one submitted positive test on ChatGPT mobile before resubmitting; the rejection reason specifically requires web and mobile consistency.
 
 Negative controls:
 
