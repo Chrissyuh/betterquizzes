@@ -375,7 +375,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v73-mobile-save.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v73-mobile-save.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v74-blank-guard.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v74-blank-guard.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
   },
   {
     name: "add_question",
@@ -1230,10 +1230,11 @@ function bqV40PracticeRequiredWarning(quiz) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v73-mobile-save.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v74-blank-guard.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v73-mobile-save.html",
   "ui://widget/betterquizzes-v72-feedback-polish.html",
   "ui://widget/betterquizzes-v71-discovery-guard.html",
   "ui://widget/betterquizzes-v70-review-gating.html",
@@ -2435,19 +2436,41 @@ function widgetHtml(options = {}) {
   const jsSrc = widgetAssetUrl(options.assetBase, js);
   const cssHref = css ? widgetAssetUrl(options.assetBase, css) : "";
   const cssLink = cssHref ? `<link rel="stylesheet" href="${escapeHtmlAttr(cssHref)}">` : "";
-  return `<script>
+  return `<style>${widgetCriticalCss()}</style>
+<script>
 window.__BETTERQUIZZER_FORCE_WIDGET__=true;
 window.__BETTERQUIZZER_WIDGET_VERSION__=${safeScriptJson(VERSION)};
 window.__BETTERQUIZZER_BOOTSTRAP__=${safeScriptJson(buildWidgetBootstrap(options))};
 window.__BETTERQUIZZER_SERVER_BASE__=${safeScriptJson(options.serverBases?.[0] || cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL))};
 window.__BETTERQUIZZER_SERVER_BASES__=${safeScriptJson(options.serverBases || uniqueDomains(cleanOrigin(process.env.PUBLIC_ORIGIN || process.env.PUBLIC_BASE_URL)))};
-window.addEventListener("error",function(e){var root=document.getElementById("root");if(root&&!root.dataset.bqMounted){root.innerHTML='<main class="shell narrow"><section class="card stack fatal-widget-error"><p class="eyebrow">BetterQuizzes V1</p><h1>Widget failed to load</h1><pre class="error-box"></pre></section></main>';var pre=root.querySelector("pre");if(pre)pre.textContent=String(e.error&&e.error.message||e.message||e.error||"Unknown error");}});
-window.addEventListener("unhandledrejection",function(e){var root=document.getElementById("root");if(root&&!root.dataset.bqMounted){root.innerHTML='<main class="shell narrow"><section class="card stack fatal-widget-error"><p class="eyebrow">BetterQuizzes V1</p><h1>Widget promise failed</h1><pre class="error-box"></pre></section></main>';var pre=root.querySelector("pre");if(pre)pre.textContent=String(e.reason&&e.reason.message||e.reason||"Unknown rejection");}});
+(function(){
+  function showFallback(title,message,detail){
+    var root=document.getElementById("root");
+    if(!root||root.dataset.bqReady==="true")return;
+    root.dataset.bqFallback="true";
+    root.innerHTML='<main class="bq-critical-shell"><section class="bq-critical-card"><p class="bq-critical-eyebrow">BetterQuizzes V1</p><h1></h1><p class="bq-critical-message"></p><pre class="bq-critical-detail" hidden></pre></section></main>';
+    var h=root.querySelector("h1");
+    var p=root.querySelector(".bq-critical-message");
+    var pre=root.querySelector("pre");
+    if(h)h.textContent=title;
+    if(p)p.textContent=message;
+    if(pre&&detail){pre.hidden=false;pre.textContent=detail;}
+  }
+  window.__BETTERQUIZZER_SHOW_BOOT_FALLBACK__=showFallback;
+  window.setTimeout(function(){showFallback("Loading quiz...","ChatGPT opened BetterQuizzes. Waiting for the quiz packet.");},900);
+  window.setTimeout(function(){showFallback("Still loading quiz...","BetterQuizzes is open and still waiting for launch data from ChatGPT.");},4500);
+  window.addEventListener("error",function(e){showFallback("Widget failed to load","BetterQuizzes hit a startup error instead of going blank.",String(e.error&&e.error.message||e.message||e.error||"Unknown error"));});
+  window.addEventListener("unhandledrejection",function(e){showFallback("Widget promise failed","BetterQuizzes hit a startup error instead of going blank.",String(e.reason&&e.reason.message||e.reason||"Unknown rejection"));});
+})();
 </script>
 <div id="root"><main class="shell narrow"><section class="card stack"><p class="eyebrow">BetterQuizzes V1</p><h1>Loading quiz…</h1><p>If this stays here, the widget bundle did not mount.</p></section></main></div>
 ${cssLink}
 <link rel="modulepreload" href="${escapeHtmlAttr(jsSrc)}">
 <script type="module" src="${escapeHtmlAttr(jsSrc)}"></script>`;
+}
+
+function widgetCriticalCss() {
+  return `html,body,#root{box-sizing:border-box;margin:0;min-width:320px;min-height:120px;background:#f8fafc;color:#0f172a;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*,*:before,*:after{box-sizing:inherit}.bq-critical-shell,.shell.narrow{width:min(860px,calc(100% - 1rem));margin:0 auto;padding:.75rem 0}.bq-critical-card,.shell.narrow .card{display:grid;gap:.65rem;padding:1rem 1.1rem;border:1px solid #dbe4f0;border-radius:18px;background:linear-gradient(180deg,#fff,#f8fbff);box-shadow:0 12px 30px rgba(15,23,42,.08)}.bq-critical-eyebrow,.shell.narrow .eyebrow{margin:0;color:#475569;font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.bq-critical-card h1,.shell.narrow h1{margin:0;color:#0f172a;font-size:1.35rem;line-height:1.15}.bq-critical-message,.shell.narrow p:not(.eyebrow){margin:0;color:#475569;font-size:.98rem;line-height:1.4}.bq-critical-detail,.shell.narrow pre{margin:.25rem 0 0;padding:.75rem;max-height:12rem;overflow:auto;border-radius:10px;background:#0f172a;color:#dbeafe;white-space:pre-wrap;font-size:.8rem}@media(max-width:560px){.bq-critical-shell,.shell.narrow{width:100%;padding:.5rem}.bq-critical-card,.shell.narrow .card{border-radius:14px;padding:.85rem}.bq-critical-card h1,.shell.narrow h1{font-size:1.15rem}.bq-critical-message,.shell.narrow p:not(.eyebrow){font-size:.9rem}}`;
 }
 
 function buildWidgetBootstrap(options = {}) {

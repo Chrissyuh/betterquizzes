@@ -59,6 +59,7 @@ declare global {
     __BETTERQUIZZER_SERVER_BASE__?: string;
     __BETTERQUIZZER_SERVER_BASES__?: string[];
     __BETTERQUIZZER_FORCE_WIDGET__?: boolean;
+    __BETTERQUIZZER_SHOW_BOOT_FALLBACK__?: (title: string, message: string, detail?: string) => void;
   }
 }
 
@@ -243,6 +244,14 @@ export function persistWidgetState(state: unknown): void {
     // Widget state should improve UX, never block the quiz.
   }
   persistLocalWidgetState(state);
+}
+
+export function notifyHostIntrinsicHeight(): void {
+  try {
+    getOpenAiBridge()?.notifyIntrinsicHeight?.();
+  } catch {
+    // Height notifications are best-effort and should never block rendering.
+  }
 }
 
 function getBrowserStorage(kind: "localStorage" | "sessionStorage"): Storage | null {
@@ -583,26 +592,36 @@ function getBridgeQuizCandidates(bridge?: OpenAiBridge): HostCandidate[] {
 }
 
 function getBridgeLaunchPackets(bridge?: OpenAiBridge): Record<string, unknown>[] {
+  const bridgeRecord = asRecord(bridge);
   const bridgeOutput = asRecord(bridge?.toolOutput);
+  const bridgeMetadata = asRecord(bridge?.toolResponseMetadata);
+  const globalsRecord = asRecord(latestOpenAiGlobals);
   const bridgeGlobalsOutput = asRecord(latestOpenAiGlobals?.toolOutput);
   const mcpOutput = asRecord(latestMcpToolResult);
+  const mcpInput = asRecord(latestMcpToolInput);
   const surfaces: unknown[] = [
+    bridgeRecord,
     bridge?.toolOutput,
-    asRecord(bridge?.toolResponseMetadata),
+    bridgeMetadata,
     bridgeOutput,
     asRecord(bridgeOutput?.result),
     asRecord(bridgeOutput?.structuredContent),
     asRecord(asRecord(bridgeOutput?.result)?.structuredContent),
     asRecord(bridgeOutput?._meta),
     asRecord(asRecord(bridgeOutput?.result)?._meta),
+    globalsRecord,
     latestOpenAiGlobals?.toolOutput,
-    asRecord(latestOpenAiGlobals?.toolResponseMetadata),
+    asRecord(globalsRecord?.toolResponseMetadata),
     bridgeGlobalsOutput,
     asRecord(bridgeGlobalsOutput?.result),
     asRecord(bridgeGlobalsOutput?.structuredContent),
     asRecord(asRecord(bridgeGlobalsOutput?.result)?.structuredContent),
     asRecord(bridgeGlobalsOutput?._meta),
     asRecord(asRecord(bridgeGlobalsOutput?.result)?._meta),
+    latestMcpToolInput,
+    mcpInput,
+    asRecord(mcpInput?.structuredContent),
+    asRecord(asRecord(mcpInput?.result)?.structuredContent),
     latestMcpToolResult,
     mcpOutput,
     asRecord(mcpOutput?.result),

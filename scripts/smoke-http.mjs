@@ -128,6 +128,7 @@ async function runSmoke() {
   const widgetHtml = resource.result.contents[0].text;
   assert(widgetHtml.length < 100_000, "widget resource should be a small external-asset bootstrap, not an inlined bundle");
   assert(widgetHtml.includes('rel="stylesheet"') && widgetHtml.includes('type="module" src='), "widget resource should load external CSS and JS assets");
+  assert(widgetHtml.includes("bq-critical-card") && widgetHtml.includes("__BETTERQUIZZER_SHOW_BOOT_FALLBACK__"), "widget resource should include a visible inline blank-guard loader");
   assert(!widgetHtml.includes("katex.renderToString"), "widget resource should not inline the full application JavaScript bundle");
   const aliasResource = await rpc("resources/read", { uri: "ui://widget/betterquizzes-v61-bridge.html" });
   assert(aliasResource.result.contents[0].uri === resources.result.resources[0].uri, "v61 widget URI should remain a compatibility alias for the current resource");

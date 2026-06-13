@@ -16,7 +16,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v73-mobile-save.html"'), "mobile save/layout polish must use a v73 widget URI so ChatGPT does not reuse the v72 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v74-blank-guard.html"'), "blank-widget hardening must use a v74 widget URI so ChatGPT does not reuse the v73 cached resource");
+assert(remote.includes("betterquizzes-v73-mobile-save.html"), "v73 mobile-save URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v72-feedback-polish.html"), "v72 feedback-polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v71-discovery-guard.html"), "v71 discovery-guard URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v70-review-gating.html"), "v70 review-gating URI must remain available as a compatibility alias");
@@ -158,7 +159,10 @@ assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronge
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
 assert(styles.includes("bq-question-arrival-v69") && styles.includes("1.55s cubic-bezier"), "new questions must use slower V69 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v73-mobile-save.html"), "skip removal and mobile save/layout polish must ship with a widget URI cache bust");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v74-blank-guard.html"), "skip removal and blank-widget hardening must ship with a widget URI cache bust");
+assert(remote.includes("widgetCriticalCss") && remote.includes("__BETTERQUIZZER_SHOW_BOOT_FALLBACK__") && remote.includes("bq-critical-card"), "widget HTML must include inline critical loader CSS and a boot watchdog");
+assert(app.includes("notifyHostIntrinsicHeight") && app.includes("dataset.bqReady"), "widget app must mark readiness and notify host height after visible renders");
+assert(bridge.includes("latestMcpToolInput") && bridge.includes("bridgeRecord") && bridge.includes("asRecord(asRecord(mcpInput?.result)?.structuredContent)"), "host bridge must inspect direct, globals, and MCP notification launch wrappers");
 assert(app.includes("quiz.description ? <RichBlock text={quiz.description} /> : null") && styles.includes("V68 screenshot polish"), "quiz descriptions must stay hidden while answering but remain available in review mode");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");

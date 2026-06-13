@@ -82,10 +82,11 @@ assert(!startQuizToolBlock.includes("fill_blank") && !startQuizToolBlock.include
 assert(server.includes("QUESTION_AUTHORING_DISCOVERY_TEXT") && server.includes("fill_blank") && server.includes("numeric") && server.includes("{choiceId} objects are accepted"), "question authoring discovery text must include question-type and choiceId keywords");
 assert(addFirstToolBlock.includes("QUESTION_AUTHORING_DISCOVERY_TEXT"), "add_first_question description must attach question-type discovery text");
 assert(addQuestionToolBlock.includes("QUESTION_AUTHORING_DISCOVERY_TEXT"), "add_question description must attach question-type discovery text");
-assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v73-mobile-save.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
-assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v73-mobile-save.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
+assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v74-blank-guard.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
+assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v74-blank-guard.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
 assert(server.includes('"openai/toolInvocation/invoking": "Validating quiz..."') && !server.includes('"openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Validating quiz..."'), "compatibility create_quiz must not advertise an output template");
-assert(server.includes("betterquizzes-v73-mobile-save.html"), "widget URI must cache-bust the mobile save/layout fix");
+assert(server.includes("betterquizzes-v74-blank-guard.html"), "widget URI must cache-bust the blank-widget hardening fix");
+assert(server.includes("betterquizzes-v73-mobile-save.html"), "v73 mobile-save URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v72-feedback-polish.html"), "v72 feedback-polish URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v71-discovery-guard.html"), "v71 discovery-guard URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v70-review-gating.html"), "v70 widget URI must remain as a compatibility alias");
@@ -99,6 +100,7 @@ assert(server.includes("betterquizzes-v63-uxfix.html"), "v63 widget URI must rem
 assert(server.includes("betterquizzes-v62-fastload.html"), "v62 widget URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v61-bridge.html"), "v61 widget URI must remain a compatibility alias");
 assert(server.includes('rel="modulepreload"') && server.includes('type="module" src='), "widget resource should externalize hashed JS/CSS assets");
+assert(server.includes("widgetCriticalCss") && server.includes("__BETTERQUIZZER_SHOW_BOOT_FALLBACK__") && server.includes("bq-critical-card"), "widget resource must include inline blank-guard loader CSS and watchdog");
 assert(server.includes("max-age=31536000, immutable") && server.includes("gzipSync"), "static assets should be immutable and gzip-capable");
 assert(server.includes("SUPPORTED_QUESTION_TYPE_VALUES") && server.includes("unsupportedQuestionTypes") && server.includes("multiple_select"), "builder tools must advertise supported/unsupported question types");
 assert(!server.includes('"text_select", "matching"') && !sharedGuidance.includes("text_select") && !sharedGuidance.includes("sentence-selection"), "text_select must not be advertised or suggested in active model guidance");

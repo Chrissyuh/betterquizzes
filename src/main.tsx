@@ -5,10 +5,17 @@ import "katex/dist/katex.min.css";
 import "./styles.css";
 import { BETTERQUIZZER_VERSION } from "./shared/version";
 
+function markRootReady(root = document.getElementById("root")): void {
+  if (!root) return;
+  root.dataset.bqMounted = "true";
+  root.dataset.bqReady = "true";
+}
+
 function showFatalWidgetError(error: unknown): void {
   const root = document.getElementById("root");
   const message = error instanceof Error ? error.message : String(error);
   if (!root) return;
+  markRootReady(root);
   root.innerHTML = `
     <main class="shell narrow">
       <section class="card stack fatal-widget-error">
@@ -30,6 +37,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    markRootReady();
     console.error("BetterQuizzes widget render error", error, info);
   }
 
@@ -57,12 +65,13 @@ const rootElement = document.getElementById("root");
 if (!rootElement) {
   showFatalWidgetError(new Error("Missing #root element."));
 } else {
-  rootElement.dataset.bqMounted = "true";
-  createRoot(rootElement).render(
+  const root = createRoot(rootElement);
+  root.render(
     <React.StrictMode>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
     </React.StrictMode>,
   );
+  rootElement.dataset.bqMounted = "true";
 }

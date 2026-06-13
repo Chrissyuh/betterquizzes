@@ -27,6 +27,7 @@ import {
   getPersistedDraftState,
   getPersistedSubmissionState,
   isChatGptWidget,
+  notifyHostIntrinsicHeight,
   persistWidgetState,
   persistSubmissionState,
   sendSubmissionFollowUp,
@@ -171,11 +172,11 @@ const SAMPLE_QUIZZES = [tinyDemo as QuizSpec, aphgDemo as QuizSpec, mixedTypesDe
 const WIDGET_VERSION = BETTERQUIZZER_VERSION;
 const WIDGET_VERSION_LABEL = formatWidgetVersion(WIDGET_VERSION);
 const STABLE_LAUNCH_MS = 450;
-const HYDRATION_ERROR_DELAY_MS = 30000;
-const HYDRATION_ERROR_GRACE_MS = 3500;
-const HYDRATION_INTERRUPTED_MS = 12000;
+const HYDRATION_ERROR_DELAY_MS = 4500;
+const HYDRATION_ERROR_GRACE_MS = 1000;
+const HYDRATION_INTERRUPTED_MS = 3500;
 const SERVER_RECOVERY_POLL_MS = 1500;
-const SERVER_RECOVERY_TIMEOUT_MS = 30000;
+const SERVER_RECOVERY_TIMEOUT_MS = 12000;
 const SERVER_UPDATE_FAST_WINDOW_MS = 90000;
 
 export default function App(): ReactElement {
@@ -198,6 +199,17 @@ export default function App(): ReactElement {
   const pendingLaunchRef = useRef<PendingLaunch | null>(null);
   const hydrationStartedAtRef = useRef(Date.now());
   const lastServerUpdateAtRef = useRef(Date.now());
+
+  useLayoutEffect(() => {
+    if (!widgetMode || typeof document === "undefined") return;
+    const root = document.getElementById("root");
+    if (root) {
+      root.dataset.bqMounted = "true";
+      root.dataset.bqReady = "true";
+      delete root.dataset.bqFallback;
+    }
+    notifyHostIntrinsicHeight();
+  }, [widgetMode, screen, quiz?.questions.length, hydrationPhase, hydrationErrorVisible, finished?.followUpStatus]);
 
   function applyQuiz(rawQuiz: unknown, nextLaunchId?: string, nextRecoveryToken?: string): void {
     const prepared = prepareQuizForRender(rawQuiz);
