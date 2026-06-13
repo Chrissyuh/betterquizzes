@@ -1024,6 +1024,8 @@ function QuizRunner({
   const [incompleteSubmitPrompt, setIncompleteSubmitPrompt] = useState(false);
   const incompleteSubmitPromptRef = useRef<HTMLElement | null>(null);
   const knownQuestionIdsRef = useRef<Set<string>>(new Set(quiz.questions.map((question) => question.id)));
+  const latestDraftsRef = useRef(drafts);
+  const latestCurrentIndexRef = useRef(currentIndex);
   const [arrivingQuestionIds, setArrivingQuestionIds] = useState<Set<string>>(() => new Set());
   const displayPolicy = normalizeDisplayPolicy(quiz.displayPolicy);
   const gradingPolicy = normalizeGradingPolicy(quiz.gradingPolicy);
@@ -1046,6 +1048,20 @@ function QuizRunner({
   const progressPercent = progressTotal ? Math.round((completeQuestionCount / progressTotal) * 100) : 100;
   const shouldShowQuestionNav = quiz.questions.length > 1 || Boolean(generationStatus);
 
+  function persistAnswerStateSnapshot(index = latestCurrentIndexRef.current, draftMap = latestDraftsRef.current): void {
+    if (!widgetMode) return;
+    persistWidgetState({
+      kind: "betterquizzer.answer_state",
+      status: "answering",
+      quizId: getQuizId(quiz),
+      launchId,
+      recoveryToken,
+      currentIndex: index,
+      drafts: keepDraftsForQuiz(draftMap, quiz),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   useEffect(() => {
     setCurrentIndex((index) => clampIndex(index, quiz.questions.length));
     setDrafts((previous) => keepDraftsForQuiz(previous, quiz));
@@ -1065,18 +1081,26 @@ function QuizRunner({
   }, [quiz]);
 
   useEffect(() => {
-    if (!widgetMode) return;
-    persistWidgetState({
-      kind: "betterquizzer.answer_state",
-      status: "answering",
-      quizId: getQuizId(quiz),
-      launchId,
-      recoveryToken,
-      currentIndex,
-      drafts: keepDraftsForQuiz(drafts, quiz),
-      updatedAt: new Date().toISOString(),
-    });
+    latestDraftsRef.current = drafts;
+    latestCurrentIndexRef.current = currentIndex;
+    persistAnswerStateSnapshot(currentIndex, drafts);
   }, [widgetMode, quiz, launchId, recoveryToken, currentIndex, drafts]);
+
+  useEffect(() => {
+    if (!widgetMode || typeof window === "undefined") return;
+    const flush = (): void => persistAnswerStateSnapshot();
+    const flushWhenHidden = (): void => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+    };
+  }, [widgetMode, quiz, launchId, recoveryToken]);
 
   useEffect(() => {
     if (!incompleteSubmitPrompt || typeof document === "undefined") return;
@@ -1133,7 +1157,10 @@ function QuizRunner({
       // The UI hides/disables confidence for incomplete answers, but restores
       // the previous value when the question becomes complete again.
       void question;
-      return { ...previous, [questionId]: merged };
+      const nextDrafts = { ...previous, [questionId]: merged };
+      latestDraftsRef.current = nextDrafts;
+      persistAnswerStateSnapshot(currentIndex, nextDrafts);
+      return nextDrafts;
     });
   }
 
@@ -1151,7 +1178,10 @@ function QuizRunner({
 
   function goToQuestion(index: number): void {
     setIncompleteSubmitPrompt(false);
-    setCurrentIndex(clampIndex(index, quiz.questions.length));
+    const nextIndex = clampIndex(index, quiz.questions.length);
+    latestCurrentIndexRef.current = nextIndex;
+    persistAnswerStateSnapshot(nextIndex);
+    setCurrentIndex(nextIndex);
   }
 
   function requestSubmit(): void {

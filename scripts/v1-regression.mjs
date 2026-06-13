@@ -16,7 +16,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v72-feedback-polish.html"'), "feedback polish must use a v72 widget URI so ChatGPT does not reuse the v71 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v73-mobile-save.html"'), "mobile save/layout polish must use a v73 widget URI so ChatGPT does not reuse the v72 cached resource");
+assert(remote.includes("betterquizzes-v72-feedback-polish.html"), "v72 feedback-polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v71-discovery-guard.html"), "v71 discovery-guard URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v70-review-gating.html"), "v70 review-gating URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v69-review-polish.html"), "v69 review-polish URI must remain available as a compatibility alias");
@@ -63,6 +64,8 @@ assert(app.includes("buildQuestionGradeMap") && app.includes("neutralReviewGrade
 assert(styles.includes(".dot.grade-correct") && styles.includes(".dot.grade-incorrect") && styles.includes(".dot.grade-partially-correct") && styles.includes(".dot.grade-needs-review"), "review question dots must be color-coded by recorded grade status");
 assert(styles.includes(".read-only-question-fieldset:disabled .match-row") && styles.includes(".read-only-question-fieldset:disabled .field-label textarea"), "read-only review mode must grey out non-choice answer surfaces");
 assert(app.includes("reviewWaitingForGrade") && app.includes("Waiting for feedback...") && app.includes("Waiting for ChatGPT to save feedback in the app.") && app.includes("Review submitted answers") && styles.includes(".review-loading-button::before") && styles.includes("radial-gradient(circle, #526173"), "post-submit review must wait visibly for grade feedback before enabling, with timeout fallback");
+assert(bridge.includes("LOCAL_WIDGET_STATE_PREFIX") && bridge.includes("sessionStorage") && bridge.includes("localStorage") && app.includes('window.addEventListener("pagehide", flush)') && app.includes('document.addEventListener("visibilitychange", flushWhenHidden)'), "mobile widget answer state must persist through host state plus browser storage and page-hide flushes");
+assert(styles.includes("V73 mobile save/layout polish") && styles.includes(".top-version-row") && styles.includes("grade-card.grade-card-numeric .grade-ring::after"), "mobile layout must hide the version badge and render numeric grades as a compact horizontal bar");
 assert(app.includes("getFriendlyFollowUpMessage") && !app.includes("{finished.followUpMessage ?? \"Still trying to send your answers for feedback.\"}"), "post-submit page must avoid technical follow-up messages");
 assert(!app.includes("Answers saved") && !app.includes("Feedback requested") && !app.includes("Waiting for feedback to appear") && !app.includes("Feedback may still appear in chat"), "post-submit page must avoid the old technical status chips and stale chat-only fallback copy");
 assert(app.includes("generation-status-strip") && app.includes("Questions are being added:"), "incremental generation must use a compact status strip");
@@ -155,7 +158,7 @@ assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronge
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
 assert(styles.includes("bq-question-arrival-v69") && styles.includes("1.55s cubic-bezier"), "new questions must use slower V69 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v72-feedback-polish.html"), "skip removal and feedback polish must ship with a widget URI cache bust");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v73-mobile-save.html"), "skip removal and mobile save/layout polish must ship with a widget URI cache bust");
 assert(app.includes("quiz.description ? <RichBlock text={quiz.description} /> : null") && styles.includes("V68 screenshot polish"), "quiz descriptions must stay hidden while answering but remain available in review mode");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");

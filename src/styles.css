@@ -4275,3 +4275,67 @@ button.drag-handle:focus-visible {
     padding: .12rem !important;
   }
 }
+
+/* V73 mobile save/layout polish: conserve vertical space and keep answer drafts on mobile page exits. */
+@media (max-width: 560px) {
+  .top-version-row,
+  .version-chip {
+    display: none !important;
+  }
+
+  .top-bar {
+    gap: .48rem !important;
+  }
+
+  .top-bar h1 {
+    line-height: 1.16 !important;
+    margin: 0 0 .12rem !important;
+  }
+
+  .top-bar .progress-shell {
+    margin-top: .1rem !important;
+  }
+
+  .grade-card.grade-card-numeric {
+    grid-template-columns: 1fr !important;
+    gap: .5rem !important;
+    align-items: stretch !important;
+    justify-items: stretch !important;
+    text-align: left !important;
+    padding: .68rem .75rem !important;
+    margin: .65rem 0 !important;
+    border-radius: 14px !important;
+  }
+
+  .grade-card.grade-card-numeric .grade-ring {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  .grade-card.grade-card-numeric .grade-ring span {
+    display: block !important;
+    margin: 0 0 .26rem !important;
+    color: #0f172a !important;
+    font-size: 1rem !important;
+    line-height: 1 !important;
+    text-align: left !important;
+  }
+
+  .grade-card.grade-card-numeric .grade-ring::after {
+    content: "";
+    display: block;
+    width: 100%;
+    height: .52rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #22c55e calc(var(--grade-percent) * 1%), #e5e7eb 0);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .06);
+  }
+
+  .grade-card.grade-card-numeric h2 {
+    margin-top: .08rem !important;
+  }
+}

@@ -49,6 +49,9 @@ export type OpenAiBridge = {
   notifyIntrinsicHeight?: (height?: number) => void;
 };
 
+const LOCAL_WIDGET_STATE_PREFIX = "betterquizzes.widgetState.";
+const LOCAL_WIDGET_STATE_LATEST = `${LOCAL_WIDGET_STATE_PREFIX}latest`;
+
 declare global {
   interface Window {
     openai?: OpenAiBridge;
@@ -239,14 +242,89 @@ export function persistWidgetState(state: unknown): void {
   } catch {
     // Widget state should improve UX, never block the quiz.
   }
+  persistLocalWidgetState(state);
 }
 
-function getPersistedWidgetStateRecord(): Record<string, unknown> | null {
-  return asRecord(getOpenAiBridge()?.widgetState);
+function getBrowserStorage(kind: "localStorage" | "sessionStorage"): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window[kind] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readLocalWidgetState(key: string): Record<string, unknown> | null {
+  for (const kind of ["sessionStorage", "localStorage"] as const) {
+    const storage = getBrowserStorage(kind);
+    if (!storage) continue;
+    try {
+      const text = storage.getItem(key);
+      if (!text) continue;
+      const record = asRecord(JSON.parse(text));
+      if (record) return record;
+    } catch {
+      // Ignore stale or unavailable fallback snapshots.
+    }
+  }
+  return null;
+}
+
+function persistLocalWidgetState(state: unknown): void {
+  const record = asRecord(state);
+  const quizId = typeof record?.quizId === "string" ? record.quizId : "";
+  if (!record || !quizId) return;
+  const launchId = typeof record.launchId === "string" ? record.launchId : "";
+  let text = "";
+  try {
+    text = JSON.stringify(record);
+  } catch {
+    return;
+  }
+  const keys = [
+    `${LOCAL_WIDGET_STATE_PREFIX}quiz.${quizId}`,
+    launchId ? `${LOCAL_WIDGET_STATE_PREFIX}launch.${launchId}` : "",
+    LOCAL_WIDGET_STATE_LATEST,
+  ].filter(Boolean);
+  for (const kind of ["sessionStorage", "localStorage"] as const) {
+    const storage = getBrowserStorage(kind);
+    if (!storage) continue;
+    for (const key of keys) {
+      try {
+        storage.setItem(key, text);
+      } catch {
+        // Storage can be quota-limited or blocked in embedded mobile contexts.
+      }
+    }
+  }
+}
+
+function isWidgetStateCandidate(record: Record<string, unknown> | null, quizId: string, launchId?: string): boolean {
+  if (!record) return false;
+  if (record.quizId !== quizId) return false;
+  if (launchId && typeof record.launchId === "string" && record.launchId !== launchId) return false;
+  return true;
+}
+
+function getPersistedWidgetStateRecord(quizId: string, launchId?: string): Record<string, unknown> | null {
+  const bridgeState = asRecord(getOpenAiBridge()?.widgetState);
+  if (isWidgetStateCandidate(bridgeState, quizId, launchId)) return bridgeState;
+
+  const keys = [
+    launchId ? `${LOCAL_WIDGET_STATE_PREFIX}launch.${launchId}` : "",
+    `${LOCAL_WIDGET_STATE_PREFIX}quiz.${quizId}`,
+    LOCAL_WIDGET_STATE_LATEST,
+  ].filter(Boolean);
+
+  for (const key of keys) {
+    const state = readLocalWidgetState(key);
+    if (isWidgetStateCandidate(state, quizId, launchId)) return state;
+  }
+  return null;
 }
 
 export function getPersistedDraftState(quizId: string, launchId?: string): DraftBridgeState | null {
-  const state = getPersistedWidgetStateRecord();
+  const state = getPersistedWidgetStateRecord(quizId, launchId);
   if (!state) return null;
   const kind = state.kind;
   if (kind !== "betterquizzer.answer_state" && kind !== "betterquizzer.draft_state" && kind !== "betterquizzer.submission_state") return null;
@@ -270,7 +348,7 @@ export function getPersistedDraftState(quizId: string, launchId?: string): Draft
 }
 
 export function getPersistedSubmissionState(quizId: string, launchId?: string): SubmissionBridgeState | null {
-  const state = getPersistedWidgetStateRecord();
+  const state = getPersistedWidgetStateRecord(quizId, launchId);
   if (!state || state.kind !== "betterquizzer.submission_state") return null;
   if (state.quizId !== quizId) return null;
   if (launchId && typeof state.launchId === "string" && state.launchId !== launchId) return null;

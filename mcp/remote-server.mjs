@@ -375,7 +375,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v72-feedback-polish.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v72-feedback-polish.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v73-mobile-save.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v73-mobile-save.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
   },
   {
     name: "add_question",
@@ -1230,10 +1230,11 @@ function bqV40PracticeRequiredWarning(quiz) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v72-feedback-polish.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v73-mobile-save.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v72-feedback-polish.html",
   "ui://widget/betterquizzes-v71-discovery-guard.html",
   "ui://widget/betterquizzes-v70-review-gating.html",
   "ui://widget/betterquizzes-v69-review-polish.html",
