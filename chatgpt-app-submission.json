@@ -12,10 +12,11 @@
       "annotations": {
         "readOnlyHint": false,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": false
       },
       "justifications": {
-        "read_only_justification": "Not marked read-only because it creates or updates temporary BetterQuizzes session state in memory; it does not modify external services, durable user records, or the open web.",
+        "read_only_justification": "Creates a temporary BetterQuizzes draft in app memory for the current quiz session.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -24,10 +25,11 @@
       "annotations": {
         "readOnlyHint": false,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": false
       },
       "justifications": {
-        "read_only_justification": "Not marked read-only because it creates or updates temporary BetterQuizzes session state in memory; it does not modify external services, durable user records, or the open web.",
+        "read_only_justification": "Stores the first accepted question in temporary BetterQuizzes session state and returns the one widget launch packet.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -36,10 +38,11 @@
       "annotations": {
         "readOnlyHint": false,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": false
       },
       "justifications": {
-        "read_only_justification": "Not marked read-only because it creates or updates temporary BetterQuizzes session state in memory; it does not modify external services, durable user records, or the open web.",
+        "read_only_justification": "Adds a later accepted question to the temporary BetterQuizzes draft and updates the in-memory quiz snapshot.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -52,10 +55,9 @@
         "idempotentHint": true
       },
       "justifications": {
-        "read_only_justification": "Not marked read-only because it creates or updates temporary BetterQuizzes session state in memory; it does not modify external services, durable user records, or the open web.",
+        "read_only_justification": "Updates a draft question in temporary BetterQuizzes session state after app-local validation rejects an earlier shape.",
         "open_world_justification": "Does not publish content or modify any external service.",
-        "destructive_justification": "Does not delete, revoke access, or perform irreversible actions.",
-        "idempotent_justification": "Repeating the same corrected question update for the same draft target produces the same draft question state."
+        "destructive_justification": "Does not delete, revoke access, or perform irreversible actions."
       }
     },
     "open_quiz": {
@@ -66,7 +68,7 @@
         "idempotentHint": true
       },
       "justifications": {
-        "read_only_justification": "Opens the latest stored BetterQuizzes quiz widget without modifying external state.",
+        "read_only_justification": "Only returns recovery metadata for an already stored BetterQuizzes activity.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -75,10 +77,11 @@
       "annotations": {
         "readOnlyHint": false,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": false
       },
       "justifications": {
-        "read_only_justification": "Stores a complete quiz packet in server memory and opens the BetterQuizzes widget.",
+        "read_only_justification": "Validates and stores a complete user-supplied quiz packet in temporary BetterQuizzes app memory.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -87,22 +90,11 @@
       "annotations": {
         "readOnlyHint": false,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": false
       },
       "justifications": {
-        "read_only_justification": "Processes submitted answers for the current BetterQuizzes session and returns a submission packet.",
-        "open_world_justification": "Does not publish content or modify any external service.",
-        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
-      }
-    },
-    "record_submission": {
-      "annotations": {
-        "readOnlyHint": false,
-        "openWorldHint": false,
-        "destructiveHint": false
-      },
-      "justifications": {
-        "read_only_justification": "Alias for submit_answers that processes submitted answers for the current BetterQuizzes session.",
+        "read_only_justification": "Processes the widget's submitted answers for the current BetterQuizzes session and returns a structured SubmissionCapsule.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -111,10 +103,11 @@
       "annotations": {
         "readOnlyHint": false,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": false
       },
       "justifications": {
-        "read_only_justification": "Stores grade feedback for the current BetterQuizzes session in server memory.",
+        "read_only_justification": "Stores ChatGPT's grade summary and optional per-question feedback in temporary BetterQuizzes session state.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -123,10 +116,24 @@
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": true
       },
       "justifications": {
-        "read_only_justification": "Only retrieves recorded grade feedback for a quiz or session.",
+        "read_only_justification": "Only retrieves grade feedback already recorded for a BetterQuizzes quiz or session.",
+        "open_world_justification": "Does not publish content or modify any external service.",
+        "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
+      }
+    },
+    "record_submission": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Alias for submit_answers that processes submitted answers for the current BetterQuizzes session.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -135,10 +142,11 @@
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false,
-        "destructiveHint": false
+        "destructiveHint": false,
+        "idempotentHint": true
       },
       "justifications": {
-        "read_only_justification": "Only retrieves a summary and render diagnostics for a stored quiz.",
+        "read_only_justification": "Only retrieves a summary and render diagnostics for an already stored BetterQuizzes quiz.",
         "open_world_justification": "Does not publish content or modify any external service.",
         "destructive_justification": "Does not delete, overwrite, revoke access, or perform irreversible actions."
       }
@@ -146,57 +154,49 @@
   },
   "test_cases": [
     {
-      "description": "Create and grade a short biology quiz from a blank chat.",
+      "description": "Create and grade a three-question algebra practice quiz.",
+      "user_prompt": "Use BetterQuizzes to make a 3-question algebra practice quiz with one multiple-choice question, one fill-in answer, and one numeric answer.",
+      "file_attachment_urls": null,
+      "tools_triggered": "start_quiz, add_first_question, add_question, submit_answers, record_grade",
+      "expected_output": "ChatGPT should create one temporary BetterQuizzes draft, call add_first_question to open exactly one widget with Q1, add Q2 and Q3 with add_question into the same widget, and does not ask for extra confirmation after the user requested the quiz. After submission, ChatGPT should grade only from the SubmissionCapsule and call record_grade. This should be consistent on ChatGPT web and mobile.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Create and grade a five-question algebra quiz with renderer-safe types.",
+      "user_prompt": "Make me a 5-question algebra practice quiz using BetterQuizzes. Use only multiple-choice, true/false, fill-in, and ordering questions.",
+      "file_attachment_urls": null,
+      "tools_triggered": "start_quiz, add_first_question, add_question, submit_answers, record_grade",
+      "expected_output": "One BetterQuizzes widget should open from add_first_question, later questions should appear in the same widget, and no duplicate widgets should open. After the reviewer submits, ChatGPT should grade from the SubmissionCapsule and record concise feedback.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Create and grade a traffic-sign study quiz.",
+      "user_prompt": "Quiz me on Texas traffic signs using BetterQuizzes. Make 4 questions and wait for me to submit.",
+      "file_attachment_urls": null,
+      "tools_triggered": "start_quiz, add_first_question, add_question, submit_answers, record_grade",
+      "expected_output": "BetterQuizzes should open one temporary in-chat quiz widget, stream later questions into that widget, accept submission, and let ChatGPT grade from submitted answers only. It should not email, publish, or store a permanent gradebook record.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Create and grade a short biology quiz with mixed supported types.",
       "user_prompt": "Make me a 4-question biology quiz using BetterQuizzes. Use a mix of straightforward question types, then wait for me to answer in the widget and submit.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
-      "expected_output": "ChatGPT should select BetterQuizzes, create a draft, call add_first_question for question 1 so exactly one widget opens, add later questions with storage-only add_question calls, then grade only from the SubmissionCapsule after the reviewer submits. The same behavior should work on ChatGPT web and mobile.",
+      "tools_triggered": "start_quiz, add_first_question, add_question, submit_answers, record_grade",
+      "expected_output": "ChatGPT should select BetterQuizzes, start one draft, launch one widget from the first accepted question, add the remaining questions without opening another widget, and grade from the structured answer packet after the reviewer submits.",
       "expected_output_url": null
     },
     {
-      "description": "Create and grade a small algebra quiz with simple renderer-safe types.",
-      "user_prompt": "Use BetterQuizzes to make a 4-question basic algebra practice quiz. Use multiple-choice, true/false, fill-in, and numeric questions. Then wait for me to answer and submit.",
+      "description": "Use BetterQuizzes as a diagnostic intake before giving advice.",
+      "user_prompt": "Create a plan for me to boost my odds at a good college for mechatronics engineering. Ask me 8 questions using BetterQuizzes first to narrow it down.",
       "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
-      "expected_output": "The first accepted question should open one BetterQuizzes widget. The remaining three questions should appear in that same widget without duplicate widgets. After submission, ChatGPT should receive the structured answer packet and record concise feedback.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Create and grade a traffic-law study quiz with no external sending or gradebook behavior.",
-      "user_prompt": "Quiz me on Texas traffic signs using BetterQuizzes. Make 5 questions, then wait for me to answer in the widget and submit.",
-      "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
-      "expected_output": "BetterQuizzes should create a temporary in-chat practice quiz, open one widget from add_first_question, stream later questions into the same widget, and grade from the submitted answers only. It should not email, publish, or store a permanent gradebook record.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Create an ordering-focused quiz and verify the launch/update flow remains one widget.",
-      "user_prompt": "Use BetterQuizzes to make a 2-question biology ordering quiz. One question should order mitosis phases, and one should order levels of biological organization from smallest to largest.",
-      "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
-      "expected_output": "The model should use the normal staged builder flow, with add_first_question launching the first ordering question and add_question adding the second question to the same widget. Ordering questions should use top_to_bottom renderer direction and meaningful top/bottom labels. After submission, ChatGPT should grade only from the submitted answers.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Create a matching and multi-select quiz without asking extra permission.",
-      "user_prompt": "Make me a 3-question BetterQuizzes vocabulary check about genetics. Include one matching question, one multi-select question, and one short-answer question.",
-      "file_attachment_urls": null,
-      "tools_triggered": "start_quiz, add_first_question, add_question; after the reviewer answers and submits the widget: submit_answers, record_grade",
-      "expected_output": "ChatGPT does not ask for extra confirmation after the user requests the quiz. It should call start_quiz, launch exactly one widget with add_first_question, add the two later questions with add_question, and grade the structured answer packet after the reviewer submits.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Inspect the current quiz only after a quiz exists in the same chat.",
-      "user_prompt": "After creating a BetterQuizzes quiz in this same chat, inspect the current quiz and tell me whether every question is renderable.",
-      "file_attachment_urls": null,
-      "tools_triggered": "inspect_quiz",
-      "expected_output": "Returns a concise summary of the stored quiz, including question count and render diagnostics. This test should be run only after one of the creation tests has already created a quiz in the same conversation.",
+      "tools_triggered": "start_quiz, add_first_question, add_question, submit_answers, record_grade",
+      "expected_output": "ChatGPT should ask the diagnostic questions in one BetterQuizzes widget, collect the structured submission, record qualitative or numeric feedback when appropriate, and then use the submitted answers to give the planning advice in chat.",
       "expected_output_url": null
     }
   ],
   "negative_test_cases": [
     {
-      "description": "Do not trigger for ordinary homework explanations without an interactive quiz request.",
+      "description": "Do not trigger for ordinary explanations without an interactive quiz request.",
       "user_prompt": "Explain photosynthesis to me in simple terms. Do not make a quiz.",
       "file_attachment_urls": null,
       "tools_triggered": null,
@@ -212,35 +212,27 @@
       "expected_output_url": null
     },
     {
-      "description": "Do not trigger for unrelated calendar or scheduling tasks.",
-      "user_prompt": "Schedule a study session for tomorrow afternoon.",
-      "file_attachment_urls": null,
-      "tools_triggered": null,
-      "expected_output": "The app should not be invoked because BetterQuizzes does not manage calendars.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Do not trigger for requests to publish or send quiz results externally.",
+      "description": "Do not trigger for requests to send or publish quiz results externally.",
       "user_prompt": "Email my quiz score to my teacher and post it online.",
       "file_attachment_urls": null,
       "tools_triggered": null,
-      "expected_output": "The app should not be invoked for sending email or publishing results because it has no external messaging or posting capability.",
+      "expected_output": "The app should not be invoked for sending email or publishing results because BetterQuizzes has no external messaging or posting capability.",
       "expected_output_url": null
     },
     {
-      "description": "Do not trigger when the user wants to enter sensitive personal data.",
-      "user_prompt": "Make a quiz that asks students for their full names, home addresses, and medical history before they can answer.",
-      "file_attachment_urls": null,
-      "tools_triggered": null,
-      "expected_output": "The app should not collect unnecessary sensitive personal information. ChatGPT should suggest a privacy-preserving quiz instead.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Do not promise durable classroom gradebook storage.",
+      "description": "Do not trigger for durable classroom gradebook storage.",
       "user_prompt": "Use BetterQuizzes as my permanent class gradebook and store all student scores for the semester.",
       "file_attachment_urls": null,
       "tools_triggered": null,
       "expected_output": "The app should not be invoked as a durable classroom gradebook because BetterQuizzes stores quiz and grade state only temporarily for the current app session.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not collect unnecessary sensitive personal information.",
+      "user_prompt": "Make a quiz that asks students for their full names, home addresses, and medical history before they can answer.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not collect unnecessary sensitive personal information. ChatGPT should suggest a privacy-preserving quiz instead.",
       "expected_output_url": null
     }
   ]
