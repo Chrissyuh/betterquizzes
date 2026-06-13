@@ -4030,3 +4030,80 @@ button.drag-handle:focus-visible {
     animation: none !important;
   }
 }
+
+/* V70 review gating and rail rollback: real loaded question boxes keep the pre-V69 look. */
+.question-dots .dot:not(.planned-question):not(.grade-correct):not(.grade-incorrect):not(.grade-partially-correct):not(.grade-needs-review) {
+  border-radius: 9px !important;
+  border: 1px solid #d9e0ea !important;
+  background: #f7f8fa !important;
+  color: #667085 !important;
+  box-shadow: none !important;
+}
+
+.question-dots .dot.ready:not(.planned-question):not(.grade-correct):not(.grade-incorrect):not(.grade-partially-correct):not(.grade-needs-review) {
+  background: var(--bq-ready-bg) !important;
+  color: var(--bq-ready) !important;
+  border-color: #b8dbc8 !important;
+}
+
+.question-dots .dot.draft:not(.planned-question),
+.question-dots .dot.incomplete:not(.planned-question) {
+  background: var(--bq-draft-bg) !important;
+  color: var(--bq-draft) !important;
+  border-color: #f4d28a !important;
+}
+
+.question-dots .dot.empty:not(.planned-question) {
+  background: #f7f8fa !important;
+  color: #667085 !important;
+  border-color: #d9e0ea !important;
+}
+
+.question-dots .dot.active:not(.planned-question):not(.grade-correct):not(.grade-incorrect):not(.grade-partially-correct):not(.grade-needs-review),
+.question-dots .dot.ready.active:not(.planned-question):not(.grade-correct):not(.grade-incorrect):not(.grade-partially-correct):not(.grade-needs-review),
+.question-dots .dot.empty.active:not(.planned-question):not(.grade-correct):not(.grade-incorrect):not(.grade-partially-correct):not(.grade-needs-review),
+.question-dots .dot.incomplete.active:not(.planned-question):not(.grade-correct):not(.grade-incorrect):not(.grade-partially-correct):not(.grade-needs-review),
+.question-dots .dot.draft.active:not(.planned-question):not(.grade-correct):not(.grade-incorrect):not(.grade-partially-correct):not(.grade-needs-review) {
+  background: #1f2937 !important;
+  color: #ffffff !important;
+  border-color: #1f2937 !important;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .28), 0 0 0 3px rgba(31, 41, 55, .14) !important;
+  transform: none !important;
+}
+
+.question-dots .planned-question {
+  border-radius: 9px !important;
+  border: 1px solid #d9e0ea !important;
+  background: linear-gradient(90deg, #f7f8fa 0%, #eef2f7 48%, #f7f8fa 100%) !important;
+  color: transparent !important;
+  box-shadow: none !important;
+  animation: bq-planned-question-rest 1.8s ease-in-out infinite, bq-planned-question-fade-v70 .32s ease both !important;
+}
+
+@keyframes bq-planned-question-fade-v70 {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.review-loading-button {
+  justify-content: center;
+  background: #eef2f7 !important;
+  border-color: #d8dee8 !important;
+  color: #64748b !important;
+  cursor: wait !important;
+}
+
+.review-loading-button::after {
+  content: "";
+  width: .78rem;
+  height: .78rem;
+  margin-left: .55rem;
+  border-radius: 999px;
+  border: 2px solid rgba(100, 116, 139, .28);
+  border-top-color: #64748b;
+  animation: bq-review-wait-spin .9s linear infinite;
+}
+
+@keyframes bq-review-wait-spin {
+  to { transform: rotate(360deg); }
+}

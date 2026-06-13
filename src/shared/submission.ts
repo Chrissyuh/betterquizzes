@@ -79,7 +79,7 @@ export function buildLlmReturnPrompt(submission: SubmissionCapsule): string {
     `Submission: ${submission.quizId} / ${submission.sessionId}`,
     `Completion: ${submission.completion.requiredAnswered}/${submission.completion.requiredTotal} required answered; missing required: ${submission.completion.missingRequiredQuestionIds.join(", ") || "none"}; missing confidence: ${submission.completion.missingRequiredConfidenceIds.join(", ") || "none"}.`,
     "The structured SubmissionCapsule is returned by the BetterQuizzes tool result; use it as the source of truth. Do not recreate the quiz or assume blank non-required questions are wrong.",
-    "After grading, call record_grade once when available. Include per-question items for incorrect, partially_correct, or needs_review questions so the app review screen can show feedback; then keep chat brief and tell me you added feedback to the questions to review.",
+    "After grading, call record_grade exactly once if the tool is available. Include quizId, sessionId, score/maxScore or nulls, label, summary, and per-question items for incorrect, partially_correct, or needs_review questions so the app review screen can show feedback; then keep chat brief and tell me you added feedback to the questions to review.",
     "Confidence values are integers only: 1=low, 2=medium, 3=high. Do not use decimals or percentages.",
   ].join("\n");
 }

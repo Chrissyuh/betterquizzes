@@ -459,7 +459,7 @@ export default function App(): ReactElement {
   }
 
   if (screen === "review" && finished && quiz) {
-    return <ReviewQuizScreen quiz={quiz} finished={finished} onBack={() => setScreen("submission")} />;
+    return <ReviewQuizScreen quiz={quiz} finished={finished} widgetMode={widgetMode} onBack={() => setScreen("submission")} />;
   }
 
   if (!quiz) {
@@ -2717,23 +2717,33 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finis
   const { submission, hostSubmitted } = finished;
   const gradeStatus = getFinishedGradeStatus(finished, widgetMode);
   const [recordedGrade, setRecordedGrade] = useState<GradePayload | null>(null);
+  const [gradePollComplete, setGradePollComplete] = useState(!widgetMode);
 
   useEffect(() => {
-    if (!widgetMode) return;
+    if (!widgetMode) {
+      setGradePollComplete(true);
+      return;
+    }
     let cancelled = false;
+    let foundGrade = false;
     let attempts = 0;
+    setRecordedGrade(null);
+    setGradePollComplete(false);
     const poll = async () => {
       attempts += 1;
       const grade = await fetchGradeFromServer(submission.quizId, submission.sessionId, finished.recoveryToken).catch(() => null);
       if (cancelled) return;
       if (grade) {
+        foundGrade = true;
         setRecordedGrade(grade);
+        setGradePollComplete(true);
         return;
       }
     };
     void poll();
     const interval = window.setInterval(() => {
-      if (cancelled || attempts >= 16) {
+      if (cancelled || foundGrade || attempts >= 16) {
+        if (!cancelled && !foundGrade) setGradePollComplete(true);
         window.clearInterval(interval);
         return;
       }
@@ -2744,6 +2754,9 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finis
       window.clearInterval(interval);
     };
   }, [widgetMode, submission.quizId, submission.sessionId, finished.recoveryToken]);
+
+  const reviewWaitingForGrade = widgetMode && !recordedGrade && !gradePollComplete;
+  const reviewButtonLabel = recordedGrade || !widgetMode ? "Review quiz" : reviewWaitingForGrade ? "Waiting for feedback..." : "Review submitted answers";
 
   return (
     <main className="shell narrow result-shell">
@@ -2759,9 +2772,10 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finis
         ) : null}
 
         <div className="actions wrap">
-          <button className="primary" type="button" onClick={onReview}>Review quiz</button>
+          <button className={reviewWaitingForGrade ? "review-loading-button" : "primary"} type="button" disabled={reviewWaitingForGrade} aria-busy={reviewWaitingForGrade ? "true" : undefined} onClick={onReview}>{reviewButtonLabel}</button>
           {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
         </div>
+        {widgetMode && !recordedGrade && gradePollComplete ? <p className="muted compact-status">You can review your submitted answers now. Feedback may still appear in chat.</p> : null}
       </section>
     </main>
   );
@@ -2778,7 +2792,7 @@ function buildReviewDraftsFromSubmission(submission: SubmissionCapsule): Record<
   } satisfies DraftAnswer]));
 }
 
-function ReviewQuizScreen({ quiz, finished, onBack }: { quiz: QuizSpec; finished: FinishedSubmission; onBack: () => void }): ReactElement {
+function ReviewQuizScreen({ quiz, finished, widgetMode, onBack }: { quiz: QuizSpec; finished: FinishedSubmission; widgetMode: boolean; onBack: () => void }): ReactElement {
   const displayPolicy = normalizeDisplayPolicy(quiz.displayPolicy);
   const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
   const drafts = useMemo(() => buildReviewDraftsFromSubmission(finished.submission), [finished.submission]);
@@ -2793,6 +2807,7 @@ function ReviewQuizScreen({ quiz, finished, onBack }: { quiz: QuizSpec; finished
   }, [total]);
 
   useEffect(() => {
+    if (!widgetMode) return;
     let cancelled = false;
     let attempts = 0;
     const poll = async () => {
@@ -2813,7 +2828,7 @@ function ReviewQuizScreen({ quiz, finished, onBack }: { quiz: QuizSpec; finished
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [finished.submission.quizId, finished.submission.sessionId, finished.recoveryToken]);
+  }, [widgetMode, finished.submission.quizId, finished.submission.sessionId, finished.recoveryToken]);
 
   if (!current) {
     return (
@@ -3279,9 +3294,10 @@ function formatQuestionList(quiz: QuizSpec, questionIds: string[]): string {
 function buildAutoGradePrompt(submission: SubmissionCapsule, quiz?: QuizSpec): string {
   const packet = buildCompactGradingPacket(submission, quiz);
   return [
-    "Grade this BetterQuizzes submission now. Do not call tools, do not wait for more data, and do not recreate the quiz.",
-    "Use only the compact JSON packet below. Reply quickly and concisely.",
-    "Format: Score: x/y or case-dependent result; Mistakes/needs review; Targeted review. Keep the first grading reply under 120 words.",
+    "Grade this BetterQuizzes submission now. Use only the compact JSON packet below and do not wait for more data.",
+    "After grading, call record_grade exactly once if that tool is available. Do not call create_quiz, submit_answers, or any non-grading tools.",
+    "record_grade must include quizId, sessionId, score/maxScore or nulls, label, summary, and items for incorrect, partially_correct, or needs_review questions with questionId, mark/status, and concise feedback. Omit correct items unless needed.",
+    "After record_grade, reply briefly in chat, ideally: I added feedback to the questions to review.",
     "Grade fill-blank and short text leniently for capitalization, spacing, and harmless punctuation.",
     "Grade skipped optional answers case-by-case: count them wrong or Needs review in strict knowledge checks when appropriate, omit them in casual practice/check-ins when more useful, and prioritize UX/debug findings over score in developer smoke tests. Treat confidence as a weak signal only.",
     JSON.stringify(packet),
@@ -3296,6 +3312,7 @@ function buildCompactGradingPacket(submission: SubmissionCapsule, quiz?: QuizSpe
     kind: "betterquizzer.fast_grading_packet",
     version: WIDGET_VERSION,
     quizId: submission.quizId,
+    sessionId: submission.sessionId,
     title: limitForGrading(submission.title, 120),
     subject: limitForGrading(submission.subject, 80),
     mode: submission.mode,

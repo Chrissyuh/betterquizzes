@@ -15,7 +15,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v69-review-polish.html"'), "review polish must use a v69 widget URI so ChatGPT does not reuse the v68 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v70-review-gating.html"'), "review gating must use a v70 widget URI so ChatGPT does not reuse the v69 cached resource");
+assert(remote.includes("betterquizzes-v69-review-polish.html"), "v69 review-polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v68-mobile-dot-fix.html"), "v68 mobile-dot-fix URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v67-screenshot-polish.html"), "v67 screenshot-polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v66-refresh-grace.html"), "v66 refresh-grace URI must remain available as a compatibility alias");
@@ -55,11 +56,12 @@ assert(app.includes("function ReviewQuizScreen") && app.includes("buildReviewDra
 assert(app.includes("buildQuestionGradeMap") && app.includes("questionGradeMarks") && app.includes("question-grade-feedback"), "review mode must render per-question recorded grade feedback");
 assert(styles.includes(".dot.grade-correct") && styles.includes(".dot.grade-incorrect") && styles.includes(".dot.grade-partially-correct") && styles.includes(".dot.grade-needs-review"), "review question dots must be color-coded by recorded grade status");
 assert(styles.includes(".read-only-question-fieldset:disabled .match-row") && styles.includes(".read-only-question-fieldset:disabled .field-label textarea"), "read-only review mode must grey out non-choice answer surfaces");
+assert(app.includes("reviewWaitingForGrade") && app.includes("Waiting for feedback...") && app.includes("Review submitted answers") && styles.includes(".review-loading-button"), "post-submit review must wait for grade feedback before enabling, with timeout fallback");
 assert(app.includes("getFriendlyFollowUpMessage") && !app.includes("{finished.followUpMessage ?? \"Still trying to send your answers for feedback.\"}"), "post-submit page must avoid technical follow-up messages");
 assert(!app.includes("Answers saved") && !app.includes("Feedback requested") && !app.includes("Waiting for feedback to appear"), "post-submit page must avoid the old technical status chips");
 assert(app.includes("generation-status-strip") && app.includes("Questions are being added:"), "incremental generation must use a compact status strip");
 assert(app.includes("planned-question") && styles.includes(".question-dots .planned-question"), "incremental generation must show planned question placeholders in the question bar");
-assert(styles.includes("--bq-dot-size") && styles.includes("bq-question-number-fade-v69") && styles.includes("bq-planned-question-fade-v69"), "planned question placeholders must match real dot dimensions and fade in without vertical fly-in");
+assert(styles.includes("--bq-dot-size") && styles.includes("bq-question-number-fade-v69") && styles.includes("bq-planned-question-fade-v70") && styles.includes("V70 review gating and rail rollback"), "planned question placeholders must match real dot dimensions and loaded dots must keep the pre-V69 look");
 assert(!app.includes("className=\"card question-card build-next-card\""), "incremental generation must not render the old end-card");
 assert(app.includes("const [submitAttempted, setSubmitAttempted]") && app.includes("revealRequiredStatus={submitAttempted}"), "required validation styling must wait until submit is attempted");
 assert(app.includes("disabled={submitting}") && !app.includes("disabled={submitting || !canSubmit}"), "submit must remain clickable so missing required items can show delayed feedback");
@@ -91,6 +93,7 @@ assert(app.includes("nextRevision > currentRevision") && app.includes("setLaunch
 assert(readFileSync("src/host/openaiBridge.ts", "utf8").includes("quiz.questions.length > expectedQuestionCount"), "widget must accept certified partial launch packets for staged generation");
 assert(app.includes("submission.launchId = launchId") && app.includes("submission.quizRevision = quiz.metadata.quizRevision"), "submissions must carry stable launch/revision identity");
 assert(app.includes("sendSubmissionFollowUp(buildAutoGradePrompt(submission, quiz), 4500)") && app.includes("kind: \"betterquizzer.fast_grading_packet\"") && app.includes("const richQuestionMap"), "submission follow-up must be self-contained when the host tool result is not visible after a chat interruption");
+assert(app.includes("After grading, call record_grade exactly once") && app.includes("sessionId: submission.sessionId") && !app.includes("Grade this BetterQuizzes submission now. Do not call tools"), "automatic grading prompt must request record_grade and include sessionId");
 assert(!app.includes('"/api/quiz/latest"') && app.includes("getRequestedRecoveryToken") && app.includes("SERVER_RECOVERY_TIMEOUT_MS"), "widget must not use latest-quiz as a generic ChatGPT hydration fallback");
 assert(app.includes("describeHostBridgeState()") && app.includes("Server bases:"), "widget hydration failures must include useful technical recovery details");
 assert(remote.includes("window.__BETTERQUIZZER_SERVER_BASES__=") && remote.includes("requestOrigin") && remote.includes("connectDomains"), "production widget bootstrap must include fallback server bases and CSP connect domains");
@@ -142,11 +145,11 @@ assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronge
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
 assert(styles.includes("bq-question-arrival-v69") && styles.includes("1.55s cubic-bezier"), "new questions must use slower V69 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v69-review-polish.html"), "skip removal and review polish must ship with a widget URI cache bust");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v70-review-gating.html"), "skip removal and review gating must ship with a widget URI cache bust");
 assert(!app.includes("quiz.description ? <RichBlock") && styles.includes("V68 screenshot polish"), "quiz descriptions must stay hidden and mobile screenshot compaction CSS must exist");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
-assert(remote.includes("partially_correct") && remote.includes("Prefer omitting correct items") && remote.includes("normalizeGradeMark"), "record_grade must document and normalize per-question review marks");
+assert(remote.includes("partially_correct") && remote.includes("Prefer omitting correct items") && remote.includes("normalizeGradeMark") && remote.includes("After grading, call record_grade exactly once"), "record_grade must document and normalize per-question review marks");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");
 assert(remote.includes('url.pathname.startsWith("/api/grade/")') && remote.includes("requireQuizRecoveryAccess(url, quizId)"), "server must expose token-scoped grade polling endpoint");
 assert(app.includes("fetchGradeFromServer"), "widget must poll for recorded grades");

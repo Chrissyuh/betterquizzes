@@ -177,7 +177,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v69-review-polish.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v69-review-polish.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v70-review-gating.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v70-review-gating.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
   },
   {
     name: "add_question",
@@ -886,10 +886,11 @@ function handleV23BuilderTool(name, input = {}) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v69-review-polish.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v70-review-gating.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v69-review-polish.html",
   "ui://widget/betterquizzes-v68-mobile-dot-fix.html",
   "ui://widget/betterquizzes-v67-screenshot-polish.html",
   "ui://widget/betterquizzes-v66-refresh-grace.html",
@@ -1261,7 +1262,7 @@ function submitAnswers(id, args) {
   };
   ok(id, {
     structuredContent: packet,
-    content: [{ type: "text", text: `Received ${submission.answers.length} BetterQuizzes answers.${(submission.completion?.requiredTotal ?? 0) > 0 ? ` Required questions complete: ${submission.completion?.requiredAnswered ?? "?"}/${submission.completion?.requiredTotal ?? "?"}.` : ""} Use the structured SubmissionCapsule as the source of truth. Grade case-by-case: strict checks may count skipped relevant questions wrong or Needs review, casual practice may omit blank optional answers, and developer smoke tests should prioritize app/UX findings over score. Explain mistakes and use confidence cautiously as a weak signal.` }],
+    content: [{ type: "text", text: `Received ${submission.answers.length} BetterQuizzes answers.${(submission.completion?.requiredTotal ?? 0) > 0 ? ` Required questions complete: ${submission.completion?.requiredAnswered ?? "?"}/${submission.completion?.requiredTotal ?? "?"}.` : ""} Use the structured SubmissionCapsule as the source of truth. Grade case-by-case: strict checks may count skipped relevant questions wrong or Needs review, casual practice may omit blank optional answers, and developer smoke tests should prioritize app/UX findings over score. After grading, call record_grade exactly once with quizId, sessionId, score/maxScore or nulls, label, summary, and items for incorrect, partially_correct, or needs_review questions using questionId, mark/status, and concise feedback. Then reply briefly in chat.` }],
     _meta: { ...packet, returnPrompt: makePrompt(submission) }
   });
 }

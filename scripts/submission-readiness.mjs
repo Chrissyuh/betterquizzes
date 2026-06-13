@@ -11,7 +11,7 @@ const SUPPORT_PLACEHOLDERS = [
   "support@example.com",
   "support@trybettertools.example"
 ];
-const RESOURCE_URI = "ui://widget/betterquizzes-v69-review-polish.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v70-review-gating.html";
 const failures = [];
 
 function check(condition, message) {
@@ -43,7 +43,7 @@ async function checkPublicHost() {
 
   if (manifest) {
     check(manifest.transport?.endpoint === `${CANONICAL_ORIGIN}/mcp`, "public manifest must advertise the canonical custom-domain MCP endpoint.");
-    check(manifest.widgetResource === RESOURCE_URI, "public manifest must advertise the v69 review-polish widget resource.");
+    check(manifest.widgetResource === RESOURCE_URI, "public manifest must advertise the v70 review-gating widget resource.");
   }
 
   for (const path of ["/privacy", "/terms"]) {

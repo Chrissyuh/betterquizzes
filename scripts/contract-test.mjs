@@ -75,10 +75,11 @@ assert(server.includes("recoveryToken: stored.recoveryToken"), "launch metadata 
 assert(server.includes('name: "add_first_question"') && server.includes("launch exactly one widget"), "add_first_question must be the sole builder launch tool");
 assert(server.includes('name: "add_question"') && server.includes("intentionally has no widget output template"), "add_question must be storage-only after launch");
 assert(server.includes('"openai/toolInvocation/invoking": "Adding question..."'), "add_question must retain status metadata");
-assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v69-review-polish.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
-assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v69-review-polish.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
+assert(!server.includes('name: "add_question",\n    description: "Add exactly one later question') || !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v70-review-gating.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Adding question..."'), "storage-only add_question must not advertise an output template");
+assert(server.includes('"openai/toolInvocation/invoking": "Checking quiz..."') && !server.includes('"openai/outputTemplate": "ui://widget/betterquizzes-v70-review-gating.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Checking quiz..."'), "recovery-only open_quiz must not advertise an output template");
 assert(server.includes('"openai/toolInvocation/invoking": "Validating quiz..."') && !server.includes('"openai/outputTemplate": RESOURCE_URI, "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Validating quiz..."'), "compatibility create_quiz must not advertise an output template");
-assert(server.includes("betterquizzes-v69-review-polish.html"), "widget URI must cache-bust the review polish");
+assert(server.includes("betterquizzes-v70-review-gating.html"), "widget URI must cache-bust the review gating fix");
+assert(server.includes("betterquizzes-v69-review-polish.html"), "v69 widget URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v68-mobile-dot-fix.html"), "v68 widget URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v67-screenshot-polish.html"), "v67 widget URI must remain as a compatibility alias");
 assert(server.includes("betterquizzes-v66-refresh-grace.html"), "v66 widget URI must remain as a compatibility alias");
