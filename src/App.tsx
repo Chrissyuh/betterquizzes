@@ -675,6 +675,10 @@ function shouldShowQuestionGradeFeedback(grade: ReviewQuestionGrade | undefined)
   return Boolean(grade.feedback?.trim());
 }
 
+function neutralReviewGradeMap(questions: Question[]): Map<string, ReviewQuestionGrade> {
+  return new Map(questions.map((question) => [question.id, { status: "needs_review" as const }]));
+}
+
 function formatReviewGradeStatus(status: ReviewGradeStatus): string {
   switch (status) {
     case "correct":
@@ -1308,12 +1312,12 @@ function QuizRunner({
     <main className="shell quiz-layout">
       <section className="top-bar card">
         <div>
-          <div className="eyebrow-row"><p className="eyebrow">BetterQuizzes</p><span className="version-chip">{WIDGET_VERSION_LABEL}</span></div>
+          <div className="eyebrow-row top-version-row"><span className="version-chip">{WIDGET_VERSION_LABEL}</span></div>
           <h1><RichInline text={quiz.title} /></h1>
         </div>
-        <div className="top-actions">
-          {!widgetMode ? <button type="button" onClick={onReset}>New quiz</button> : null}
-        </div>
+        {!widgetMode ? <div className="top-actions">
+          <button type="button" onClick={onReset}>New quiz</button>
+        </div> : null}
         <div className="progress-shell" aria-label="Quiz progress"><span style={{ width: `${progressPercent}%` }} /></div>
         {generationStatus ? (
           <div className="generation-status-strip" aria-live="polite">
@@ -1336,7 +1340,7 @@ function QuizRunner({
               <p>Unfinished answers will be sent blank for ChatGPT to grade or ignore based on the quiz instructions.</p>
             </div>
             <div className="actions">
-              <button type="button" onClick={reviewUnfinished}>Review unfinished</button>
+              <button type="button" onClick={reviewUnfinished}>Keep working</button>
               <button className="primary" type="button" disabled={submitting} onClick={() => void finish({ allowIncomplete: true })}>Submit anyway</button>
             </div>
           </section>
@@ -1449,7 +1453,7 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
       </div>
       <h2><RichInline text={question.prompt} /></h2>
       <fieldset className="read-only-question-fieldset" disabled={readOnly} aria-label={readOnly ? "Submitted answer review" : undefined}>
-        <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onTypingQuestionTabNext={onTypingQuestionTabNext} onChange={readOnly ? () => undefined : onChange} />
+        <QuestionInput question={question} draft={draft} readOnly={readOnly} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onTypingQuestionTabNext={onTypingQuestionTabNext} onChange={readOnly ? () => undefined : onChange} />
         {confidenceEnabled ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
           <div>
             <p className="confidence-heading">Confidence</p>
@@ -1464,12 +1468,11 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
           <p>{questionGrade.feedback}</p>
         </section>
       ) : null}
-      {readOnly ? <p className="review-mode-note">Review mode: submitted answers cannot be changed.</p> : null}
     </section>
   );
 }
 
-function QuestionInput({ question, draft, quizChoiceBehavior, onTypingQuestionTabNext, onChange }: { question: Question; draft: DraftAnswer | undefined; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onTypingQuestionTabNext?: () => void; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+function QuestionInput({ question, draft, readOnly = false, quizChoiceBehavior, onTypingQuestionTabNext, onChange }: { question: Question; draft: DraftAnswer | undefined; readOnly?: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onTypingQuestionTabNext?: () => void; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
   const response = draft?.response;
   if ((question as { type?: unknown }).type === "text_select") {
     return <QuestionRenderWarning question={question} detail="Text-select questions are not available in BetterQuizzes V1. Ask ChatGPT to replace this question with a supported type." />;
@@ -1494,7 +1497,7 @@ function QuestionInput({ question, draft, quizChoiceBehavior, onTypingQuestionTa
     case "numeric":
       return <TextField label={question.unit ? `Number (${question.unit})` : "Number"} inputMode="text" value={typeof response === "number" || typeof response === "string" ? String(response) : ""} onTabNext={onTypingQuestionTabNext} onChange={(value) => onChange({ response: value })} />;
     case "ordering":
-      return <OrderingInput question={question} response={Array.isArray(response) ? response.filter((item): item is string => typeof item === "string") : []} onChange={(value) => onChange({ response: value })} />;
+      return <OrderingInput question={question} response={Array.isArray(response) ? response.filter((item): item is string => typeof item === "string") : []} readOnly={readOnly} onChange={(value) => onChange({ response: value })} />;
     case "matching":
       return <MatchingInput question={question} response={isMatchingPairs(response) ? response : []} onChange={(value) => onChange({ response: value })} />;
     default:
@@ -2206,7 +2209,7 @@ function setOrderingDragScrollLock(enabled: boolean): void {
   document.body?.classList.toggle("bq-ordering-drag-lock", enabled);
 }
 
-function OrderingInput({ question, response, onChange }: { question: Extract<Question, { type: "ordering" }>; response: string[]; onChange: (value: string[]) => void }): ReactElement {
+function OrderingInput({ question, response, readOnly = false, onChange }: { question: Extract<Question, { type: "ordering" }>; response: string[]; readOnly?: boolean; onChange: (value: string[]) => void }): ReactElement {
   const inputMode = useOrderingInputMode();
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -2579,6 +2582,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
   }
 
   function onHandleKeyDown(event: ReactKeyboardEvent<HTMLElement>, id: string): void {
+    if (readOnly) return;
     if (event.key === "ArrowUp") {
       event.preventDefault();
       moveByStep(id, -1);
@@ -2615,13 +2619,13 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
               draggable={false}
               aria-roledescription="sortable item"
               aria-label={`${index + 1}. ${item?.text ?? id}`}
-              onPointerDown={inputMode === "desktop" ? (event) => beginDrag(event, id, "desktop") : undefined}
-              onPointerMove={inputMode === "desktop" ? moveDrag : undefined}
-              onPointerUp={inputMode === "desktop" ? endDrag : undefined}
-              onPointerCancel={inputMode === "desktop" ? cancelDrag : undefined}
+              onPointerDown={!readOnly && inputMode === "desktop" ? (event) => beginDrag(event, id, "desktop") : undefined}
+              onPointerMove={!readOnly && inputMode === "desktop" ? moveDrag : undefined}
+              onPointerUp={!readOnly && inputMode === "desktop" ? endDrag : undefined}
+              onPointerCancel={!readOnly && inputMode === "desktop" ? cancelDrag : undefined}
             >
               <span className="order-item-text"><span className="order-index">{index + 1}</span><RichInline text={item?.text ?? id} /></span>
-              <span
+              {!readOnly ? <span
                 className="drag-handle"
                 role="slider"
                 tabIndex={0}
@@ -2638,7 +2642,7 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
               >
                 <span aria-hidden="true" className="drag-bar-grip" />
                 <span className="drag-label">Drag</span>
-              </span>
+              </span> : null}
             </div>
           );
         })}
@@ -2766,6 +2770,12 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finis
         <p>{getSubmissionMessage(gradeStatus, hostSubmitted)}</p>
 
         {recordedGrade ? <GradeSummaryCard grade={recordedGrade} /> : null}
+        {reviewWaitingForGrade ? (
+          <section className="grade-waiting-card" aria-live="polite">
+            <span className="grade-waiting-dot" aria-hidden="true" />
+            <span>Waiting for ChatGPT to save feedback in the app.</span>
+          </section>
+        ) : null}
 
         {finished.followUpAttempts && gradeStatus !== "grade_requested" ? (
           <p className="muted compact-status">{getFriendlyFollowUpMessage(gradeStatus)}</p>
@@ -2775,7 +2785,7 @@ function SubmissionScreen({ finished, widgetMode, onNewQuiz, onReview }: { finis
           <button className={reviewWaitingForGrade ? "review-loading-button" : "primary"} type="button" disabled={reviewWaitingForGrade} aria-busy={reviewWaitingForGrade ? "true" : undefined} onClick={onReview}>{reviewButtonLabel}</button>
           {!widgetMode ? <button type="button" onClick={onNewQuiz}>Start another quiz</button> : null}
         </div>
-        {widgetMode && !recordedGrade && gradePollComplete ? <p className="muted compact-status">You can review your submitted answers now. Feedback may still appear in chat.</p> : null}
+        {widgetMode && !recordedGrade && gradePollComplete ? <p className="muted compact-status">You can review your submitted answers now.</p> : null}
       </section>
     </main>
   );
@@ -2799,6 +2809,7 @@ function ReviewQuizScreen({ quiz, finished, widgetMode, onBack }: { quiz: QuizSp
   const [currentIndex, setCurrentIndex] = useState(0);
   const [recordedGrade, setRecordedGrade] = useState<GradePayload | null>(null);
   const questionGradeMarks = useMemo(() => buildQuestionGradeMap(recordedGrade), [recordedGrade]);
+  const reviewGradeMarks = useMemo(() => recordedGrade ? questionGradeMarks : neutralReviewGradeMap(quiz.questions), [recordedGrade, questionGradeMarks, quiz.questions]);
   const current = quiz.questions[currentIndex] ?? quiz.questions[0];
   const total = quiz.questions.length;
 
@@ -2848,15 +2859,12 @@ function ReviewQuizScreen({ quiz, finished, widgetMode, onBack }: { quiz: QuizSp
         <div>
           <div className="eyebrow-row"><p className="eyebrow">Review mode</p><span className="version-chip">{WIDGET_VERSION_LABEL}</span></div>
           <h1><RichInline text={quiz.title} /></h1>
-          <p>Your submitted answers are shown below. They cannot be changed.</p>
-        </div>
-        <div className="top-actions">
-          <button className="primary" type="button" onClick={onBack}>Back to results</button>
+          {quiz.description ? <RichBlock text={quiz.description} /> : null}
         </div>
       </section>
-      {total > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={new Set()} gradeMarks={questionGradeMarks} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus onSelect={setCurrentIndex} /> : null}
+      {total > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={new Set()} gradeMarks={reviewGradeMarks} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus onSelect={setCurrentIndex} /> : null}
       <section className="main-column">
-        <QuestionCard question={current} questionIndex={currentIndex} questionCount={total} plannedQuestionCount={total} draft={drafts[current.id]} readOnly questionGrade={questionGradeMarks.get(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus quizChoiceBehavior={quiz.choiceBehavior} onTypingQuestionTabNext={currentIndex < total - 1 ? () => setCurrentIndex(currentIndex + 1) : undefined} onChange={() => undefined} />
+        <QuestionCard question={current} questionIndex={currentIndex} questionCount={total} plannedQuestionCount={total} draft={drafts[current.id]} readOnly questionGrade={reviewGradeMarks.get(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus quizChoiceBehavior={quiz.choiceBehavior} onTypingQuestionTabNext={currentIndex < total - 1 ? () => setCurrentIndex(currentIndex + 1) : undefined} onChange={() => undefined} />
         <div className={`actions split compact-actions ${total <= 1 ? "single-question-actions" : ""}`}>
           {total > 1 ? (
             <div className="actions">
@@ -2864,6 +2872,9 @@ function ReviewQuizScreen({ quiz, finished, widgetMode, onBack }: { quiz: QuizSp
               <button type="button" disabled={currentIndex === total - 1} onClick={() => setCurrentIndex((index) => Math.min(total - 1, index + 1))}>Next</button>
             </div>
           ) : null}
+          <div className="submit-column">
+            <button className="primary" type="button" onClick={onBack}>Back to results</button>
+          </div>
         </div>
       </section>
     </main>
@@ -2878,6 +2889,7 @@ function GradeSummaryCard({ grade }: { grade: GradePayload }): ReactElement {
     : hasNumeric
       ? String(percent) + "%"
       : "";
+  const gradeTitle = formatGradeTitle(grade, percent, scoreText);
   const ringStyle = hasNumeric ? { "--grade-percent": String(percent) } as React.CSSProperties : undefined;
   return (
     <section className={hasNumeric ? "grade-card grade-card-numeric" : "grade-card grade-card-qualitative"} aria-live="polite">
@@ -2885,13 +2897,18 @@ function GradeSummaryCard({ grade }: { grade: GradePayload }): ReactElement {
         <span>{hasNumeric ? String(percent) + "%" : "✓"}</span>
       </div>
       <div>
-        <p className="eyebrow">Grade ready</p>
-        <h2>{grade.label || (hasNumeric ? "Graded" : "Feedback ready")}</h2>
-        {scoreText ? <p className="grade-score-text">{scoreText}</p> : null}
+        <h2>{gradeTitle}</h2>
         {grade.summary ? <p className="muted">{grade.summary}</p> : <p className="muted">ChatGPT recorded feedback for this submission.</p>}
       </div>
     </section>
   );
+}
+
+function formatGradeTitle(grade: GradePayload, percent: number | null, scoreText: string): string {
+  if (scoreText) return `You scored ${scoreText}${percent !== null && percent >= 80 ? "!" : "."}`;
+  if (percent !== null) return `You scored ${percent}%${percent >= 80 ? "!" : "."}`;
+  const label = typeof grade.label === "string" ? grade.label.trim() : "";
+  return label && !/^grade ready\.?$/i.test(label) ? label : "Feedback ready";
 }
 
 function getGradePercent(grade: GradePayload): number | null {
@@ -2989,19 +3006,19 @@ function getSubmissionHeadline(status: SubmissionDeliveryStatus): string {
 }
 
 function getSubmissionMessage(status: SubmissionDeliveryStatus, hostSubmitted: boolean): string {
-  if (status === "grade_requested") return "Your submission is complete and ChatGPT has what it needs. Return to the chat for feedback.";
-  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your submission is complete. Feedback should appear in the chat shortly.";
+  if (status === "grade_requested") return "ChatGPT has your answers. When feedback is ready, review the questions here in the app.";
+  if (status === "requesting_grade" || status === "retrying_grade_request") return "Your answers were submitted. ChatGPT is being asked to save feedback for review here.";
   if (status === "grade_request_unavailable") return hostSubmitted
-    ? "Your answers were submitted. Return to the chat if feedback does not appear automatically."
+    ? "Your answers were submitted. You can review your responses here."
     : "Your submission is complete here. Return to the chat to continue.";
-  if (status === "grade_request_failed") return "Your submission is complete, but the feedback request did not finish. Your work is not lost.";
+  if (status === "grade_request_failed") return "Your answers were saved. You can review your responses here.";
   return "Your submission is complete.";
 }
 
 function getFriendlyFollowUpMessage(status: SubmissionDeliveryStatus): string {
-  if (status === "grade_request_failed") return "If feedback does not appear, return to the chat and ask ChatGPT to grade this submission.";
+  if (status === "grade_request_failed") return "If feedback is missing, ask ChatGPT to grade the submitted BetterQuizzes answers.";
   if (status === "grade_request_unavailable") return "Return to the chat to continue.";
-  return "Feedback should appear in the chat shortly.";
+  return "Feedback is being saved for review in the app.";
 }
 
 function summarizeToolResult(result: ToolResultLike | null): ToolResultLike | null {
@@ -3296,8 +3313,10 @@ function buildAutoGradePrompt(submission: SubmissionCapsule, quiz?: QuizSpec): s
   return [
     "Grade this BetterQuizzes submission now. Use only the compact JSON packet below and do not wait for more data.",
     "After grading, call record_grade exactly once if that tool is available. Do not call create_quiz, submit_answers, or any non-grading tools.",
-    "record_grade must include quizId, sessionId, score/maxScore or nulls, label, summary, and items for incorrect, partially_correct, or needs_review questions with questionId, mark/status, and concise feedback. Omit correct items unless needed.",
-    "After record_grade, reply briefly in chat, ideally: I added feedback to the questions to review.",
+    "Decide whether a numeric grade applies. For objective quizzes, include score and maxScore. For surveys, fit checks, reflections, or advice intake, use score:null and maxScore:null with a useful label instead.",
+    "record_grade must include quizId, sessionId, score/maxScore or nulls, label, a polished one-sentence summary, and items for incorrect, partially_correct, or needs_review questions with questionId, mark/status, and concise feedback. Omit correct items unless needed.",
+    "In summary and feedback, use question labels like Q1 and Q5, never lowercase q1/q5. Do not output raw ids, JSON, or terse fragments like 'Review distribution'. Write a complete sentence.",
+    "After record_grade, reply briefly in chat: I added feedback in the BetterQuizzes app. Open Review quiz to see the questions to review.",
     "Grade fill-blank and short text leniently for capitalization, spacing, and harmless punctuation.",
     "Grade skipped optional answers case-by-case: count them wrong or Needs review in strict knowledge checks when appropriate, omit them in casual practice/check-ins when more useful, and prioritize UX/debug findings over score in developer smoke tests. Treat confidence as a weak signal only.",
     JSON.stringify(packet),

@@ -79,7 +79,7 @@ export function buildLlmReturnPrompt(submission: SubmissionCapsule): string {
     `Submission: ${submission.quizId} / ${submission.sessionId}`,
     `Completion: ${submission.completion.requiredAnswered}/${submission.completion.requiredTotal} required answered; missing required: ${submission.completion.missingRequiredQuestionIds.join(", ") || "none"}; missing confidence: ${submission.completion.missingRequiredConfidenceIds.join(", ") || "none"}.`,
     "The structured SubmissionCapsule is returned by the BetterQuizzes tool result; use it as the source of truth. Do not recreate the quiz or assume blank non-required questions are wrong.",
-    "After grading, call record_grade exactly once if the tool is available. Include quizId, sessionId, score/maxScore or nulls, label, summary, and per-question items for incorrect, partially_correct, or needs_review questions so the app review screen can show feedback; then keep chat brief and tell me you added feedback to the questions to review.",
+    "After grading, call record_grade exactly once if the tool is available. Decide whether a numeric grade applies; use score/maxScore for objective quizzes and score:null, maxScore:null when a grade does not fit. Include quizId, sessionId, label, a polished one-sentence summary, and per-question items for incorrect, partially_correct, or needs_review questions so the app review screen can show feedback. Use question labels like Q1 and Q5, never lowercase q1/q5. Then keep chat brief and tell me feedback is visible in the BetterQuizzes app review.",
     "Confidence values are integers only: 1=low, 2=medium, 3=high. Do not use decimals or percentages.",
   ].join("\n");
 }
@@ -204,8 +204,8 @@ function buildLlmInstructions(quiz: QuizSpec, displayPolicy: DisplayPolicy, grad
     "Blank answers mean no response. Do not assume why they are blank. Decide whether to score, omit, or mark Needs review based on title, mode, prompt wording, answerRequired, completion, and whether the activity looks like practice, strict assessment, or developer testing. For response.kind=other, grade the text semantically. If answer text conflicts with numeric confidence, prioritize the answer text.",
     "For ordering questions, response arrays are visual top-to-bottom order unless answer.meta.responseDirection says otherwise. Use answer.meta.topLabel and answer.meta.bottomLabel to interpret the user-facing endpoints.",
     "For multi_typing and multi_write_vertical questions, response is a field-id keyed object. Grade each typed field semantically against the field labels, answerKey, rubric, and expectedKeywords when available.",
-    gradingPolicy.requestCorrectnessMarks !== false ? "When you call record_grade, include per-question items for incorrect, partially_correct, or needs_review questions using questionId, mark/status, optional points, and concise feedback. Omit correct items unless they need special context." : "Per-question correctness markings are optional.",
-    "Do not call create_quiz again when grading. Grade the submitted activity, record useful app feedback for missed/partial questions, and keep the chat response concise.",
+    gradingPolicy.requestCorrectnessMarks !== false ? "When you call record_grade, include per-question items for incorrect, partially_correct, or needs_review questions using questionId, mark/status, optional points, and concise feedback. Omit correct items unless they need special context. Use Q1/Q5-style labels in human-facing summary and feedback." : "Per-question correctness markings are optional.",
+    "Do not call create_quiz again when grading. Grade the submitted activity, record useful app feedback for missed/partial questions, tell the user the feedback is visible in the BetterQuizzes app review, and keep the chat response concise.",
   ].join(" ");
 }
 

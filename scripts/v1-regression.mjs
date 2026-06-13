@@ -16,7 +16,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v71-discovery-guard.html"'), "discovery guard must use a v71 widget URI so ChatGPT does not reuse the v70 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v72-feedback-polish.html"'), "feedback polish must use a v72 widget URI so ChatGPT does not reuse the v71 cached resource");
+assert(remote.includes("betterquizzes-v71-discovery-guard.html"), "v71 discovery-guard URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v70-review-gating.html"), "v70 review-gating URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v69-review-polish.html"), "v69 review-polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v68-mobile-dot-fix.html"), "v68 mobile-dot-fix URI must remain available as a compatibility alias");
@@ -52,15 +53,18 @@ assert(app.includes("suppressAutoScrollUntilRef") && app.includes("rail.scrollBy
 assert(app.includes("const shouldShowQuestionNav = quiz.questions.length > 1 || Boolean(generationStatus)"), "question navigation must show when a one-question staged quiz expects more questions");
 assert(app.includes("single-question-actions"), "one-question quizzes must not show prev/next controls");
 assert(app.includes("const submitLooksReady = allQuestionsDone"), "submit button should look ready only when every question is complete");
-assert(app.includes("incompleteSubmitPrompt") && app.includes("Submit anyway") && app.includes("Review unfinished"), "incomplete optional submissions must ask for confirmation");
-assert(app.includes("panel-close-button") && app.includes("closeOnOutsidePointer") && app.includes('event.key === "Escape"') && styles.includes("background: #fff7ed") && styles.includes("grid-template-columns: repeat(2, minmax(0, 1fr))"), "incomplete submit warning must be soft, full-width, and dismissible");
+assert(app.includes("incompleteSubmitPrompt") && app.includes("Submit anyway") && app.includes("Keep working") && !app.includes("Review unfinished"), "incomplete optional submissions must ask for confirmation with the calmer keep-working label");
+assert(app.includes("panel-close-button") && app.includes("closeOnOutsidePointer") && app.includes('event.key === "Escape"') && styles.includes("background: #fff8f1") && styles.includes("grid-template-columns: repeat(2, minmax(0, 1fr))"), "incomplete submit warning must be soft, full-width, and dismissible");
 assert(app.includes("function ReviewQuizScreen") && app.includes("buildReviewDraftsFromSubmission") && app.includes("readOnly") && app.includes("Back to results"), "submitted quizzes must support read-only review mode");
-assert(app.includes("buildQuestionGradeMap") && app.includes("questionGradeMarks") && app.includes("question-grade-feedback"), "review mode must render per-question recorded grade feedback");
+assert(!app.includes("Review mode: submitted answers cannot be changed.") && !app.includes("Your submitted answers are shown below. They cannot be changed."), "review mode must avoid redundant read-only warning copy");
+assert(app.includes("readOnly ? <span") || app.includes("{!readOnly ? <span"), "review mode must omit ordering drag handles instead of showing disabled handles");
+assert(styles.includes("V72 submitted/review polish") && styles.includes(".read-only-question-fieldset:disabled .bq-ordering-rebuilt .draggable-order-item") && styles.includes("content: none !important"), "V72 review polish must hide ordering handles and remove saturated drop markers");
+assert(app.includes("buildQuestionGradeMap") && app.includes("neutralReviewGradeMap") && app.includes("reviewGradeMarks") && app.includes("question-grade-feedback"), "review mode must stay neutral until recorded grade feedback arrives");
 assert(styles.includes(".dot.grade-correct") && styles.includes(".dot.grade-incorrect") && styles.includes(".dot.grade-partially-correct") && styles.includes(".dot.grade-needs-review"), "review question dots must be color-coded by recorded grade status");
 assert(styles.includes(".read-only-question-fieldset:disabled .match-row") && styles.includes(".read-only-question-fieldset:disabled .field-label textarea"), "read-only review mode must grey out non-choice answer surfaces");
-assert(app.includes("reviewWaitingForGrade") && app.includes("Waiting for feedback...") && app.includes("Review submitted answers") && styles.includes(".review-loading-button"), "post-submit review must wait for grade feedback before enabling, with timeout fallback");
+assert(app.includes("reviewWaitingForGrade") && app.includes("Waiting for feedback...") && app.includes("Waiting for ChatGPT to save feedback in the app.") && app.includes("Review submitted answers") && styles.includes(".review-loading-button::before") && styles.includes("radial-gradient(circle, #526173"), "post-submit review must wait visibly for grade feedback before enabling, with timeout fallback");
 assert(app.includes("getFriendlyFollowUpMessage") && !app.includes("{finished.followUpMessage ?? \"Still trying to send your answers for feedback.\"}"), "post-submit page must avoid technical follow-up messages");
-assert(!app.includes("Answers saved") && !app.includes("Feedback requested") && !app.includes("Waiting for feedback to appear"), "post-submit page must avoid the old technical status chips");
+assert(!app.includes("Answers saved") && !app.includes("Feedback requested") && !app.includes("Waiting for feedback to appear") && !app.includes("Feedback may still appear in chat"), "post-submit page must avoid the old technical status chips and stale chat-only fallback copy");
 assert(app.includes("generation-status-strip") && app.includes("Questions are being added:"), "incremental generation must use a compact status strip");
 assert(app.includes("planned-question") && styles.includes(".question-dots .planned-question"), "incremental generation must show planned question placeholders in the question bar");
 assert(styles.includes("--bq-dot-size") && styles.includes("bq-question-number-fade-v69") && styles.includes("bq-planned-question-fade-v70") && styles.includes("V70 review gating and rail rollback"), "planned question placeholders must match real dot dimensions and loaded dots must keep the pre-V69 look");
@@ -151,8 +155,8 @@ assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronge
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
 assert(styles.includes("bq-question-arrival-v69") && styles.includes("1.55s cubic-bezier"), "new questions must use slower V69 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v71-discovery-guard.html"), "skip removal and discovery guard must ship with a widget URI cache bust");
-assert(!app.includes("quiz.description ? <RichBlock") && styles.includes("V68 screenshot polish"), "quiz descriptions must stay hidden and mobile screenshot compaction CSS must exist");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v72-feedback-polish.html"), "skip removal and feedback polish must ship with a widget URI cache bust");
+assert(app.includes("quiz.description ? <RichBlock text={quiz.description} /> : null") && styles.includes("V68 screenshot polish"), "quiz descriptions must stay hidden while answering but remain available in review mode");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
 assert(remote.includes("partially_correct") && remote.includes("Prefer omitting correct items") && remote.includes("normalizeGradeMark") && remote.includes("After grading, call record_grade exactly once"), "record_grade must document and normalize per-question review marks");

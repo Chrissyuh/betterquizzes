@@ -4107,3 +4107,171 @@ button.drag-handle:focus-visible {
 @keyframes bq-review-wait-spin {
   to { transform: rotate(360deg); }
 }
+
+/* V72 submitted/review polish: clearer feedback wait state, tighter rail padding, and calmer controls. */
+.top-version-row {
+  margin: 0 0 .12rem;
+}
+
+.version-chip {
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.result-hero {
+  padding-bottom: 1.15rem !important;
+}
+
+.nav-card {
+  padding: .95rem 1.05rem 1.05rem !important;
+}
+
+.question-dots {
+  align-items: center !important;
+  gap: .52rem !important;
+  margin: 0 !important;
+  padding: .18rem !important;
+}
+
+.incomplete-submit-panel {
+  border-color: #fed7aa !important;
+  background: #fff8f1 !important;
+  color: #7c2d12 !important;
+  padding: 1rem !important;
+  padding-right: 3rem !important;
+  box-shadow: 0 14px 30px rgba(154, 52, 18, .07) !important;
+}
+
+.incomplete-submit-panel > div:first-of-type {
+  padding-right: 0 !important;
+}
+
+.incomplete-submit-panel p {
+  color: #8a4b18 !important;
+}
+
+.incomplete-submit-panel .primary {
+  background: #d97706 !important;
+  border-color: #b45309 !important;
+  color: white !important;
+}
+
+.panel-close-button {
+  top: .72rem !important;
+  right: .72rem !important;
+  display: grid !important;
+  place-items: center !important;
+  line-height: 1 !important;
+  border-color: rgba(180, 83, 9, .22) !important;
+  color: #92400e !important;
+  background: rgba(255, 255, 255, .86) !important;
+}
+
+.panel-close-button:hover {
+  background: #ffedd5 !important;
+}
+
+.review-loading-button {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #e8eef8 !important;
+  color: #526173 !important;
+  border-color: #d1dae8 !important;
+  isolation: isolate;
+}
+
+.review-loading-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  transform: translateX(-100%);
+  animation: bq-review-button-sheen 1.55s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.review-loading-button::after {
+  content: "" !important;
+  position: relative;
+  z-index: 1;
+  width: 1.7rem !important;
+  height: .42rem !important;
+  margin-left: .72rem !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background:
+    radial-gradient(circle, #526173 58%, transparent 62%) 0 50% / .42rem .42rem no-repeat,
+    radial-gradient(circle, #7b8794 58%, transparent 62%) 50% 50% / .42rem .42rem no-repeat,
+    radial-gradient(circle, #a3acb8 58%, transparent 62%) 100% 50% / .42rem .42rem no-repeat !important;
+  box-shadow: none !important;
+  animation: bq-review-wait-dots 1.05s ease-in-out infinite !important;
+}
+
+@keyframes bq-review-button-sheen {
+  45%, 100% { transform: translateX(100%); }
+}
+
+@keyframes bq-review-wait-dots {
+  0%, 100% { opacity: .46; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1px); }
+}
+
+.grade-waiting-card {
+  border-color: #c7d2fe !important;
+  background: #f5f7ff !important;
+  color: #354064 !important;
+  box-shadow: none !important;
+}
+
+.review-quiz-layout .top-bar {
+  grid-template-columns: 1fr !important;
+}
+
+.review-quiz-layout .compact-actions > .actions button {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #172033 !important;
+}
+
+.review-quiz-layout .compact-actions > .actions button:disabled {
+  background: #edf1f6 !important;
+  border-color: #d8dee8 !important;
+  color: #8a94a6 !important;
+}
+
+.read-only-question-fieldset:disabled .bq-ordering-rebuilt .draggable-order-item {
+  grid-template-columns: minmax(0, 1fr) !important;
+  cursor: default !important;
+}
+
+.read-only-question-fieldset:disabled .bq-ordering-rebuilt .draggable-order-item:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging)::before,
+.bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging)::after {
+  content: none !important;
+  display: none !important;
+}
+
+.bq-ordering-rebuilt .draggable-order-item.drag-over:not(.dragging),
+.bq-ordering-rebuilt .draggable-order-item.drop-before:not(.dragging),
+.bq-ordering-rebuilt .draggable-order-item.drop-after:not(.dragging) {
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, .10) !important;
+}
+
+@media (max-width: 640px) {
+  .nav-card {
+    padding: .55rem .6rem !important;
+  }
+
+  .question-dots {
+    gap: .32rem !important;
+    padding: .12rem !important;
+  }
+}
