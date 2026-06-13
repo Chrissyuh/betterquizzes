@@ -176,6 +176,18 @@ async function runSmoke() {
   assert(stagedStarted.result.structuredContent.capabilities?.recoveryTool === "open_quiz", "start_quiz capabilities should name open_quiz only as the recovery tool");
   assert(stagedStarted.result.structuredContent.workflow?.some((step) => step.includes("open_quiz")), "start_quiz should return the canonical workflow");
   assert(stagedStarted.result.structuredContent.validationPolicy?.includes("add_question validates"), "start_quiz should expose validation policy");
+  const duplicateStarted = await rpc("tools/call", {
+    name: "start_quiz",
+    arguments: {
+      title: "Staged Builder Smoke",
+      topic: "QA",
+      quizId: "staged-builder-smoke",
+      expectedQuestionCount: 3
+    }
+  });
+  assert(duplicateStarted.result.structuredContent.duplicateStartIgnored === true, "duplicate empty start_quiz should be ignored");
+  assert(duplicateStarted.result.structuredContent.draftId === stagedDraftId, "duplicate empty start_quiz should return the existing draftId");
+  assert(duplicateStarted.result.structuredContent.next?.includes("Do not call start_quiz again"), "duplicate start_quiz response should direct the model away from another start_quiz call");
   const compatibilityStarted = await rpc("tools/call", {
     name: "start_quiz",
     arguments: {
@@ -208,8 +220,8 @@ async function runSmoke() {
         id: "staged-choice",
         type: "multiple_choice",
         prompt: "Pick the checked path.",
-        choices: ["Builder", "Legacy"],
-        answer: 0
+        choices: [{ id: "builder", text: "Builder" }, { id: "legacy", text: "Legacy" }],
+        answer: { choiceId: "builder" }
       }
     }
   });
@@ -221,6 +233,7 @@ async function runSmoke() {
   assert(firstAdd.result.structuredContent.safeToPresentToUser === true, "add_first_question should clearly mark renderer-safe launch packets");
   assert(firstAdd.result.structuredContent.launchStatus === "building", "partial add_first_question launch should report building status");
   assert(firstAdd.result._meta?.ui?.route === "quiz", "add_first_question should carry widget launch metadata");
+  assert(firstAdd.result._meta?.quiz?.questions?.[0]?.answer === 0, "choiceId answer objects should normalize to zero-based indexes");
   assert(!JSON.stringify(firstAdd.result.structuredContent.warnings || []).includes("normalized"), "launch warnings should not include routine normalization messages");
   assert(Array.isArray(firstAdd.result.structuredContent.normalizations), "launch should expose normalizations separately from warnings");
 

@@ -410,6 +410,17 @@ function normalizeChoices(choices: unknown[], index: number, warnings: string[])
 
 function normalizeChoiceAnswer(answer: unknown, normalizedChoices: NormalizedChoices, warnings: string[], questionIndex: number): unknown {
   if (typeof answer === "number" && Number.isInteger(answer)) return answer;
+  if (isRecord(answer)) {
+    const candidate = answer.choiceId ?? answer.id ?? answer.value ?? answer.label ?? answer.text;
+    if (typeof candidate === "string" || typeof candidate === "number" || typeof candidate === "boolean") {
+      const normalized = normalizeChoiceAnswer(String(candidate), normalizedChoices, warnings, questionIndex);
+      if (typeof normalized === "number") {
+        warnings.push(`questions[${questionIndex}]: normalized object choice answer to zero-based index ${normalized}.`);
+        return normalized;
+      }
+    }
+    return answer;
+  }
   if (typeof answer !== "string") return answer;
 
   const trimmed = answer.trim();

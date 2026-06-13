@@ -8,6 +8,7 @@ const types = readFileSync("src/shared/types.ts", "utf8");
 const render = readFileSync("src/shared/renderContract.ts", "utf8");
 const submission = readFileSync("src/shared/submission.ts", "utf8");
 const bridge = readFileSync("src/host/openaiBridge.ts", "utf8");
+const sharedGuidance = readFileSync("mcp/shared-authoring-guidance.mjs", "utf8");
 
 function assert(value, message) {
   if (!value) throw new Error(message);
@@ -15,7 +16,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v70-review-gating.html"'), "review gating must use a v70 widget URI so ChatGPT does not reuse the v69 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v71-discovery-guard.html"'), "discovery guard must use a v71 widget URI so ChatGPT does not reuse the v70 cached resource");
+assert(remote.includes("betterquizzes-v70-review-gating.html"), "v70 review-gating URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v69-review-polish.html"), "v69 review-polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v68-mobile-dot-fix.html"), "v68 mobile-dot-fix URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v67-screenshot-polish.html"), "v67 screenshot-polish URI must remain available as a compatibility alias");
@@ -80,6 +82,10 @@ assert(remote.includes("REPAIR_QUESTION_INPUT_SCHEMA") && remote.includes('requi
 assert(remote.includes("SUPPORTED_QUESTION_TYPE_VALUES") && remote.includes("Use multi_select, not multiple_select"), "builder schemas must expose supported question types and the multiple_select correction");
 assert(remote.includes("Unsupported question type:") && remote.includes("prepareQuizForRender({"), "add_question must validate renderer compatibility before storing questions");
 assert(remote.includes("start_quiz with expectedQuestionCount") && remote.includes("Do not send chat progress/check-in messages while authoring"), "model instructions must prefer quiet staged authoring");
+assert(remote.includes("If a narrowed tool/resource search shows start_quiz but hides add_first_question/add_question") && sharedGuidance.includes("Re-query BetterQuizzes for add_first_question or add_question"), "model instructions must recover from narrowed tool discovery without repeated start_quiz calls");
+assert(remote.includes("QUESTION_AUTHORING_DISCOVERY_TEXT") && remote.includes("Question authoring supports these type values") && remote.includes("{choiceId} objects are accepted"), "question-authoring discovery text must live on add_first_question/add_question");
+assert(remote.includes("Duplicate empty draft start detected") && remote.includes("v23FindDuplicateEmptyStartDraft"), "start_quiz must guard exact duplicate empty draft creation");
+assert(render.includes("normalized object choice answer to zero-based index") && remote.includes("normalized object choice answer to zero-based index"), "choiceId answer objects must normalize to zero-based answer indexes");
 assert(remote.includes("globalThis.__betterQuizzesV23LatestDraftId") && remote.includes("Accepted question stored"), "add_question must store accepted questions continuously");
 assert(remote.includes('name: "open_quiz"') && remote.includes("OPEN_TOOL_ANNOTATIONS") && remote.includes("idempotentHint: true"), "open_quiz must be a stable idempotent launch tool");
 assert(remote.includes("v23SyncLaunchedDraft") && remote.includes('name: "add_first_question"') && remote.includes("launch exactly one widget"), "staged authoring must launch from add_first_question");
@@ -145,7 +151,7 @@ assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronge
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
 assert(styles.includes("bq-question-arrival-v69") && styles.includes("1.55s cubic-bezier"), "new questions must use slower V69 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v70-review-gating.html"), "skip removal and review gating must ship with a widget URI cache bust");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v71-discovery-guard.html"), "skip removal and discovery guard must ship with a widget URI cache bust");
 assert(!app.includes("quiz.description ? <RichBlock") && styles.includes("V68 screenshot polish"), "quiz descriptions must stay hidden and mobile screenshot compaction CSS must exist");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
