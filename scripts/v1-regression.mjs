@@ -15,7 +15,8 @@ function assert(value, message) {
 
 assert(remote.includes('const VERSION = "V1"'), "server version must be V1");
 assert(/const RESOURCE_URI = "ui:\/\/widget\/[^"\n]*betterquiz[^"\n]*";/.test(remote), "resource URI must cache-bust for V1 patch 2");
-assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v68-mobile-dot-fix.html"'), "mobile dot sizing fixes must use a v68 widget URI so ChatGPT does not reuse the v67 cached resource");
+assert(remote.includes('const RESOURCE_URI = "ui://widget/betterquizzes-v69-review-polish.html"'), "review polish must use a v69 widget URI so ChatGPT does not reuse the v68 cached resource");
+assert(remote.includes("betterquizzes-v68-mobile-dot-fix.html"), "v68 mobile-dot-fix URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v67-screenshot-polish.html"), "v67 screenshot-polish URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v66-refresh-grace.html"), "v66 refresh-grace URI must remain available as a compatibility alias");
 assert(remote.includes("betterquizzes-v65-final-hardening.html"), "v65 final-hardening URI must remain available as a compatibility alias");
@@ -42,6 +43,7 @@ assert(app.includes("isConfidenceRequiredForQuestion(question, displayPolicy) &&
 assert(!app.includes("Answer this question to choose confidence.") && app.includes("Confidence unlocks after you answer."), "confidence locked copy must stay concise and non-demanding");
 assert(app.includes("function OrderingInput") && app.includes("bqV61OrderingRebuild") && app.includes("data-ordering-mode") && app.includes("draggable={false}") && app.includes("moveByStep"), "ordering questions must support rebuilt separate desktop/mobile sorting with fallback controls");
 assert(app.includes("x: 0,") && styles.includes("transform: translate3d(0, var(--drag-y, 0), 0)"), "ordering drag visual movement must be vertically clamped");
+assert(app.includes("getClampedOrderingDragClientY") && app.includes("draggedMidY") && app.includes('document.visibilityState !== "visible"'), "ordering drag must clamp inside list bounds, switch by dragged-row midpoint, and end on focus/visibility loss");
 assert(app.includes("questionIndex={currentIndex}") && app.includes("Question {questionIndex + 1} of {visibleTotal}"), "question cards must show a stable question number label");
 assert(app.includes("suppressAutoScrollUntilRef") && app.includes("rail.scrollBy({ left: step * direction"), "question number rail must auto-scroll without fighting manual scroll");
 assert(app.includes("const shouldShowQuestionNav = quiz.questions.length > 1 || Boolean(generationStatus)"), "question navigation must show when a one-question staged quiz expects more questions");
@@ -50,10 +52,14 @@ assert(app.includes("const submitLooksReady = allQuestionsDone"), "submit button
 assert(app.includes("incompleteSubmitPrompt") && app.includes("Submit anyway") && app.includes("Review unfinished"), "incomplete optional submissions must ask for confirmation");
 assert(app.includes("panel-close-button") && app.includes("closeOnOutsidePointer") && app.includes('event.key === "Escape"') && styles.includes("background: #fff7ed") && styles.includes("grid-template-columns: repeat(2, minmax(0, 1fr))"), "incomplete submit warning must be soft, full-width, and dismissible");
 assert(app.includes("function ReviewQuizScreen") && app.includes("buildReviewDraftsFromSubmission") && app.includes("readOnly") && app.includes("Back to results"), "submitted quizzes must support read-only review mode");
+assert(app.includes("buildQuestionGradeMap") && app.includes("questionGradeMarks") && app.includes("question-grade-feedback"), "review mode must render per-question recorded grade feedback");
+assert(styles.includes(".dot.grade-correct") && styles.includes(".dot.grade-incorrect") && styles.includes(".dot.grade-partially-correct") && styles.includes(".dot.grade-needs-review"), "review question dots must be color-coded by recorded grade status");
+assert(styles.includes(".read-only-question-fieldset:disabled .match-row") && styles.includes(".read-only-question-fieldset:disabled .field-label textarea"), "read-only review mode must grey out non-choice answer surfaces");
 assert(app.includes("getFriendlyFollowUpMessage") && !app.includes("{finished.followUpMessage ?? \"Still trying to send your answers for feedback.\"}"), "post-submit page must avoid technical follow-up messages");
 assert(!app.includes("Answers saved") && !app.includes("Feedback requested") && !app.includes("Waiting for feedback to appear"), "post-submit page must avoid the old technical status chips");
 assert(app.includes("generation-status-strip") && app.includes("Questions are being added:"), "incremental generation must use a compact status strip");
 assert(app.includes("planned-question") && styles.includes(".question-dots .planned-question"), "incremental generation must show planned question placeholders in the question bar");
+assert(styles.includes("--bq-dot-size") && styles.includes("bq-question-number-fade-v69") && styles.includes("bq-planned-question-fade-v69"), "planned question placeholders must match real dot dimensions and fade in without vertical fly-in");
 assert(!app.includes("className=\"card question-card build-next-card\""), "incremental generation must not render the old end-card");
 assert(app.includes("const [submitAttempted, setSubmitAttempted]") && app.includes("revealRequiredStatus={submitAttempted}"), "required validation styling must wait until submit is attempted");
 assert(app.includes("disabled={submitting}") && !app.includes("disabled={submitting || !canSubmit}"), "submit must remain clickable so missing required items can show delayed feedback");
@@ -135,10 +141,12 @@ assert(styles.includes("bq-staged-dot-arrival-v19"), "question dots must have st
 assert(styles.includes("bq-card-arrival-v19"), "question cards must have stronger arrival animation");
 assert(styles.includes("bq-ai-ellipsis-v19"), "AI still-generating ellipsis animation must exist");
 assert(styles.includes("bq-question-arrival-v46") && styles.includes("1.35s cubic-bezier"), "new questions must use slower V46 arrival animation");
-assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v68-mobile-dot-fix.html"), "skip removal and mobile dot sizing must ship with a widget URI cache bust");
+assert(styles.includes("bq-question-arrival-v69") && styles.includes("1.55s cubic-bezier"), "new questions must use slower V69 arrival animation");
+assert(!app.includes("Skip this quiz") && remote.includes("betterquizzes-v69-review-polish.html"), "skip removal and review polish must ship with a widget URI cache bust");
 assert(!app.includes("quiz.description ? <RichBlock") && styles.includes("V68 screenshot polish"), "quiz descriptions must stay hidden and mobile screenshot compaction CSS must exist");
 
 assert(remote.includes('name: "record_grade"'), "record_grade tool must be exposed");
+assert(remote.includes("partially_correct") && remote.includes("Prefer omitting correct items") && remote.includes("normalizeGradeMark"), "record_grade must document and normalize per-question review marks");
 assert(remote.includes("const grades = new Map();"), "server must store recorded grades");
 assert(remote.includes('url.pathname.startsWith("/api/grade/")') && remote.includes("requireQuizRecoveryAccess(url, quizId)"), "server must expose token-scoped grade polling endpoint");
 assert(app.includes("fetchGradeFromServer"), "widget must poll for recorded grades");

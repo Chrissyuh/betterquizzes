@@ -21,7 +21,7 @@ Expected behavior:
 - `add_first_question` opens exactly one widget.
 - ChatGPT does not ask for extra permission to create the first question or later questions after the user requested the quiz.
 - Later questions appear in the same widget; no duplicate loading widgets appear.
-- After the reviewer answers and submits the widget, ChatGPT receives `submit_answers`, grades from the `SubmissionCapsule`, calls `record_grade`, and does not recreate the quiz.
+- After the reviewer answers and submits the widget, ChatGPT receives `submit_answers`, grades from the `SubmissionCapsule`, calls `record_grade`, and does not recreate the quiz. `record_grade.items` should use `questionId` plus `mark`/`status` values of `correct`, `incorrect`, `partially_correct`, or `needs_review`; include feedback mainly for incorrect, partial, or needs-review questions so review mode can highlight them.
 - Run each positive prompt in a fresh web chat and at least one on mobile before resubmission.
 
 ## Negative prompts

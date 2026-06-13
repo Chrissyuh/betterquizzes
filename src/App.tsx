@@ -135,8 +135,26 @@ type GradePayload = {
   percent?: number | null;
   label?: string;
   summary?: string;
-  items?: { questionId?: string; mark?: string; feedback?: string; points?: number | null; maxPoints?: number | null }[];
+  items?: GradePayloadItem[];
   recordedAt?: string;
+};
+
+type GradePayloadItem = {
+  questionId?: string;
+  mark?: string;
+  status?: string;
+  feedback?: string;
+  points?: number | null;
+  maxPoints?: number | null;
+};
+
+type ReviewGradeStatus = "correct" | "incorrect" | "partially_correct" | "needs_review";
+
+type ReviewQuestionGrade = {
+  status: ReviewGradeStatus;
+  feedback?: string;
+  points?: number | null;
+  maxPoints?: number | null;
 };
 
 type PendingLaunch = {
@@ -622,6 +640,52 @@ async function fetchGradeFromServer(quizId: string, sessionId?: string, recovery
     return record.grade ?? null;
   }
   return null;
+}
+
+function normalizeReviewGradeStatus(value: unknown): ReviewGradeStatus {
+  const key = String(value ?? "needs_review").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["correct", "right", "yes", "true", "passed", "pass", "full_credit"].includes(key)) return "correct";
+  if (["incorrect", "wrong", "no", "false", "missed", "fail", "failed", "no_credit"].includes(key)) return "incorrect";
+  if (["partial", "partially_correct", "partly_correct", "partial_credit", "partially_right"].includes(key)) return "partially_correct";
+  return "needs_review";
+}
+
+function gradeStatusClassName(status: ReviewGradeStatus): string {
+  return `grade-${status.replace("_", "-")}`;
+}
+
+function buildQuestionGradeMap(grade: GradePayload | null): Map<string, ReviewQuestionGrade> {
+  const map = new Map<string, ReviewQuestionGrade>();
+  for (const item of grade?.items ?? []) {
+    const questionId = String(item?.questionId ?? "").trim();
+    if (!questionId) continue;
+    map.set(questionId, {
+      status: normalizeReviewGradeStatus(item.mark ?? item.status),
+      feedback: typeof item.feedback === "string" ? item.feedback.trim() : "",
+      points: item.points ?? null,
+      maxPoints: item.maxPoints ?? null,
+    });
+  }
+  return map;
+}
+
+function shouldShowQuestionGradeFeedback(grade: ReviewQuestionGrade | undefined): grade is ReviewQuestionGrade {
+  if (!grade) return false;
+  if (grade.status === "correct") return false;
+  return Boolean(grade.feedback?.trim());
+}
+
+function formatReviewGradeStatus(status: ReviewGradeStatus): string {
+  switch (status) {
+    case "correct":
+      return "Correct";
+    case "incorrect":
+      return "Incorrect";
+    case "partially_correct":
+      return "Partially correct";
+    case "needs_review":
+      return "Needs review";
+  }
 }
 
 function describeServerBases(): string {
@@ -1262,7 +1326,7 @@ function QuizRunner({
       {shouldShowQuestionNav ? <QuestionNav questions={quiz.questions} expectedQuestionCount={generationStatus?.expected} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={arrivingQuestionIds} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} onSelect={goToQuestion} /> : null}
 
       <section className="main-column">
-        <QuestionCard question={current} questionIndex={currentIndex} questionCount={quiz.questions.length} plannedQuestionCount={progressTotal} draft={drafts[current.id]} isArriving={arrivingQuestionIds.has(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onChange={(draft) => updateDraft(current.id, draft)} />
+        <QuestionCard question={current} questionIndex={currentIndex} questionCount={quiz.questions.length} plannedQuestionCount={progressTotal} draft={drafts[current.id]} isArriving={arrivingQuestionIds.has(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus={submitAttempted} quizChoiceBehavior={quiz.choiceBehavior} onTypingQuestionTabNext={currentIndex < quiz.questions.length - 1 ? () => goToQuestion(currentIndex + 1) : undefined} onChange={(draft) => updateDraft(current.id, draft)} />
         {submitAttempted && error ? <div className="notice-box" role="status">{error}</div> : null}
         {incompleteSubmitPrompt ? (
           <section ref={incompleteSubmitPromptRef} className="incomplete-submit-panel" role="alert" aria-live="assertive">
@@ -1300,6 +1364,7 @@ function QuestionNav({
   drafts,
   currentIndex,
   arrivingQuestionIds,
+  gradeMarks,
   displayPolicy,
   activityPolicy,
   revealRequiredStatus,
@@ -1310,6 +1375,7 @@ function QuestionNav({
   drafts: Record<string, DraftAnswer>;
   currentIndex: number;
   arrivingQuestionIds: Set<string>;
+  gradeMarks?: Map<string, ReviewQuestionGrade>;
   displayPolicy: DisplayPolicy;
   activityPolicy: ActivityPolicy;
   revealRequiredStatus: boolean;
@@ -1355,7 +1421,8 @@ function QuestionNav({
       <div ref={railRef} className="question-dots" onWheel={markManualQuestionRailScroll} onPointerDown={markManualQuestionRailScroll} onTouchStart={markManualQuestionRailScroll}>
         {questions.map((question, index) => {
           const status = getQuestionStatus(question, drafts[question.id], displayPolicy, activityPolicy, revealRequiredStatus);
-          return <button key={question.id} type="button" className={`dot ${index === currentIndex ? "active" : ""} ${arrivingQuestionIds.has(question.id) ? "new-question" : ""} ${status}`} onClick={() => onSelect(index)}>{index + 1}</button>;
+          const gradeClass = gradeMarks?.get(question.id) ? gradeStatusClassName(gradeMarks.get(question.id)?.status ?? "needs_review") : "";
+          return <button key={question.id} type="button" className={`dot ${index === currentIndex ? "active" : ""} ${arrivingQuestionIds.has(question.id) ? "new-question" : ""} ${status} ${gradeClass}`} onClick={() => onSelect(index)}>{index + 1}</button>;
         })}
         {Array.from({ length: placeholderCount }, (_, index) => (
           <span key={`planned-${questions.length + index + 1}`} className="dot planned-question" aria-hidden="true" />
@@ -1365,7 +1432,7 @@ function QuestionNav({
   );
 }
 
-function QuestionCard({ question, questionIndex, questionCount, plannedQuestionCount, draft, isArriving = false, readOnly = false, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onChange }: { question: Question; questionIndex: number; questionCount: number; plannedQuestionCount: number; draft: DraftAnswer | undefined; isArriving?: boolean; readOnly?: boolean; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+function QuestionCard({ question, questionIndex, questionCount, plannedQuestionCount, draft, isArriving = false, readOnly = false, questionGrade, displayPolicy, activityPolicy, revealRequiredStatus, quizChoiceBehavior, onTypingQuestionTabNext, onChange }: { question: Question; questionIndex: number; questionCount: number; plannedQuestionCount: number; draft: DraftAnswer | undefined; isArriving?: boolean; readOnly?: boolean; questionGrade?: ReviewQuestionGrade; displayPolicy: DisplayPolicy; activityPolicy: ActivityPolicy; revealRequiredStatus: boolean; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onTypingQuestionTabNext?: () => void; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
   const status = getQuestionStatus(question, draft, displayPolicy, activityPolicy, revealRequiredStatus);
   const required = isQuestionRequired(question, activityPolicy);
   const answerComplete = isQuestionAnswerComplete(question, draft);
@@ -1373,15 +1440,16 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
   const confidenceRequired = isConfidenceRequiredForQuestion(question, displayPolicy);
   const confidenceValue = answerComplete && confidenceEnabled ? normalizeConfidence(draft?.confidence) : undefined;
   const visibleTotal = Math.max(questionCount, plannedQuestionCount);
+  const gradeClass = questionGrade ? `question-${gradeStatusClassName(questionGrade.status)}` : "";
   return (
-    <section className={`card question-card ${isArriving ? "new-question" : ""} ${status}`}>
+    <section className={`card question-card ${isArriving ? "new-question" : ""} ${status} ${gradeClass}`}>
       <div className="question-header">
         <span className="question-meta-label question-number-label">Question {questionIndex + 1} of {visibleTotal}</span>
         {!required ? <span className="question-meta-label">Optional</span> : null}
       </div>
       <h2><RichInline text={question.prompt} /></h2>
       <fieldset className="read-only-question-fieldset" disabled={readOnly} aria-label={readOnly ? "Submitted answer review" : undefined}>
-        <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onChange={readOnly ? () => undefined : onChange} />
+        <QuestionInput question={question} draft={draft} quizChoiceBehavior={question.choiceBehavior ?? quizChoiceBehavior} onTypingQuestionTabNext={onTypingQuestionTabNext} onChange={readOnly ? () => undefined : onChange} />
         {confidenceEnabled ? <section className={answerComplete ? "confidence-section unlocked" : "confidence-section locked"}>
           <div>
             <p className="confidence-heading">Confidence</p>
@@ -1390,12 +1458,18 @@ function QuestionCard({ question, questionIndex, questionCount, plannedQuestionC
           <ConfidencePicker value={confidenceValue} required={confidenceRequired && revealRequiredStatus} disabled={!answerComplete || readOnly} onChange={(confidence) => onChange({ confidence })} />
         </section> : null}
       </fieldset>
+      {readOnly && shouldShowQuestionGradeFeedback(questionGrade) ? (
+        <section className={`question-grade-feedback ${gradeStatusClassName(questionGrade.status)}`}>
+          <strong>{formatReviewGradeStatus(questionGrade.status)}</strong>
+          <p>{questionGrade.feedback}</p>
+        </section>
+      ) : null}
       {readOnly ? <p className="review-mode-note">Review mode: submitted answers cannot be changed.</p> : null}
     </section>
   );
 }
 
-function QuestionInput({ question, draft, quizChoiceBehavior, onChange }: { question: Question; draft: DraftAnswer | undefined; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
+function QuestionInput({ question, draft, quizChoiceBehavior, onTypingQuestionTabNext, onChange }: { question: Question; draft: DraftAnswer | undefined; quizChoiceBehavior?: QuizSpec["choiceBehavior"]; onTypingQuestionTabNext?: () => void; onChange: (draft: Partial<DraftAnswer>) => void }): ReactElement {
   const response = draft?.response;
   if ((question as { type?: unknown }).type === "text_select") {
     return <QuestionRenderWarning question={question} detail="Text-select questions are not available in BetterQuizzes V1. Ask ChatGPT to replace this question with a supported type." />;
@@ -1408,17 +1482,17 @@ function QuestionInput({ question, draft, quizChoiceBehavior, onChange }: { ques
     case "true_false":
       return <TrueFalseList selected={typeof response === "boolean" ? response : null} onSelect={(value) => onChange({ response: value })} />;
     case "fill_blank":
-      return <TextField label="Your answer" placeholder={question.placeholder ?? "Type your answer..."} value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={(question as { formatting?: boolean }).formatting === true} onChange={(value) => onChange({ response: value })} />;
+      return <TextField label="Your answer" placeholder={question.placeholder ?? "Type your answer..."} value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={(question as { formatting?: boolean }).formatting === true} onTabNext={onTypingQuestionTabNext} onChange={(value) => onChange({ response: value })} />;
     case "short_answer":
-      return <TextArea label="Short answer" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={(question as { formatting?: boolean }).formatting === true} onChange={(value) => onChange({ response: value })} />;
+      return <TextArea label="Short answer" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={(question as { formatting?: boolean }).formatting === true} onTabNext={onTypingQuestionTabNext} onChange={(value) => onChange({ response: value })} />;
     case "long_response":
-      return <TextArea label="Long response" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={(question as { formatting?: boolean }).formatting === true} onChange={(value) => onChange({ response: value })} rows={8} />;
+      return <TextArea label="Long response" value={typeof response === "string" ? response : ""} responseLimit={getResponseLimit(question)} formatting={(question as { formatting?: boolean }).formatting === true} onTabNext={onTypingQuestionTabNext} onChange={(value) => onChange({ response: value })} rows={8} />;
     case "multi_typing":
-      return <MultiTypingInput question={question} response={isMultiTypingResponse(response) ? response : {}} onChange={(value) => onChange({ response: value })} />;
+      return <MultiTypingInput question={question} response={isMultiTypingResponse(response) ? response : {}} onTabNext={onTypingQuestionTabNext} onChange={(value) => onChange({ response: value })} />;
     case "multi_write_vertical":
-      return <MultiWriteVerticalInput question={question} response={isMultiTypingResponse(response) ? response : {}} onChange={(value) => onChange({ response: value })} />;
+      return <MultiWriteVerticalInput question={question} response={isMultiTypingResponse(response) ? response : {}} onTabNext={onTypingQuestionTabNext} onChange={(value) => onChange({ response: value })} />;
     case "numeric":
-      return <TextField label={question.unit ? `Number (${question.unit})` : "Number"} inputMode="text" value={typeof response === "number" || typeof response === "string" ? String(response) : ""} onChange={(value) => onChange({ response: value })} />;
+      return <TextField label={question.unit ? `Number (${question.unit})` : "Number"} inputMode="text" value={typeof response === "number" || typeof response === "string" ? String(response) : ""} onTabNext={onTypingQuestionTabNext} onChange={(value) => onChange({ response: value })} />;
     case "ordering":
       return <OrderingInput question={question} response={Array.isArray(response) ? response.filter((item): item is string => typeof item === "string") : []} onChange={(value) => onChange({ response: value })} />;
     case "matching":
@@ -1778,7 +1852,13 @@ type TextFormat = "bold" | "italic" | "underline" | "subscript" | "superscript" 
 
 type TextControlElement = HTMLInputElement | HTMLTextAreaElement;
 
-function TextField({ label, value, onChange, placeholder, inputMode, responseLimit, formatting = false }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; inputMode?: "decimal" | "text"; responseLimit?: ResponseLimit | null; formatting?: boolean }): ReactElement {
+function handleTypingQuestionTab(event: ReactKeyboardEvent<TextControlElement>, onTabNext?: () => void): void {
+  if (event.key !== "Tab" || event.shiftKey || !onTabNext) return;
+  event.preventDefault();
+  onTabNext();
+}
+
+function TextField({ label, value, onChange, placeholder, inputMode, responseLimit, formatting = false, onTabNext }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; inputMode?: "decimal" | "text"; responseLimit?: ResponseLimit | null; formatting?: boolean; onTabNext?: () => void }): ReactElement {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const maxChars = getMaxChars(responseLimit);
   const limitedValue = clampTextToLimit(value, maxChars);
@@ -1788,14 +1868,14 @@ function TextField({ label, value, onChange, placeholder, inputMode, responseLim
   return (
     <label className="field-label">
       <span>{label}</span>
-      <input ref={inputRef} autoComplete="off" inputMode={inputMode} value={limitedValue} maxLength={maxChars ?? undefined} placeholder={placeholder} onChange={(event) => onChange(clampTextToLimit(event.currentTarget.value, maxChars))} />
+      <input ref={inputRef} autoComplete="off" inputMode={inputMode} value={limitedValue} maxLength={maxChars ?? undefined} placeholder={placeholder} onKeyDown={(event) => handleTypingQuestionTab(event, onTabNext)} onChange={(event) => onChange(clampTextToLimit(event.currentTarget.value, maxChars))} />
       {formatting ? <TextFormatToolbar onFormat={apply} /> : null}
       {shouldShowCharCounter(responseLimit, maxChars) ? <span className="char-counter">{limitedValue.length} / {maxChars}</span> : null}
     </label>
   );
 }
 
-function TextArea({ label, value, onChange, rows = 4, responseLimit, formatting = false, placeholder = "Write your answer..." }: { label: string; value: string; onChange: (value: string) => void; rows?: number; responseLimit?: ResponseLimit | null; formatting?: boolean; placeholder?: string }): ReactElement {
+function TextArea({ label, value, onChange, rows = 4, responseLimit, formatting = false, placeholder = "Write your answer...", onTabNext }: { label: string; value: string; onChange: (value: string) => void; rows?: number; responseLimit?: ResponseLimit | null; formatting?: boolean; placeholder?: string; onTabNext?: () => void }): ReactElement {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const maxChars = getMaxChars(responseLimit);
   const limitedValue = clampTextToLimit(value, maxChars);
@@ -1814,7 +1894,7 @@ function TextArea({ label, value, onChange, rows = 4, responseLimit, formatting 
   return (
     <label className="field-label">
       <span>{label}</span>
-      <textarea ref={textAreaRef} className="text-area no-horizontal-resize auto-text-area" rows={rows} value={limitedValue} maxLength={maxChars ?? undefined} placeholder={placeholder} onChange={(event) => onChange(clampTextToLimit(event.currentTarget.value, maxChars))} />
+      <textarea ref={textAreaRef} className="text-area no-horizontal-resize auto-text-area" rows={rows} value={limitedValue} maxLength={maxChars ?? undefined} placeholder={placeholder} onKeyDown={(event) => handleTypingQuestionTab(event, onTabNext)} onChange={(event) => onChange(clampTextToLimit(event.currentTarget.value, maxChars))} />
       {formatting ? <TextFormatToolbar onFormat={apply} /> : null}
       {shouldShowCharCounter(responseLimit, maxChars) ? <span className="char-counter">{limitedValue.length} / {maxChars}</span> : null}
     </label>
@@ -1993,7 +2073,7 @@ function buildMathAlphanumericReverseMap(style: "bold" | "italic"): Record<strin
 
 
 
-function MultiTypingInput({ question, response, onChange }: { question: Extract<Question, { type: "multi_typing" }>; response: Record<string, string>; onChange: (value: Record<string, string>) => void }): ReactElement {
+function MultiTypingInput({ question, response, onChange, onTabNext }: { question: Extract<Question, { type: "multi_typing" }>; response: Record<string, string>; onChange: (value: Record<string, string>) => void; onTabNext?: () => void }): ReactElement {
   const fields = getMultiTypingFields(question);
   if (fields.length < 2) return <QuestionRenderWarning question={question} detail="This multi-typing question needs at least two fields." />;
 
@@ -2003,13 +2083,14 @@ function MultiTypingInput({ question, response, onChange }: { question: Extract<
 
   return (
     <div className="multi-typing-grid">
-      {fields.map((field) => (
+      {fields.map((field, index) => (
         <TextField
           key={field.id}
           label={field.label}
           value={typeof response[field.id] === "string" ? response[field.id] : ""}
           placeholder={field.placeholder ?? `Type ${field.label.toLowerCase()}...`}
           responseLimit={field.responseLimit ?? getResponseLimit(question)}
+          onTabNext={index === fields.length - 1 ? onTabNext : undefined}
           onChange={(value) => updateField(field.id, value)}
         />
       ))}
@@ -2017,7 +2098,7 @@ function MultiTypingInput({ question, response, onChange }: { question: Extract<
   );
 }
 
-function MultiWriteVerticalInput({ question, response, onChange }: { question: Extract<Question, { type: "multi_write_vertical" }>; response: Record<string, string>; onChange: (value: Record<string, string>) => void }): ReactElement {
+function MultiWriteVerticalInput({ question, response, onChange, onTabNext }: { question: Extract<Question, { type: "multi_write_vertical" }>; response: Record<string, string>; onChange: (value: Record<string, string>) => void; onTabNext?: () => void }): ReactElement {
   const fields = getMultiTypingFields(question);
   if (fields.length < 1) return <QuestionRenderWarning question={question} detail="This multi-write vertical question needs at least one field." />;
 
@@ -2027,7 +2108,7 @@ function MultiWriteVerticalInput({ question, response, onChange }: { question: E
 
   return (
     <div className="multi-write-vertical">
-      {fields.map((field) => (
+      {fields.map((field, index) => (
         <TextArea
           key={field.id}
           label={field.label}
@@ -2035,6 +2116,7 @@ function MultiWriteVerticalInput({ question, response, onChange }: { question: E
           placeholder={field.placeholder ?? "Write " + field.label.toLowerCase() + "..."}
           responseLimit={field.responseLimit ?? getResponseLimit(question)}
           rows={3}
+          onTabNext={index === fields.length - 1 ? onTabNext : undefined}
           onChange={(value) => updateField(field.id, value)}
         />
       ))}
@@ -2185,6 +2267,22 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     setOrderingDragScrollLock(false);
   }, []);
 
+  useEffect(() => {
+    if (!draggedId) return;
+    const endOnFocusLoss = () => finishDrag();
+    const endOnVisibilityLoss = () => {
+      if (document.visibilityState !== "visible") finishDrag();
+    };
+    window.addEventListener("blur", endOnFocusLoss);
+    window.addEventListener("pointercancel", endOnFocusLoss);
+    document.addEventListener("visibilitychange", endOnVisibilityLoss);
+    return () => {
+      window.removeEventListener("blur", endOnFocusLoss);
+      window.removeEventListener("pointercancel", endOnFocusLoss);
+      document.removeEventListener("visibilitychange", endOnVisibilityLoss);
+    };
+  }, [draggedId]);
+
   if (!items.length) return <QuestionRenderWarning question={question} detail="This ordering question did not include any valid items." />;
 
   const oversizedItem = items.find((item) => !isRenderableOrderingDragText(item.text));
@@ -2223,9 +2321,13 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     const rect = row.getBoundingClientRect();
     const previousOffset = dragVisualOffsetRef.current;
     const baseTop = rect.top - (previousOffset?.y ?? 0);
+    const listRect = listRef.current?.getBoundingClientRect();
+    const rawY = active.currentY - active.grabOffsetY - baseTop;
+    const minY = listRect ? listRect.top - baseTop : rawY;
+    const maxY = listRect ? listRect.bottom - row.offsetHeight - baseTop : rawY;
     setOrderingDragVisualOffset({
       x: 0,
-      y: active.currentY - active.grabOffsetY - baseTop,
+      y: Math.max(minY, Math.min(maxY, rawY)),
     });
   }
 
@@ -2267,6 +2369,15 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
     commit(next);
   }
 
+  function getClampedOrderingDragClientY(active: OrderingDragState, clientY: number): number {
+    const row = getOrderingRow(active.id);
+    const listRect = listRef.current?.getBoundingClientRect();
+    if (!row || !listRect) return clientY;
+    const minY = listRect.top + active.grabOffsetY;
+    const maxY = listRect.bottom - row.offsetHeight + active.grabOffsetY;
+    return Math.max(minY, Math.min(maxY, clientY));
+  }
+
   function insertionIndexFromPoint(_clientX: number, clientY: number, sourceId: string): number {
     const list = listRef.current;
     const currentOrder = orderRef.current.length ? orderRef.current : order;
@@ -2274,11 +2385,14 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
 
     const rows = Array.from(list.querySelectorAll<HTMLElement>("[data-order-id]")).filter((row) => row.dataset.orderId !== sourceId);
     const listRect = list.getBoundingClientRect();
+    const active = dragRef.current;
+    const activeRow = active ? getOrderingRow(active.id) : null;
+    const draggedMidY = active && activeRow ? clientY - active.grabOffsetY + activeRow.offsetHeight / 2 : clientY;
 
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
       const centerY = listRect.top + row.offsetTop - list.scrollTop + row.offsetHeight / 2;
-      if (clientY < centerY) return index;
+      if (draggedMidY < centerY) return index;
     }
     return rows.length;
   }
@@ -2424,12 +2538,13 @@ function OrderingInput({ question, response, onChange }: { question: Extract<Que
       if (!active.moved && distance < 4) return;
     }
 
+    const clampedClientY = getClampedOrderingDragClientY(active, clientY);
     active.moved = true;
     active.currentX = clientX;
-    active.currentY = clientY;
-    active.lastY = clientY;
+    active.currentY = clampedClientY;
+    active.lastY = clampedClientY;
     event?.preventDefault();
-    const nextDropIndex = insertionIndexFromPoint(clientX, clientY, active.id);
+    const nextDropIndex = insertionIndexFromPoint(clientX, clampedClientY, active.id);
     setDropIndex(nextDropIndex);
     setDropMarker(markerFromInsertionIndex(active.id, nextDropIndex));
     moveToIndex(active.id, nextDropIndex);
@@ -2548,7 +2663,8 @@ function MatchingInput({ question, response, onChange }: { question: Extract<Que
     const selectedRightId = response.find((pair) => pair.leftId === left.id)?.rightId ?? "";
     const selectedByOtherRows = new Set(response.filter((pair) => pair.leftId !== left.id).map((pair) => pair.rightId));
     const visibleRightItems = uniqueRightItems ? rightItems.filter((right) => right.id === selectedRightId || !selectedByOtherRows.has(right.id)) : rightItems;
-    return <label key={left.id} className="match-row"><span><RichInline text={left.text} /></span><select value={selectedRightId} onChange={(event) => setPair(left.id, event.currentTarget.value)}><option value="">Choose match...</option>{visibleRightItems.map((right) => <option key={right.id} value={right.id}>{right.text}</option>)}</select></label>;
+    const selectedRightText = visibleRightItems.find((right) => right.id === selectedRightId)?.text ?? "";
+    return <label key={left.id} className="match-row"><span className="match-left-text" title={left.text}><RichInline text={left.text} /></span><select className="match-select" value={selectedRightId} title={selectedRightText || "Choose match"} aria-label={`Match for ${left.text}`} onChange={(event) => setPair(left.id, event.currentTarget.value)}><option value="">Choose match...</option>{visibleRightItems.map((right) => <option key={right.id} value={right.id}>{right.text}</option>)}</select></label>;
   })}</div>;
 }
 
@@ -2667,12 +2783,37 @@ function ReviewQuizScreen({ quiz, finished, onBack }: { quiz: QuizSpec; finished
   const activityPolicy = normalizeActivityPolicy(quiz.activityPolicy);
   const drafts = useMemo(() => buildReviewDraftsFromSubmission(finished.submission), [finished.submission]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [recordedGrade, setRecordedGrade] = useState<GradePayload | null>(null);
+  const questionGradeMarks = useMemo(() => buildQuestionGradeMap(recordedGrade), [recordedGrade]);
   const current = quiz.questions[currentIndex] ?? quiz.questions[0];
   const total = quiz.questions.length;
 
   useEffect(() => {
     setCurrentIndex((index) => clampIndex(index, total));
   }, [total]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      const grade = await fetchGradeFromServer(finished.submission.quizId, finished.submission.sessionId, finished.recoveryToken).catch(() => null);
+      if (cancelled) return;
+      if (grade) setRecordedGrade(grade);
+    };
+    void poll();
+    const interval = window.setInterval(() => {
+      if (cancelled || attempts >= 24) {
+        window.clearInterval(interval);
+        return;
+      }
+      void poll();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [finished.submission.quizId, finished.submission.sessionId, finished.recoveryToken]);
 
   if (!current) {
     return (
@@ -2690,7 +2831,7 @@ function ReviewQuizScreen({ quiz, finished, onBack }: { quiz: QuizSpec; finished
     <main className="shell quiz-layout review-quiz-layout">
       <section className="top-bar card">
         <div>
-          <p className="eyebrow">Review mode</p>
+          <div className="eyebrow-row"><p className="eyebrow">Review mode</p><span className="version-chip">{WIDGET_VERSION_LABEL}</span></div>
           <h1><RichInline text={quiz.title} /></h1>
           <p>Your submitted answers are shown below. They cannot be changed.</p>
         </div>
@@ -2698,9 +2839,9 @@ function ReviewQuizScreen({ quiz, finished, onBack }: { quiz: QuizSpec; finished
           <button className="primary" type="button" onClick={onBack}>Back to results</button>
         </div>
       </section>
-      {total > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={new Set()} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus onSelect={setCurrentIndex} /> : null}
+      {total > 1 ? <QuestionNav questions={quiz.questions} drafts={drafts} currentIndex={currentIndex} arrivingQuestionIds={new Set()} gradeMarks={questionGradeMarks} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus onSelect={setCurrentIndex} /> : null}
       <section className="main-column">
-        <QuestionCard question={current} questionIndex={currentIndex} questionCount={total} plannedQuestionCount={total} draft={drafts[current.id]} readOnly displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus quizChoiceBehavior={quiz.choiceBehavior} onChange={() => undefined} />
+        <QuestionCard question={current} questionIndex={currentIndex} questionCount={total} plannedQuestionCount={total} draft={drafts[current.id]} readOnly questionGrade={questionGradeMarks.get(current.id)} displayPolicy={displayPolicy} activityPolicy={activityPolicy} revealRequiredStatus quizChoiceBehavior={quiz.choiceBehavior} onTypingQuestionTabNext={currentIndex < total - 1 ? () => setCurrentIndex(currentIndex + 1) : undefined} onChange={() => undefined} />
         <div className={`actions split compact-actions ${total <= 1 ? "single-question-actions" : ""}`}>
           {total > 1 ? (
             <div className="actions">

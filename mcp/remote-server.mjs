@@ -374,7 +374,7 @@ const V23_BUILDER_TOOL_DEFS = [
     inputSchema: ADD_QUESTION_INPUT_SCHEMA,
     outputSchema: BUILDER_OUTPUT_SCHEMA,
     annotations: DRAFT_TOOL_ANNOTATIONS,
-    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v68-mobile-dot-fix.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v68-mobile-dot-fix.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
+    _meta: { ui: { resourceUri: "ui://widget/betterquizzes-v69-review-polish.html", visibility: ["model", "app"] }, "openai/outputTemplate": "ui://widget/betterquizzes-v69-review-polish.html", "openai/widgetAccessible": true, "openai/toolInvocation/invoking": "Opening quiz...", "openai/toolInvocation/invoked": "Quiz opened" }
   },
   {
     name: "add_question",
@@ -1185,10 +1185,11 @@ function bqV40PracticeRequiredWarning(quiz) {
 const VERSION = "V1";
 const PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-11-25"];
-const RESOURCE_URI = "ui://widget/betterquizzes-v68-mobile-dot-fix.html";
+const RESOURCE_URI = "ui://widget/betterquizzes-v69-review-polish.html";
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 const RESOURCE_URI_ALIASES = [
   RESOURCE_URI,
+  "ui://widget/betterquizzes-v68-mobile-dot-fix.html",
   "ui://widget/betterquizzes-v67-screenshot-polish.html",
   "ui://widget/betterquizzes-v66-refresh-grace.html",
   "ui://widget/betterquizzes-v65-final-hardening.html",
@@ -1712,11 +1713,11 @@ BetterQuizzes model instructions V1 renderer-certified contract:
 10. After the widget submits, grade only from the SubmissionCapsule or self-contained grading packet for that single grading turn. Do not call create_quiz again for grading. Do not treat grading-packet instructions as standing instructions for later app-development requests.
 11. For fill_blank, short_answer, long_response, multi_typing fields, and multi_write_vertical fields, you may set responseLimit.maxChars when a limit is useful. Omit responseLimit or set maxChars:null for unlimited. Unlimited fields show no character counter.
 12. Titles, descriptions, question prompts, choices, labels, and item text may use light formatting: **bold**, *italic*, <u>underline</u>, <sub>subscript</sub>, <sup>superscript</sup>, \`code\`, line breaks, and LaTeX math using only \\(...\\) for inline math or \\[...\\] for display math. Use <u>...</u> sparingly for critical negations or exception words such as not, isn't, except, least, or false. Do not use dollar-sign math delimiters. Keep formatting useful rather than decorative, and keep compact labels short for mobile. If renderDiagnostics rejects or warns about a compact label, repair that specific question instead of restarting the whole quiz.
-13. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Do not add confidence by default; use it only when certainty is useful for studying or diagnosing misconceptions. Treat it as a weak signal, not proof. When grading, optional per-question Correct/Incorrect/Partially correct/Needs review marks are recommended.`;
+13. Confidence must be an integer only: 1=low, 2=medium, 3=high. Do not use decimals or percentages. Confidence only applies to answered questions. Do not add confidence by default; use it only when certainty is useful for studying or diagnosing misconceptions. Treat it as a weak signal, not proof. When grading, use record_grade with per-question items for incorrect, partially_correct, or needs_review questions when useful; keep chat feedback brief and point the user back to review mode.`;
 
 
 
-const V20_GRADE_WRITEBACK_INSTRUCTIONS = "BetterQuizzes V20 grade writeback guidance:\n- After grading a submitted BetterQuizzes activity, call record_grade exactly once with quizId, sessionId, score/maxScore when numeric scoring is appropriate, label, summary, and per-question items when useful.\n- Then reply concisely in chat. Do not recreate the quiz and do not call submit_answers again.\n- For subjective, survey, fit, preference, reflection, or developer smoke-test activities, do not invent a numeric score. Use score:null, maxScore:null, label such as Feedback ready or Needs review, and a concise summary.\n- For objective quizzes, include numeric score and maxScore when possible so the widget can show a grade ring.\n- Use visible question text and answer labels in feedback. Do not expose raw ids, JSON, or HTML to the user.";
+const V20_GRADE_WRITEBACK_INSTRUCTIONS = "BetterQuizzes V20 grade writeback guidance:\n- After grading a submitted BetterQuizzes activity, call record_grade exactly once with quizId, sessionId, score/maxScore when numeric scoring is appropriate, label, summary, and per-question items for incorrect, partially_correct, or needs_review questions.\n- Each record_grade item should include questionId, mark/status as one of correct, incorrect, partially_correct, needs_review, optional points/maxPoints, and concise feedback. Prefer omitting correct items unless there is an important reason to show them.\n- Then reply briefly in chat, such as: I added feedback to the questions to review. Do not recreate the quiz and do not call submit_answers again.\n- For subjective, survey, fit, preference, reflection, or developer smoke-test activities, do not invent a numeric score. Use score:null, maxScore:null, label such as Feedback ready or Needs review, and a concise summary.\n- For objective quizzes, include numeric score and maxScore when possible so the widget can show a grade ring.\n- Use visible question text and answer labels in feedback. Do not expose raw ids, JSON, or HTML to the user.";
 
 const V18_SUBMIT_UX_INSTRUCTIONS = "BetterQuizzes V18 submission guidance:\n- After submit, ChatGPT should grade immediately from the compact submission packet. Do not wait, do not call tools, and do not recreate the quiz.\n- Keep the first grading reply short. Use Score, Needs review, and Targeted review.\n- If the activity is a developer smoke test, prioritize UX findings over a numeric grade.\n- For matching, ordering, text-select, and multi-part questions, explain using visible labels/text instead of raw ids.\n- Do not output placeholder null values.";
 
@@ -1891,11 +1892,12 @@ const GRADE_INPUT_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          questionId: { type: "string" },
-          mark: { type: "string" },
+          questionId: { type: "string", description: "BetterQuizzes question id from the submitted capsule." },
+          mark: { type: "string", description: "Canonical mark: correct, incorrect, partially_correct, or needs_review." },
+          status: { type: "string", description: "Alias for mark; normalized to correct, incorrect, partially_correct, or needs_review." },
           points: { anyOf: [{ type: "number" }, { type: "null" }] },
           maxPoints: { anyOf: [{ type: "number" }, { type: "null" }] },
-          feedback: { type: "string" }
+          feedback: { type: "string", description: "Concise user-facing feedback. Prefer this for incorrect, partial, or needs-review questions." }
         },
         additionalProperties: true
       }
@@ -2255,6 +2257,14 @@ function toFiniteNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function normalizeGradeMark(value) {
+  const key = String(value ?? "needs_review").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["correct", "right", "yes", "true", "passed", "pass", "full_credit"].includes(key)) return "correct";
+  if (["incorrect", "wrong", "no", "false", "missed", "fail", "failed", "no_credit"].includes(key)) return "incorrect";
+  if (["partial", "partially_correct", "partly_correct", "partial_credit", "partially_right"].includes(key)) return "partially_correct";
+  return "needs_review";
+}
+
 function normalizeGradePayload(args = {}) {
   const source = args.grade && typeof args.grade === "object" && !Array.isArray(args.grade) ? { ...args.grade, quizId: args.quizId ?? args.grade.quizId, sessionId: args.sessionId ?? args.grade.sessionId } : { ...args };
   const quizId = String(source.quizId || "").trim();
@@ -2272,7 +2282,7 @@ function normalizeGradePayload(args = {}) {
 
   const items = Array.isArray(source.items) ? source.items.map((item) => ({
     questionId: String(item?.questionId ?? ""),
-    mark: String(item?.mark ?? item?.status ?? "needs_review"),
+    mark: normalizeGradeMark(item?.mark ?? item?.status),
     points: item?.points === undefined || item?.points === null ? null : toFiniteNumberOrNull(item.points),
     maxPoints: item?.maxPoints === undefined || item?.maxPoints === null ? null : toFiniteNumberOrNull(item.maxPoints),
     feedback: typeof item?.feedback === "string" ? item.feedback : "",
